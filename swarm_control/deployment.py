@@ -18,6 +18,7 @@ def main():
     project.verify_origin()
     env = dict(os.environ, SWARM_GATEWAY_APP=project.gateway_app,
                SWARM_GATEWAY_LEDGER=project.gateway_ledger,
+               SWARM_GATEWAY_CONCURRENCY=str(project.gateway_concurrency),
                SWARM_OPENAI_SECRET=project.openai_secret)
     subprocess.run([sys.executable, "-m", "modal", "deploy", "--env", project.environment,
                     "-m", "swarm_control.pilot_gateway"], env=env, check=True)

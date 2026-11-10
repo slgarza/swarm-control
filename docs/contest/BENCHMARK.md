@@ -1,8 +1,8 @@
 # Comparing the swarm with an AFK pipeline
 
 This is a proposed evaluation protocol. No completed comparison is included in
-this repository. The current ten-worker release is not the qualifying 100-agent
-system; improving it is a prerequisite to the final contest run.
+this repository. The controller supports explicitly configured cohorts up to 100,
+but offline load tests do not establish a qualifying live 100-agent system.
 
 ## 1. Define the experiment before running it
 
@@ -19,8 +19,10 @@ other's run. Use authorized data and repositories.
 
 Keep the backlog dependency graph identical. Include realistic shared-file work
 and dependent changes rather than making every task artificially independent.
-Review how each system handles those dependencies and conflicts. Do not disable
-this release's ownership checks merely to manufacture a 100-agent launch.
+Review how each system handles those dependencies and conflicts. Use the explicit
+`--allow-overlap` mode for reviewed shared-file work; per-worker path restrictions
+still apply, and integration must check the combined result. Do not manufacture
+small tasks merely to fill a 100-agent launch.
 
 ## 2. Choose a strong baseline
 
@@ -149,3 +151,19 @@ An efficiency win requires improvement on **both** announcement metrics while
 meeting scale and quality requirements. If either metric is unknown or the
 baseline is not comparable, the conclusion remains unproven. Use the
 [evidence template](EVIDENCE.md) and keep projections separate from measurements.
+
+## Offline measurement commands
+
+`swarm-control evidence collect` exports allowlisted aggregates and original
+artifact hashes. It requires explicit delivery-clock timestamps for hourly rates,
+reconciled cost receipts for dollar rates, and independent acceptance receipts
+before counting accepted merged green deliveries. Missing measurements stay null.
+`swarm-control evidence compare` recomputes rates and checks matching repository,
+base, frozen task manifest and comparison protocol. It checks clock and delivery
+totals against the report's timestamps and receipts; it cannot authenticate local
+receipts or independently approve a baseline. See [the input formats](EVIDENCE.md).
+
+The exporter separates process overlap from sampled command/model spans attached
+to validated contributions. Neither is continuous activity instrumentation. It
+always leaves the live scale requirement unverified and the comparison never
+certifies a contest win. Review original evidence and the organizers' baseline.

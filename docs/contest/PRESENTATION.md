@@ -10,6 +10,8 @@ machines. The target project supplies its own code, backlog, instructions and CI
 The original Afterimage pilot ran ten real coding agents and delivered ten merged
 green PRs. One delivery required a coordinator code repair. The standalone
 controller has offline regression coverage and a reproducible local tutorial.
+Its runner/gateway now accept explicitly configured cohorts up to 100, with
+bounded dispatch, completion checkpoints and opted-in shared-file integration.
 It has **not yet demonstrated the 100-agent requirement or an efficiency advantage
 over the best AFK pipeline**.
 
@@ -26,9 +28,9 @@ the submission format and applicable review date with the organizer.
 | 0:45–1:45 | System architecture | Show the [component diagram](../ARCHITECTURE.md). Explain separate controller, target repository, worker VMs, model gateway and GitHub CI. |
 | 1:45–2:45 | Reproducibility | Show the [local tutorial](../QUICKSTART.md): create a separate target, run two baseline tests, inspect a two-task plan. State that this step launches no agents. |
 | 2:45–4:00 | Real pilot evidence | Open the original report and one delivered PR. Distinguish generated patch, local validation, semantic review, CI and actual merge. Show the recorded coordinator repair. |
-| 4:00–5:00 | Coordination and budget | Explain disjoint ownership, shared local ledger, temporary model credentials and sequential integration on the latest base. State the limits of those mechanisms. |
+| 4:00–5:00 | Coordination and budget | Explain default disjoint ownership, opt-in shared-file work, three-way application, combined validation, completion checkpoints and bounded gateway capacity. Show that actual conflicts still require repair. |
 | 5:00–6:15 | Competition test | Show the requirements table and [comparison protocol](BENCHMARK.md). Explain how useful overlap, delivery rate, cost and interventions will be measured. |
-| 6:15–7:00 | Next milestone | Run a second real target, improve integration and conflict handling, then evaluate 25, 50 and 100 agents with approved budgets. |
+| 6:15–7:00 | Next milestone | Confirm real provider capacity, run a second target, then evaluate 25, 50 and 100 agents with approved budgets and a strong AFK comparison. |
 
 For a short opening:
 
@@ -72,9 +74,9 @@ that every worker performed useful computation continuously.
 | Requirement from the announcement | Current position | Evidence still needed |
 | --- | --- | --- |
 | Real codebase and backlog | Afterimage pilot delivered foundation modules | Larger independently reviewed backlog and acceptance criteria |
-| Minimum 100 agents live on the same repository | Ten demonstrated; live release capped at ten | At least 100 genuine sessions with meaningful overlapping work |
+| Minimum 100 agents live on the same repository | Ten demonstrated; configurable 100-worker implementation tested offline | At least 100 genuine sessions with meaningful overlapping work |
 | Useful agents rather than idle containers | Pilot includes commands, patches and tests | Complete per-agent evidence and contribution attribution at 100 |
-| Handle collisions and CI contention | Disjoint ownership and serial integration | Shared-file scenarios, repair, queueing and combined validation at scale |
+| Handle collisions and CI contention | Opt-in shared ownership, clean three-way application, combined checks and durable conflict receipts tested offline | Live shared-file scenarios, repair, CI contention and combined validation at scale |
 | Merged, passing PRs | Ten observed | Repeatable delivery and post-merge quality on the benchmark workload |
 | Beat best available AFK on PRs/hour | No comparison | Fair repeated runs against a strong baseline |
 | Beat best available AFK on PRs/dollar | Billing incomplete; no comparison | Reconciled eligible cost for both pipelines under the same rules |

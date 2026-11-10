@@ -5,7 +5,13 @@ import sys
 
 def main():
     try:
-        if len(sys.argv) > 1 and sys.argv[1] == "deploy-gateway":
+        if len(sys.argv) > 1 and sys.argv[1] == "evidence":
+            from .evidence import main as run
+            del sys.argv[1]
+        elif len(sys.argv) > 1 and sys.argv[1] == "budget":
+            from .budget_policy import main as run
+            del sys.argv[1]
+        elif len(sys.argv) > 1 and sys.argv[1] == "deploy-gateway":
             from .deployment import main as run
             del sys.argv[1]
         elif len(sys.argv) > 1 and sys.argv[1] == "integrate":

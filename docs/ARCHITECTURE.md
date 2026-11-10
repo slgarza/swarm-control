@@ -2,8 +2,9 @@
 
 The implementation uses a central controller and independent coding workers.
 Each worker owns one task. Workers do not directly exchange messages, dynamically
-recruit peers or resolve shared-file conflicts. The current controller rejects
-overlapping ownership before dispatch.
+recruit peers or resolve shared-file conflicts. Overlapping ownership is rejected
+by default; `plan` and `run --allow-overlap` record shared ownership explicitly
+while preserving each worker's scope checks and isolated checkout.
 
 ## Responsibilities
 
@@ -59,9 +60,12 @@ controller attempts recovery even after failures and records cleanup problems.
 It does not silently start replacement workers or replenish budget.
 
 All synchronized checkouts cross a barrier before their agents begin. A setup
-failure breaks the barrier rather than pretending the full cohort started.
+failure breaks the barrier rather than pretending the full cohort started. The
+dispatcher submits at most the requested worker count and checkpoints completed
+reports and ledger states before admitting more tasks. Checkpoint failure stops
+new submissions; submitted workers still finish through their recovery paths.
 The VM caps remain 2 CPU/2 GiB, with up to 300 seconds of agent time and 1200 seconds
-for the full lifecycle. This is a bounded pilot implementation.
+for the full lifecycle. A profile may opt into up to 100 workers; its default is ten.
 
 ## Model credentials and budget
 
@@ -70,7 +74,16 @@ expiring token for one task/run. The gateway admits only its supported Responses
 requests and tracks reservations in a durable Modal ledger. The local SQLite
 ledger separately reserves cumulative model and infrastructure allowances across
 probes and cohorts. See [gateway details](GATEWAY.md) for request policy and failure
-accounting.
+accounting. The gateway's single serving container accepts 120 HTTP inputs and
+limits concurrent provider requests to `runtime.gateway_concurrency` (default 20,
+maximum 100). Capacity waiting is bounded to 15 seconds before a 429 response
+without a provider call or budget reservation. A synchronized 100-worker cohort
+needs configured gateway capacity and matching real API quota. The runner checks
+local capacity before allocation and authenticated gateway admission capacity
+before sandbox launch. Missing deployed capacity is accepted only for cohorts of
+at most 20, for compatibility with older gateways. A failed admission capacity check
+stops the run and retains its allocation. The operator still must ensure the
+supplied HTTP URL belongs to that gateway deployment.
 
 Reservations are not invoices. Failed or ambiguous requests may retain their
 reservation. Local allocations are not automatically refunded when a run finishes.
@@ -86,12 +99,23 @@ Worker states include `preparing`, `ready`, `working`, `checking`, `validated`,
 after GitHub confirms integration. These represent different layers, not one
 universal state machine.
 
-The integrator binds a candidate to its worker patch digest, tested base and Git
-tree. It runs all configured install/check commands in a fresh worktree. Publish
-and merge require the reviewed patch hash. Merge requires all returned GitHub
+The integrator binds a candidate to its original worker digest, applied diff digest,
+tested base and Git tree. It tries strict application on the current base. An
+opt-in overlap manifest permits three-way application if strict application fails
+and the worker base is an ancestor. Clean application reruns all configured
+install/check commands in a fresh worktree. Conflicts preserve a `needs_repair`
+receipt and original patch, then clean the partial application from that worktree.
+No repair worker or additional budget is created automatically.
+
+Publish and merge require the original reviewed patch hash; three-way candidates
+also require the reviewed hash of `integration.patch`, the actual applied diff.
+Merge requires all returned GitHub
 Actions checks to succeed on the exact PR head, including the configured required
-names. A changed base or candidate stops integration. One integrator must own the
-merge sequence because the GitHub API's atomic head check does not lock the base.
+names. Check lists and open-PR admission are paginated with a 100-page bound and
+fail on inconsistent/incomplete results. A changed base or candidate stops
+integration. A separate `integration.lock` serializes local prepare/publish/merge
+commands. Other merge clients still require coordination because GitHub's atomic
+head check does not lock the base.
 
 The dispatcher lock coordinates Git worktrees sharing one Git common directory.
 It does not coordinate other clones or hosts. Scheduling, budget and gateway
@@ -113,9 +137,11 @@ state are not yet a globally distributed control service.
 ## What remains outside this implementation
 
 Automatic backlog decomposition, peer-to-peer coordination, distributed leases,
-shared-file repair, private-target clone authentication, unattended semantic review,
-a dashboard and live cohorts above ten are future work. The [scaling roadmap](SCALING.md)
-and [benchmark protocol](contest/BENCHMARK.md) explain how to evaluate those additions.
+autonomous conflict repair, private-target clone authentication, unattended semantic
+review and a dashboard remain future work. Larger cohorts and clean shared-file
+integration have offline coverage; their real scale and throughput still need
+evidence. The [scaling roadmap](SCALING.md) and [benchmark protocol](contest/BENCHMARK.md)
+explain how to evaluate them.
 
 Related primary documentation: [OpenAI agents](https://developers.openai.com/tracks/building-agents),
 [Modal sandboxes](https://modal.com/docs/guide/sandboxes),

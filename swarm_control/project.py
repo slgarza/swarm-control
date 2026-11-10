@@ -49,6 +49,7 @@ class Project:
     max_live_agents: int
     model_limit_cents: int
     infra_limit_cents: int
+    gateway_concurrency: int = 20
 
     @property
     def clone_url(self):
@@ -101,7 +102,7 @@ def load_project(path):
         (project, {"repository", "base_branch", "tasks_dir", "instructions"}),
         (validation, {"install", "checks", "required_checks"}),
         (runtime, {"network_domains", "worker_app", "gateway_app", "gateway_ledger",
-                   "openai_secret", "environment", "image", "setup_commands"}),
+                   "gateway_concurrency", "openai_secret", "environment", "image", "setup_commands"}),
         (budget, {"live_enabled", "max_live_agents", "model_limit_cents", "infra_limit_cents"}),
     ):
         require(not set(section) - keys, "unknown project setting; check the configuration schema")
@@ -146,11 +147,14 @@ def load_project(path):
             "runtime.image must be a container image reference")
     setup = runtime.get("setup_commands", ["npm install --global npm@11.16.0 @openai/codex@0.166.0"])
     setup = string_list(setup, "setup_commands")
+    gateway_concurrency = runtime.get("gateway_concurrency", 20)
+    require(type(gateway_concurrency) is int and 1 <= gateway_concurrency <= 100,
+            "runtime.gateway_concurrency must be an integer between 1 and 100")
     live = budget.get("live_enabled", False)
     maximum = budget.get("max_live_agents", 10)
     require(type(live) is bool, "live_enabled must be boolean")
-    require(type(maximum) is int and 1 <= maximum <= 10,
-            "this release supports at most ten live agents; larger plans are not live authorization")
+    require(type(maximum) is int and 1 <= maximum <= 100,
+            "max_live_agents must be between 1 and 100; capacity is not spend authorization")
     limits = {}
     for field in ("model_limit_cents", "infra_limit_cents"):
         limits[field] = budget.get(field, 0)
@@ -163,4 +167,4 @@ def load_project(path):
                    string_list(validation.get("required_checks", ["checks"]), "required_checks"),
                    domains, names["worker_app"], names["gateway_app"], names["gateway_ledger"],
                    names["openai_secret"], names["environment"],
-                   image, setup, live, maximum, **limits)
+                   image, setup, live, maximum, **limits, gateway_concurrency=gateway_concurrency)

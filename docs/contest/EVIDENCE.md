@@ -1,8 +1,9 @@
 # Evidence and reproducibility package
 
-The controller already writes private execution artifacts. The contest reporting
-package described here is a manual assembly process; this release does not
-automatically produce the proposed benchmark summary or a 100-agent certificate.
+The controller writes private execution artifacts and can export sanitized local
+aggregates with `swarm-control evidence collect`. Acceptance review, billing
+reconciliation and baseline approval remain external evidence. The exporter does
+not issue a 100-agent certificate.
 
 ## Capture before dispatch
 
@@ -56,13 +57,22 @@ modal-runs/batch-.../
     agent.jsonl                 private agent events
     last-message.txt            worker handoff
     versions.json              worker tool versions
+    benchmarks.json            bounded private receipts recovered before worker termination
     integration.json           candidate/review/PR state after integration starts
+    integration.patch          actual diff on the current integration base
 ```
 
 Some files appear only after their stage runs successfully; early failures can
 leave partial evidence. Other budget/probe/integration logs are also written.
 Inspect actual outputs rather than treating this abbreviated tree as a completeness
 guarantee. Git worktrees use the original checkout's common state directory.
+
+The trusted helper bundles only regular JSON files from the worker's
+`.swarm/benchmarks/`: at most 100 receipts, 1 MB each and 5 MB total. Symlinks,
+invalid JSON, unsafe paths and excessive scans fail capture instead of silently
+dropping evidence. Recovery runs again after final checks, so their receipts are
+retrieved before VM termination. Report metadata contains counts and hashes and
+labels these measurements worker-reported; the original bundle stays private.
 
 Gateway administrative status can contain credential hashes. Agent logs can
 contain prompts, source and sensitive output. Do not publish the raw `.swarm/`
@@ -72,7 +82,8 @@ tree, SQLite database, tokens, secret values or raw customer artifacts.
 
 Copy [run-summary.template.json](run-summary.template.json) into a separate report
 and fill only verified fields. It is a proposed report format, not an input to
-`swarm-control` and not an automatic export. `null` means unmeasured/unknown; it
+`swarm-control`. The CLI export is a smaller measured format documented below.
+`null` means unmeasured/unknown; it
 must not be silently interpreted as zero. Empty lists mean entries have not been
 provided, not proof that no failures or interventions occurred.
 
@@ -103,3 +114,102 @@ The historical ten-agent [public report](https://github.com/slgarza/Afterimage/b
 and [JSON](https://github.com/slgarza/Afterimage/blob/main/docs/swarm/pilot10-2026-11-10.json)
 are useful examples of reporting limits and repair attribution. They are not
 completed evidence for the 100-agent requirement or an AFK efficiency comparison.
+
+## Exporting measured aggregates
+
+Run this after integration and the agreed observation window. Store inputs and
+exports in the target's ignored `.swarm/` or another private evidence directory.
+The command is offline and only reads files; redirect stdout to save the report.
+
+```sh
+swarm-control evidence collect /path/to/target/.swarm/modal-runs/batch-ID \
+  --pipeline swarm \
+  --started-at 2026-11-24T14:00:00-06:00 \
+  --ended-at 2026-11-24T15:00:00-06:00 \
+  --protocol /private/comparison-protocol.json \
+  --cost-receipt /private/reconciled-cost.json \
+  --acceptance-receipts /private/acceptance.json > /private/swarm-report.json
+swarm-control evidence compare /private/swarm-report.json /private/afk-report.json
+```
+
+The timestamps are examples, not a scheduled or completed run. They must cover
+the full delivery clock defined in the benchmark, including setup after workload
+release, review, CI and integration. Without both timestamps no hourly rate is
+calculated. The tool checks worker/merge times against that interval but cannot
+observe when the operator actually released the backlog.
+
+Prepare one identical protocol file for the pair before dispatch:
+
+```json
+{
+  "comparison_id": "target-repetition-1",
+  "baseline_configuration_sha256": "<SHA256 of the approved baseline configuration>",
+  "acceptance_policy_sha256": "<SHA256 of independent acceptance and quality rules>",
+  "cost_policy_sha256": "<SHA256 of cost allocation and exemption rules>",
+  "clock_definition": "Workload release through final accepted merge and required checks",
+  "observation_window_seconds": 86400
+}
+```
+
+Replace digest placeholders with 64 lowercase hexadecimal characters. Matching
+protocol hashes establish matching supplied rules, not organizer approval. The
+collector also hashes the task objects from every manifest, sorted by ID. Both
+pipelines must use the same frozen task objects. An AFK adapter must produce the
+same local evidence layout or an independently audited compatible report; the
+controller does not run an AFK product or invent baseline results.
+
+A reconciled cost receipt uses USD, includes all failed attempts and repairs,
+and follows the same allocation rule for both pipelines:
+
+```json
+{
+  "reconciliation_status": "reconciled",
+  "gross_total": 12.50,
+  "confirmed_internal_token_exemption": 0,
+  "contest_eligible_total": 12.50
+}
+```
+
+A positive exemption also requires `exemption_evidence_sha256`: the hash of the
+private confirmation identifying who approved the classification and which
+charges qualify. Eligible cost must equal gross cost minus that confirmed amount.
+Keep invoices, credits, setup amortization and the confirming authority in the
+private supporting breakdown. The exporter hashes the original receipt and
+exports only allowed cost fields. It never substitutes budget reservations for
+bills. Unknown cost and a zero dollar denominator produce null dollar rates.
+
+The acceptance file is a list of independent review receipts:
+
+```json
+[
+  {
+    "task_id": "T001",
+    "patch_sha256": "<original worker patch SHA256>",
+    "reviewed_head_sha": "<reviewed PR head Git SHA>",
+    "merge_commit_sha": "<actual merge Git SHA>",
+    "accepted": true,
+    "post_merge_checks": "success",
+    "reverted": false,
+    "observation_ended_at": "2026-11-25T15:00:00-06:00",
+    "evidence_sha256": "<SHA256 of the independent acceptance/check evidence>"
+  }
+]
+```
+
+The hashes must match `integration.json`; the quality observation must cover the
+protocol window after the merge. Explicit rejection, a revert or failed checks
+does not count. Missing acceptance for a recorded merge leaves the accepted
+delivery total unknown. The export reports observed merges separately.
+
+For concurrency the exporter requires distinct sandbox IDs, matching target/base,
+timezone-aware session times, observed command and model events, and a nonempty
+patch with passing worker checks and matching hashes. Duplicate identities are
+excluded in full. It computes half-open interval overlap with UTC-normalized
+times, including seconds at or above 100. Sampled contribution spans end at the
+last observed event and may contain idle gaps; they do not prove continuously
+useful work. `scale_requirement_verified` and `contest_win_proven` remain false.
+
+Only IDs, allowed statuses, numbers, timestamps and hashes are exported. Worker
+prompts, source, commands, session credentials, handoffs, arbitrary errors and raw
+logs are omitted. Original artifact hashes retain an audit mapping. Review even
+sanitized exports before publishing. The CLI does not publish or call providers.

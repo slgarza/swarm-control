@@ -97,8 +97,9 @@ this is not an account-wide spending cap.
 
 If this target already has a ledger, do not change its limits, delete it or create
 a new clone to obtain fresh allowance. Follow [budget troubleshooting](TROUBLESHOOTING.md)
-and arrange an explicitly reviewed migration. There is no automatic budget-reset
-or general budget-migration command in this release.
+and use the [explicit budget-migration workflow](BUDGET_MIGRATION.md) only after
+review of a proposed increase and the owner's actual authorization. It preserves
+all reservations; it does not start workers or enable execution.
 
 Commit and push the task IDs and settings, then confirm CI is green:
 

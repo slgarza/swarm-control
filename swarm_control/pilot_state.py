@@ -134,6 +134,13 @@ class Ledger:
     def finish(self, task_id, batch_id, state, report):
         with self.connect() as db:
             db.execute("BEGIN IMMEDIATE")
+            previous = db.execute(
+                "SELECT batch_id,state FROM tasks WHERE task_id=?", (task_id,)
+            ).fetchone()
+            if previous and previous["batch_id"] == batch_id and previous["state"] == "merged":
+                # Integration may finish while other cohort workers still run.
+                # A delayed worker checkpoint must never demote its delivery.
+                return
             timestamp = datetime.now(UTC).isoformat()
             result = db.execute(
                 "UPDATE tasks SET state=?,report=?,updated_at=? WHERE task_id=? AND batch_id=?",
@@ -173,9 +180,25 @@ def verify_github_tasks(tasks, root, base_sha, *, repository, tasks_dir=None, qu
         issue_numbers.add(number)
     query = query or github
     tasks_dir = tasks_dir or root / "swarm/tasks"
-    open_prs = query(f"repos/{repository}/pulls?state=open&per_page=100")
-    if len(open_prs) == 100:
-        raise ValueError("PR pagination requires review before admission")
+    open_prs, pr_numbers = [], set()
+    for page in range(1, 101):
+        suffix = "" if page == 1 else f"&page={page}"
+        entries = query(f"repos/{repository}/pulls?state=open&per_page=100{suffix}")
+        if not isinstance(entries, list) or len(entries) > 100 or any(not isinstance(pr, dict) for pr in entries):
+            raise ValueError("invalid open PR pagination response")
+        for pr in entries:
+            number = pr.get("number")
+            if number is not None:
+                if type(number) is not int or number <= 0 or number in pr_numbers:
+                    raise ValueError("open PR list changed during pagination")
+                pr_numbers.add(number)
+        open_prs.extend(entries)
+        if len(entries) < 100:
+            break
+    else:
+        raise ValueError("open PR pagination limit exceeded")
+    dependency_prs = {}
+    ancestor_commits = set()
     for task in tasks:
         number = task["issue"]
         issue = query(f"repos/{repository}/issues/{number}")
@@ -190,17 +213,20 @@ def verify_github_tasks(tasks, root, base_sha, *, repository, tasks_dir=None, qu
             pr_number = metadata.get("pullRequest")
             if not isinstance(pr_number, int) or isinstance(pr_number, bool):
                 raise ValueError(f"{task['id']}: {dependency} has no integration PR")  # noqa: TRY004 - invalid metadata contract
-            pr = query(f"repos/{repository}/pulls/{pr_number}")
+            if pr_number not in dependency_prs:
+                dependency_prs[pr_number] = query(f"repos/{repository}/pulls/{pr_number}")
+            pr = dependency_prs[pr_number]
             commit = pr.get("merge_commit_sha")
             if not pr.get("merged") or not isinstance(commit, str):
                 raise ValueError(f"{task['id']}: {dependency} is not merged")
-            if subprocess.run(
+            if commit not in ancestor_commits and subprocess.run(
                 ["git", "merge-base", "--is-ancestor", commit, base_sha],
                 cwd=root,
                 capture_output=True,
                 check=False,
             ).returncode:
                 raise ValueError(f"{task['id']}: base does not include {dependency}")
+            ancestor_commits.add(commit)
 
 
 def peak_intervals(intervals):

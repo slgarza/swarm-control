@@ -67,6 +67,17 @@ class LedgerTests(unittest.TestCase):
         with self.assertRaises(ValueError):
             verify_github_tasks([task], Path("."), "a" * 40, query=open_pr, repository="example/project")
 
+    def test_delayed_worker_checkpoint_cannot_demote_a_merged_delivery(self):
+        with tempfile.TemporaryDirectory() as directory:
+            ledger = Ledger(Path(directory) / "state.db")
+            ledger.claim([{"id": "T01"}], "batch1", "a" * 40)
+            ledger.finish("T01", "batch1", "merged", "integration.json")
+            ledger.finish("T01", "batch1", "awaiting_integration", "worker-report.json")
+            self.assertEqual(ledger.rows()[0]["state"], "merged")
+            self.assertEqual(ledger.rows()[0]["report"], "integration.json")
+            with self.assertRaises(ValueError):
+                ledger.finish("T01", "wrong-batch", "failed", "report.json")
+
     def test_duplicate_issues_are_rejected_before_any_github_query(self):
         query = Mock()
         with self.assertRaisesRegex(ValueError, "duplicate GitHub issue"):
@@ -75,6 +86,28 @@ class LedgerTests(unittest.TestCase):
                 Path("."), "a" * 40, query=query, repository="example/project",
             )
         query.assert_not_called()
+
+    def test_duplicate_work_on_second_pr_page_blocks_admission(self):
+        def query(path):
+            if "/pulls?" in path:
+                if "page=2" in path:
+                    return [{"number": 101, "title": "[T01] already in progress"}]
+                return [{"number": index + 1, "title": "unrelated"} for index in range(100)]
+            return {"state": "open"}
+
+        with self.assertRaisesRegex(ValueError, "already has an open PR"):
+            verify_github_tasks([{"id": "T01", "issue": 1}], Path("."), "a" * 40,
+                                query=query, repository="example/project")
+
+    def test_full_pr_pages_are_read_to_completion_and_repeated_pages_fail_closed(self):
+        first = [{"number": index + 1, "title": "unrelated"} for index in range(100)]
+        query = Mock(side_effect=[first, [], {"state": "open"}])
+        verify_github_tasks([{"id": "T01", "issue": 1}], Path("."), "a" * 40,
+                            query=query, repository="example/project")
+        self.assertIn("page=2", query.call_args_list[1].args[0])
+        with self.assertRaisesRegex(ValueError, "changed during pagination"):
+            verify_github_tasks([{"id": "T01", "issue": 1}], Path("."), "a" * 40,
+                                query=Mock(side_effect=[first, first]), repository="example/project")
 
     def test_missing_or_unmerged_dependency_is_blocked(self):
         with tempfile.TemporaryDirectory() as directory:
