@@ -1,5 +1,6 @@
 """Offline regression tests for worker boundaries and recoverable Git output."""
 
+import hashlib
 import io
 import json
 import subprocess
@@ -12,6 +13,7 @@ from types import SimpleNamespace
 from unittest.mock import patch
 
 from swarm_control import modal_runner as runner
+from swarm_control import modal_worker as worker
 from swarm_control.modal_worker import collect, valid_path
 from swarm_control.pilot_state import Ledger
 from tests.support import make_project
@@ -30,6 +32,7 @@ class WorkerTests(unittest.TestCase):
         (self.repo / "packages/ui").mkdir(parents=True)
         (self.repo / "packages/ui/old.ts").write_text("export const old = 1;\n")
         (self.repo / "outside.txt").write_text("baseline\n")
+        (self.repo / ".gitignore").write_text(".swarm/\n")
         self.git("add", ".")
         self.git("commit", "-qm", "baseline")
         self.base = self.git("rev-parse", "HEAD").strip()
@@ -91,6 +94,76 @@ class WorkerTests(unittest.TestCase):
         self.assertFalse(runner.eligible_result(1, 0, result))
         self.assertFalse(runner.eligible_result(0, 1, result))
         self.assertFalse(runner.eligible_result(None, 0, result))
+
+    def test_benchmark_receipts_preserve_exact_utf8_without_copying_budget_or_logs(self):
+        receipts = self.repo / ".swarm/benchmarks"
+        (receipts / "nested").mkdir(parents=True)
+        raw = '{"measurement_kind":"local_validation","note":"señal","cost_usd":null}\n'.encode()
+        (receipts / "nested/attempt.json").write_bytes(raw)
+        (receipts / "checks.log").write_text("private raw log")
+        (self.repo / ".swarm/control.sqlite3").write_bytes(b"private ledger")
+        (self.repo / ".swarm/budget.json").write_text('{"private":"budget"}')
+        result = self.capture()
+        bundle = json.loads((self.root / "artifacts/benchmarks.json").read_text())
+        self.assertEqual(bundle["receipt_count"], 1)
+        receipt = bundle["receipts"][0]
+        self.assertEqual(receipt["text"].encode(), raw)
+        self.assertEqual(receipt["sha256"], hashlib.sha256(raw).hexdigest())
+        self.assertEqual(receipt["byte_count"], len(raw))
+        self.assertEqual(receipt["name"], "attempt.json")
+        self.assertEqual(receipt["relative_path"], "nested/attempt.json")
+        self.assertNotIn("private raw log", json.dumps(bundle))
+        self.assertNotIn("private ledger", json.dumps(bundle))
+        self.assertNotIn("private budget", json.dumps(bundle))
+        self.assertEqual(result["benchmark_receipts"]["source"], "worker-reported")
+        self.assertNotIn("text", json.dumps(result["benchmark_receipts"]))
+        self.assertEqual(result["ownership_violations"], [])
+
+    def test_missing_benchmarks_are_an_explicit_empty_collection(self):
+        self.assertEqual(self.capture()["benchmark_receipts"]["receipt_count"], 0)
+        self.assertEqual(json.loads((self.root / "artifacts/benchmarks.json").read_text())["receipts"], [])
+
+    def test_invalid_receipt_fails_collection_but_preserves_patch_and_error_artifact(self):
+        receipts = self.repo / ".swarm/benchmarks"
+        receipts.mkdir(parents=True)
+        receipt = receipts / "attempt.json"
+        (self.repo / "packages/ui/old.ts").write_text("useful change\n")
+        for raw in (b"[]", b"broken", b'{"cost":NaN}', b"\xff"):
+            with self.subTest(raw=raw):
+                receipt.write_bytes(raw)
+                with self.assertRaisesRegex(ValueError, "benchmark_receipt_json_invalid"):
+                    self.capture()
+                bundle = json.loads((self.root / "artifacts/benchmarks.json").read_text())
+                self.assertEqual(bundle["status"], "failed")
+                self.assertIn("useful change", (self.root / "artifacts/changes.patch").read_text())
+
+    def test_benchmark_symlinks_are_rejected_without_following_them(self):
+        receipts = self.repo / ".swarm/benchmarks"
+        receipts.mkdir(parents=True)
+        outside = self.root / "outside.json"
+        outside.write_text('{"secret":"outside"}')
+        (receipts / "attempt.json").symlink_to(outside)
+        with self.assertRaisesRegex(ValueError, "benchmark_symlink_prohibited"):
+            self.capture()
+        (receipts / "attempt.json").unlink()
+        receipts.rmdir()
+        receipts.symlink_to(self.root, target_is_directory=True)
+        with self.assertRaisesRegex(ValueError, "benchmark_symlink_prohibited"):
+            self.capture()
+        self.assertNotIn("outside", (self.root / "artifacts/benchmarks.json").read_text())
+
+    def test_benchmark_count_individual_and_total_bytes_have_hard_limits(self):
+        receipts = self.repo / ".swarm/benchmarks"
+        receipts.mkdir(parents=True)
+        for name in ("one.json", "two.json"):
+            (receipts / name).write_text('{"ok":true}')
+        for setting, maximum, reason in (
+            ("MAX_BENCHMARK_RECEIPTS", 1, "benchmark_receipt_count_limit"),
+            ("MAX_BENCHMARK_RECEIPT_BYTES", 5, "benchmark_receipt_size_limit"),
+            ("MAX_BENCHMARK_TOTAL_BYTES", 15, "benchmark_total_size_limit"),
+        ):
+            with self.subTest(setting=setting), patch.object(worker, setting, maximum), self.assertRaisesRegex(ValueError, reason):
+                self.capture()
 
 
 class PlanningTests(unittest.TestCase):
@@ -255,6 +328,89 @@ class PlanningTests(unittest.TestCase):
 
 
 class LifecycleTests(unittest.TestCase):
+    def test_final_check_benchmarks_are_recovered_before_termination_and_validated(self):
+        for invalid_bundle in (False, True):
+            with self.subTest(invalid_bundle=invalid_bundle):
+                self.check_final_benchmark_recovery(invalid_bundle)
+
+    def check_final_benchmark_recovery(self, invalid_bundle):
+        class Process:
+            stdout = stderr = ()
+            returncode = 0
+
+            def wait(self):
+                return 0
+
+        receipt_text = '{"measurement_kind":"local_validation","private_note":"exact check evidence"}\n'
+        receipt_bytes = receipt_text.encode()
+        received = []
+
+        class Filesystem:
+            def __init__(self):
+                self.files = {
+                    "changes.patch": b"", "changes.json": json.dumps({
+                        "ownership_violations": [], "prohibited_files": [],
+                        "head_unchanged": True, "patch_bytes": 0,
+                    }).encode(), "install.log": b"installed", "checks.log": b"passed", "versions.json": b"{}",
+                }
+
+            def write_text(self, *_):
+                pass
+
+            def read_bytes(self, name):
+                key = Path(name).name
+                if key not in self.files:
+                    raise FileNotFoundError(name)
+                received.append(key)
+                return self.files[key]
+
+            def read_text(self, name):
+                return self.read_bytes(name).decode()
+
+        class Sandbox:
+            object_id = "sb-benchmark"
+            filesystem = Filesystem()
+            checked = False
+            terminated = False
+
+            def exec(self, *args, **_):
+                if "check" in args:
+                    self.checked = True
+                if "collect" in args:
+                    records = [{"name": "check.json", "relative_path": "check.json",
+                                "text": receipt_text, "byte_count": len(receipt_bytes),
+                                "sha256": "bad" if invalid_bundle else hashlib.sha256(receipt_bytes).hexdigest()}] if self.checked else []
+                    self.filesystem.files["benchmarks.json"] = json.dumps({
+                        "format_version": 1, "source": "worker-reported", "status": "complete",
+                        "receipt_count": len(records), "total_bytes": len(receipt_bytes) if records else 0,
+                        "receipts": records,
+                    }).encode()
+                return Process()
+
+            def terminate(self):
+                assert "benchmarks.json" in received
+                self.terminated = True
+
+        sandbox = Sandbox()
+        fake_modal = SimpleNamespace(Sandbox=SimpleNamespace(create=lambda **_: sandbox),
+            exception=SimpleNamespace(SandboxFilesystemNotFoundError=FileNotFoundError))
+        args = SimpleNamespace(command="smoke", model=None, timeout=30, environment="main")
+        with tempfile.TemporaryDirectory() as temporary, patch.dict("sys.modules", {"modal": fake_modal}), redirect_stdout(io.StringIO()):
+            batch = Path(temporary)
+            report = runner.execute_task({"id": "A1", "ownership": ["src"]}, args,
+                                         "a" * 40, batch, None, None, None)
+            recovered = json.loads((batch / "A1/benchmarks.json").read_text())
+            self.assertEqual(recovered["receipts"][0]["text"], receipt_text)
+            self.assertTrue(sandbox.terminated)
+            if invalid_bundle:
+                self.assertEqual(report["status"], "needs_recovery")
+                self.assertIn("benchmarks.json: ValueError", report["recovery_errors"])
+            else:
+                self.assertEqual(report["status"], "smoke_passed")
+                self.assertEqual(report["benchmark_receipts"]["receipt_count"], 1)
+                self.assertEqual(report["benchmark_receipts"]["source"], "worker-reported")
+                self.assertNotIn("private_note", json.dumps(report))
+
     def test_mocked_100_agent_run_keeps_one_budget_and_incremental_task_state(self):
         self.run_mocked_100_agent_cohort(100)
 

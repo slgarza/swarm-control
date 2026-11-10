@@ -15,7 +15,7 @@ from pathlib import Path
 from threading import Barrier
 from urllib.parse import urlparse
 
-from .modal_worker import valid_path
+from .modal_worker import benchmark_bundle_summary, valid_path
 from .pilot_state import batch_summary, common_state, verify_github_tasks
 from .project import load_project
 
@@ -35,6 +35,7 @@ def task_directory():
 
 
 ARTIFACTS = (
+    "benchmarks.json",
     "changes.patch",
     "changes.json",
     "checks.log",
@@ -457,6 +458,16 @@ def execute_task(task, args, base_sha, batch, image, app, secret, barrier=None):
                     if name == "changes.patch" and sanitized.encode() != content:
                         report["status"] = "rejected"
                         report["patch_redacted"] = True
+                    if name == "benchmarks.json":
+                        report["benchmark_receipts"] = {
+                            **benchmark_bundle_summary(json.loads(sanitized)),
+                            "bundle_sha256": hashlib.sha256(sanitized.encode()).hexdigest(),
+                        }
+                        if "changes" in report:
+                            report["changes"]["benchmark_receipts"] = {
+                                key: value for key, value in report["benchmark_receipts"].items()
+                                if key != "bundle_sha256"
+                            }
                 except (
                     FileNotFoundError,
                     modal.exception.SandboxFilesystemNotFoundError,
@@ -483,6 +494,7 @@ def execute_task(task, args, base_sha, batch, image, app, secret, barrier=None):
                     "checks.log",
                     "install.log",
                     "versions.json",
+                    "benchmarks.json",
                 ):
                     if not (directory / required).is_file():
                         recovery_errors.append(f"{required}: missing")

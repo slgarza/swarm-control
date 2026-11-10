@@ -57,6 +57,7 @@ modal-runs/batch-.../
     agent.jsonl                 private agent events
     last-message.txt            worker handoff
     versions.json              worker tool versions
+    benchmarks.json            bounded private receipts recovered before worker termination
     integration.json           candidate/review/PR state after integration starts
     integration.patch          actual diff on the current integration base
 ```
@@ -65,6 +66,13 @@ Some files appear only after their stage runs successfully; early failures can
 leave partial evidence. Other budget/probe/integration logs are also written.
 Inspect actual outputs rather than treating this abbreviated tree as a completeness
 guarantee. Git worktrees use the original checkout's common state directory.
+
+The trusted helper bundles only regular JSON files from the worker's
+`.swarm/benchmarks/`: at most 100 receipts, 1 MB each and 5 MB total. Symlinks,
+invalid JSON, unsafe paths and excessive scans fail capture instead of silently
+dropping evidence. Recovery runs again after final checks, so their receipts are
+retrieved before VM termination. Report metadata contains counts and hashes and
+labels these measurements worker-reported; the original bundle stays private.
 
 Gateway administrative status can contain credential hashes. Agent logs can
 contain prompts, source and sensitive output. Do not publish the raw `.swarm/`
