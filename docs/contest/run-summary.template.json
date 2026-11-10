@@ -1,0 +1,67 @@
+{
+  "report_format_version": 1,
+  "is_template": true,
+  "run_id": null,
+  "pipeline": null,
+  "paired_run_id": null,
+  "controller_commit": null,
+  "target_repository": null,
+  "base_sha": null,
+  "task_manifest_sha256": null,
+  "model_id": null,
+  "codex_version": null,
+  "modal_version": null,
+  "runtime_image_identity": null,
+  "clock": {
+    "definition": null,
+    "source": null,
+    "started_at_utc": null,
+    "ended_at_utc": null,
+    "elapsed_seconds": null,
+    "setup_seconds_outside_clock": null
+  },
+  "work": {
+    "backlog_items": null,
+    "accepted_backlog_items": null,
+    "merged_green_prs": null,
+    "failed_tasks": null,
+    "deliveries_with_coordinator_code_repair": null,
+    "reverts_during_observation": null,
+    "observation_window_seconds": null
+  },
+  "concurrency": {
+    "requested_workers": null,
+    "observed_peak_sessions": null,
+    "session_overlap_at_or_above_100_seconds": null,
+    "useful_activity_measurement": null,
+    "evidence_gaps": []
+  },
+  "cost_usd": {
+    "authorized_allowance": null,
+    "gateway_accounting_ceiling": null,
+    "model_gross": null,
+    "infrastructure_gross": null,
+    "ci_and_other_gross": null,
+    "gross_total": null,
+    "actual_billed_total": null,
+    "credits_applied": null,
+    "confirmed_internal_token_exemption": null,
+    "contest_eligible_total": null,
+    "reconciliation_status": "unmeasured",
+    "allocation_and_exemption_policy": null
+  },
+  "rates": {
+    "merged_green_prs_per_hour": null,
+    "merged_green_prs_per_eligible_dollar": null,
+    "eligible_cost_per_delivery_usd": null
+  },
+  "interventions": [],
+  "deliveries": [],
+  "cleanup": {
+    "all_workers_terminated": null,
+    "gateway_runs_stopped": null,
+    "gateway_app_stopped_or_retained_reason": null
+  },
+  "evidence_links": [],
+  "limitations": []
+}

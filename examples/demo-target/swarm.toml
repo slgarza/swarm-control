@@ -1,0 +1,28 @@
+version = 1
+
+[project]
+repository = "YOUR_GITHUB_USER/swarm-demo"
+base_branch = "main"
+tasks_dir = "swarm/tasks"
+instructions = ["README.md", "AGENTS.md"]
+
+[validation]
+install = [["python3", "--version"]]
+checks = [["python3", "-m", "unittest", "discover", "-s", "tests", "-v"], ["python3", "-m", "compileall", "-q", "demo"]]
+required_checks = ["checks"]
+
+[runtime]
+worker_app = "swarm-demo-workers"
+gateway_app = "swarm-demo-gateway"
+gateway_ledger = "swarm-demo-budget-v1"
+openai_secret = "swarm-demo-openai"
+environment = "main"
+image = "node:24.6.0-bookworm-slim"
+setup_commands = ["npm install --global npm@11.16.0 @openai/codex@0.166.0"]
+network_domains = ["github.com", "api.github.com", "codeload.github.com", "raw.githubusercontent.com"]
+
+[budget]
+live_enabled = false
+max_live_agents = 2
+model_limit_cents = 0
+infra_limit_cents = 0

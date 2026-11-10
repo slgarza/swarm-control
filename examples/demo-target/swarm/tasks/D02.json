@@ -1,0 +1,14 @@
+{
+  "id": "D02",
+  "title": "Reject inverted integer clamp bounds",
+  "prompt": "Read README.md and AGENTS.md. Extend clamp(value: int, lower: int, upper: int) -> int in demo/numbers.py to raise ValueError when lower > upper. Preserve inclusive clamping for ordered or equal bounds and support negative integers. Inputs are integers; do not introduce other types, dependencies or extra validation. Add meaningful tests in tests/test_numbers.py and run the full suite. Do not edit the other task or shared files.",
+  "ownership": ["demo/numbers.py", "tests/test_numbers.py"],
+  "dependsOn": [],
+  "acceptance": [
+    "Inverted bounds raise ValueError.",
+    "Values below, within and above ordered bounds clamp correctly; equal and negative bounds work.",
+    "Meaningful regression tests and all project checks pass."
+  ],
+  "status": "ready",
+  "issue": 2
+}

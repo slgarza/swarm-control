@@ -1,0 +1,14 @@
+{
+  "id": "D01",
+  "title": "Normalize display-name whitespace",
+  "prompt": "Read README.md and AGENTS.md. Implement normalize_name(name: str) -> str in demo/text.py. Trim leading/trailing whitespace and collapse every internal run of whitespace (spaces, tabs, newlines) to one ordinary space. Preserve case and Unicode characters. Empty and whitespace-only strings produce an empty string. Inputs are strings; no extra validation or dependencies. Add tests in tests/test_text.py and run the full suite. Do not edit the other task or shared files.",
+  "ownership": ["demo/text.py", "tests/test_text.py"],
+  "dependsOn": [],
+  "acceptance": [
+    "normalize_name('  Ana   López ') returns 'Ana López'; tabs/newlines are normalized too.",
+    "Empty and whitespace-only inputs return an empty string; case and Unicode are preserved.",
+    "Meaningful regression tests and all project checks pass."
+  ],
+  "status": "ready",
+  "issue": 1
+}

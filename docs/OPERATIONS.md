@@ -51,3 +51,82 @@ Changed bases need a new validated attempt with old artifacts preserved.
 After a cohort, verify sandbox termination, stop gateway runs and stop its deployed
 app when no other authorized work needs it. Reconcile billing, recorded repairs,
 reverts and full delivery time. A validated patch is not a merged green PR.
+
+## Command reference
+
+For a complete first run, follow the [two-agent walkthrough](TWO_AGENT_WALKTHROUGH.md).
+These commands do not automatically move through every stage for you.
+
+| Command | What it does | External effects |
+| --- | --- | --- |
+| `plan TASK...` | Validate local task structure/ownership, resolve a local base ref and print potential concurrency | No cloud calls, budget reservation or GitHub writes |
+| `smoke TASK...` | Create worker environments, clone/install/check the unchanged target and recover artifacts | Paid Modal resources and infrastructure allocation; no coding model calls or delivered feature |
+| `deploy-gateway` | Deploy the configured trusted model service | Modal deployment/build costs possible; no coding cohort |
+| `probe` | Exercise the real gateway/model/tool round trip in one bounded sandbox | Paid model/Modal usage and durable allowance allocation |
+| `run TASK...` | Admit and execute coding tasks, validate/recover patches and attempt cleanup | Paid model/Modal usage and durable claims; no PR publication |
+| `integrate plan ARTIFACT_DIR` | Verify local worker artifacts and report the patch hash/scope | Local inspection, including target origin verification |
+| `integrate prepare ARTIFACT_DIR` | Fetch the current base, create a candidate worktree, apply the patch and run checks | Local files/worktree and configured commands; GitHub reads |
+| `integrate publish ARTIFACT_DIR` | Require patch review and an unchanged tested candidate, commit/push it and create a PR | GitHub branch/PR writes and any CI they trigger |
+| `integrate merge ARTIFACT_DIR` | Require review, current base and successful exact-head checks, merge and reconcile the ledger | GitHub merge/issue closure and any CI it triggers |
+
+`smoke` is not the free quickstart. It requires the live policy and infrastructure
+allowance even though it does not call the model. It does not claim a task as a
+coding delivery. Use `plan` for inspection without cloud resources.
+
+## Runner flags
+
+These flags apply to `plan`, `smoke` and `run` unless stated otherwise:
+
+| Flag | Meaning |
+| --- | --- |
+| `--project PATH` | Required root target configuration |
+| `--workers N` | Maximum simultaneous worker threads, default 1; planning accepts 1–100, live is capped by the project limit (at most ten) |
+| `--base REF` | Local commit/ref, default `origin/<base_branch>`; workers need that exact commit available remotely |
+| `--timeout SECONDS` | Agent time limit from 30 to 300, default 300; does not include all setup/recovery time |
+| `--synchronized` | Require exactly one task per requested worker; real agents start after all worker preparations reach the barrier |
+| `--model MODEL` | Required for `run`; only `gpt-6.1-sol` is supported by the current priced gateway |
+| `--model-budget USD` | Required for `run`; total cohort model allowance, positive whole cents, at most USD18 and within remaining local allowance |
+| `--gateway-url ORIGIN` | Required for `run`; HTTPS `*.modal.run` origin with no `/v1`, credentials, query or port |
+| `--environment NAME` | Override the profile's Modal environment for runner operations; all matching apps/secrets must exist there |
+| `--retry` | Explicitly retry a reviewed failed claim with remaining allowance; never resets merged/running tasks or budgets |
+
+The model allowance is divided equally among task credentials. For example,
+`--model-budget 2.00` for two tasks allocates USD1 per task, not USD2 each.
+If there are fewer workers than tasks without synchronization, tasks are queued
+locally. The whole live batch still cannot exceed the project's task-count cap.
+
+The probe accepts `--project`, `--gateway-url` and an optional `--environment`;
+its amount and task are fixed. Deployment accepts only `--project` and uses the
+profile's environment. Avoid mixing different environments across these commands.
+
+Integration accepts `--project`, an artifact directory, `--reviewed-patch-sha`
+for publish/merge, and optional `--worktree PATH` for prepare. A worktree override
+changes the candidate location; it does not waive ownership, review or validation.
+
+Inspect installed help without launching resources:
+
+```sh
+swarm-control --help
+swarm-control probe --help
+swarm-control deploy-gateway --help
+swarm-control integrate --help
+```
+
+## Recognizing completion
+
+The runner prints the batch evidence path and each task's final report. Review
+the report, recovered patch, final checks, recovery errors and termination result.
+Do not infer that every task succeeded merely because artifacts were created.
+`smoke_passed`, `probe_passed`, `validated` and `merged` describe different stages.
+
+The integrator's saved `integration.json` links the reviewed patch to the tested
+base/tree and published head. CI must finish on that exact head, including every
+required check name. The integrator checks GitHub Actions check runs; configure
+the project and branch protections accordingly rather than assuming arbitrary
+external status systems are verified by this code.
+
+Only one integrator should merge into the base at a time. A stale base or failed
+check is a reason to recover and revalidate, not to force merge. See
+[troubleshooting](TROUBLESHOOTING.md) for preserving attempts and
+[evidence](contest/EVIDENCE.md) for the difference between private artifacts and
+a public delivery report.

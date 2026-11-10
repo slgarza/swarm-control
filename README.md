@@ -6,10 +6,33 @@ enforces budgets and ownership, and integrates reviewed changes through passing
 GitHub Actions. OpenAI supplies the model; Modal supplies temporary machines.
 The coordinator currently runs on one host.
 
-Extracted from [Afterimage commit 2217882](https://github.com/slgarza/Afterimage/commit/2217882c3d5597bbb92a4ae28bc8a2e02ccedb0b).
-Its [first pilot](https://github.com/slgarza/Afterimage/blob/main/docs/swarm/pilot10-2026-11-10.md)
+**Start with the [local quickstart](docs/QUICKSTART.md)** to understand the system
+without credentials or cloud resources. Then follow the
+[two-agent walkthrough](docs/TWO_AGENT_WALKTHROUGH.md) to run real workers using
+your own GitHub, Modal and OpenAI accounts and an authorized budget.
+
+This project is being developed toward the Telnyx X Prize: at least 100 useful
+agents working on one real repository, beating a strong AFK pipeline on merged
+green PRs per hour and per dollar. The [first ten-agent pilot](https://github.com/slgarza/Afterimage/blob/main/docs/swarm/pilot10-2026-11-10.md)
 delivered ten reviewed, merged PRs, including one coordinator code repair.
-Extraction is tested offline; no new paid cohort is implied.
+**The 100-agent requirement and AFK efficiency comparison remain unproven.**
+
+## Documentation
+
+| Guide | What it explains |
+| --- | --- |
+| [Documentation index](docs/README.md) | Reading paths, terminology and current capabilities |
+| [Quickstart](docs/QUICKSTART.md) | Install, create a tiny target, test its baseline and inspect a local plan |
+| [Architecture](docs/ARCHITECTURE.md) | Who writes code, where it runs, how patches reach GitHub and where state lives |
+| [Two-agent walkthrough](docs/TWO_AGENT_WALKTHROUGH.md) | Own-account setup, real issues, budget, execution, review, PRs, merge and cleanup |
+| [Project reference](docs/PROJECTS.md) | Every configuration field and the task format |
+| [Operations](docs/OPERATIONS.md) | Commands, side effects, flags and integration gates |
+| [Troubleshooting](docs/TROUBLESHOOTING.md) | Setup, budget, worker and integration failures |
+| [Presentation](docs/contest/PRESENTATION.md) | Seven-minute outline, real pilot results and remaining contest requirements |
+| [Benchmark and evidence](docs/contest/BENCHMARK.md) | Fair AFK comparison; [reporting checklist and template](docs/contest/EVIDENCE.md) |
+
+All guides and the example are in English. The standalone extraction and tutorial
+are tested offline; their documentation does not imply a new paid cohort ran.
 
 ## What lives where
 
@@ -25,21 +48,28 @@ Afterimage is the first client project. Its source, tasks and private run eviden
 are not copied into this controller. Each target uses a separate controller
 process. Git worktrees share their original checkout's ledger and dispatcher lock.
 
-## Install and inspect
+## Try the local example
 
 Use Python 3.12 with venv support and Git. GitHub CLI and Modal authentication
 are needed for operations that access those services.
 
 ```sh
+git clone https://github.com/slgarza/swarm-control.git
+cd swarm-control
 python3.12 -m venv .venv
-.venv/bin/python -m pip install -e '.[dev]'
-.venv/bin/swarm-control --help
-.venv/bin/swarm-control plan T01 --project ../Afterimage/swarm.toml --base HEAD
+source .venv/bin/activate
+python -m pip install -e '.[dev]'
+python examples/create_demo.py ../swarm-demo
+cd ../swarm-demo
+python3 -m unittest discover -s tests -v
+swarm-control plan D01 D02 --project swarm.toml --workers 2 --synchronized --base HEAD
 ```
 
-`plan` reads local metadata and creates no cloud resources. It reports task status
-and potential concurrency, not live readiness. Afterimage preserves its completed
-tasks and cumulative budget with live execution disabled.
+Expected: two baseline tests pass and the plan shows two ready tasks with
+`live_execution_enabled: false`. No agent has written code at this stage.
+The helper creates a separate local Git repository and refuses an existing folder.
+`plan` reads local metadata and creates no cloud resources. It reports potential
+concurrency, not live readiness. See [Quickstart](docs/QUICKSTART.md) for details.
 
 Connect another repository using [project configuration](docs/PROJECTS.md).
 Read [operations](docs/OPERATIONS.md) before any paid run. Semantic review remains
@@ -61,12 +91,22 @@ comparison or qualifying 100-agent submission has run.
 
 ## Validation
 
+From the controller checkout with its virtual environment active:
+
 ```sh
 python -m unittest discover -s tests -p 'test_*.py'
-ruff check --isolated swarm_control tests
-python -m compileall -q swarm_control
+ruff check --isolated swarm_control tests examples
+python -m compileall -q swarm_control examples
 ```
 
-The extraction retains 70 pilot regressions and adds tests for repository
-isolation, command/check configuration, disabled live execution and preserved
-budget accounting. CI runs these without paid model or Modal calls.
+Tests cover worker recovery, budget accounting, integration gates, repository
+isolation and configuration. CI also creates the documented demo in a temporary
+directory, runs its baseline and planner, and verifies disabled execution.
+These checks make no paid model or Modal calls.
+
+## Origin
+
+The controller was extracted from [Afterimage commit 2217882](https://github.com/slgarza/Afterimage/commit/2217882c3d5597bbb92a4ae28bc8a2e02ccedb0b).
+Afterimage remains a separate client project with its original completed tasks,
+private runtime evidence and cumulative budget. The tutorial contains original,
+small Python examples rather than copied application code.
