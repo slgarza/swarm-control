@@ -108,6 +108,21 @@ These commands do not automatically move through every stage for you.
 allowance even though it does not call the model. It does not claim a task as a
 coding delivery. Use `plan` for inspection without cloud resources.
 
+Plans include a `local_admission` summary. It distinguishes requested potential
+concurrency from tasks whose local status, issue number, declared blockers and
+dependency metadata permit work. Dependencies need local `merged` status and a
+positive `pullRequest` number; the paid admission still verifies their real GitHub
+merge and inclusion in the selected base. The summary also checks the configured
+worker cap and minimum infrastructure admission reserve. A 100-task cohort needs
+a USD31 infrastructure reserve, exceeding the original USD7 pilot policy.
+
+This summary does not open the budget ledger or contact GitHub/providers. Remaining
+allowances stay unknown, and `launch_readiness_verified` stays false even when all
+local checks pass. A configured total covering the reserve does not prove remaining
+funds or authorize a policy migration. Live execution, durable budget admission,
+open issues, deployed gateway capacity and provider quota still need their real
+gates before launch. Preparation can be complete while execution remains disabled.
+
 ## Runner flags
 
 These flags apply to `plan`, `smoke` and `run` unless stated otherwise:

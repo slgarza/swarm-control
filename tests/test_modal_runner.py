@@ -283,6 +283,58 @@ class PlanningTests(unittest.TestCase):
         self.assertTrue(plan["allow_overlap"])
         self.assertEqual(len(plan["overlap_pairs"]), 4950)
         self.assertFalse(plan["live_execution_enabled"])
+        admission = plan["local_admission"]
+        self.assertEqual(admission["ready_task_count"], 100)
+        self.assertFalse(admission["project_capacity_sufficient"])
+        self.assertEqual(admission["minimum_infrastructure_reserve_cents"], 3100)
+        self.assertFalse(admission["infrastructure_policy_covers_minimum_reserve"])
+        self.assertIsNone(admission["remaining_infrastructure_allowance_cents"])
+        self.assertFalse(admission["budget_ledger_checked"])
+        self.assertFalse(admission["launch_readiness_verified"])
+
+    def test_local_admission_does_not_count_blocked_or_duplicate_issue_work(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            project = make_project(Path(temporary))
+            dependency = project.tasks_dir / "D1.json"
+            dependency.write_text(json.dumps({"id": "D1", "status": "ready"}))
+            tasks = [
+                {"id": "T1", "issue": 1, "status": "blocked"},
+                {"id": "T2", "issue": 2, "blockedBy": ["external_decision"]},
+                {"id": "T3", "issue": 3, "dependsOn": ["D1"]},
+                {"id": "T4", "issue": 4},
+                {"id": "T5", "issue": 4},
+                {"id": "T6", "issue": True},
+                {"id": "T7", "issue": 7},
+            ]
+            with patch.object(project.__class__, "ledger", side_effect=AssertionError("ledger touched")):
+                admission = runner.local_admission_summary(tasks, 7, project)
+            self.assertFalse((project.root / ".swarm").exists())
+            self.assertEqual(admission["ready_task_ids"], ["T7"])
+            self.assertEqual(admission["maximum_metadata_ready_agents"], 1)
+            self.assertIn("dependency_not_locally_merged:D1", admission["blocked_tasks"]["T3"])
+            self.assertEqual(admission["blocked_tasks"]["T4"], ["duplicate_issue"])
+            self.assertEqual(admission["blocked_tasks"]["T5"], ["duplicate_issue"])
+            self.assertEqual(admission["blocked_tasks"]["T6"], ["missing_issue"])
+            dependency.write_text(json.dumps({"id": "D1", "status": "merged", "pullRequest": 11}))
+            admission = runner.local_admission_summary([tasks[2]], 1, project)
+            self.assertEqual(admission["ready_task_count"], 1)
+            self.assertFalse(admission["github_readiness_checked"])
+            self.assertFalse(admission["provider_capacity_verified"])
+            self.assertFalse(admission["launch_readiness_verified"])
+
+    def test_local_admission_rejects_invalid_or_escaped_dependency_metadata(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            project = make_project(Path(temporary))
+            task = {"id": "T1", "issue": 1, "dependsOn": ["D1"]}
+            dependency = project.tasks_dir / "D1.json"
+            for contents in ("invalid-json", "[]", '{"status":"merged","pullRequest":true}'):
+                dependency.write_text(contents)
+                admission = runner.local_admission_summary([task], 1, project)
+                self.assertEqual(admission["ready_task_count"], 0)
+            dependency.unlink()
+            dependency.symlink_to(project.root / "README.md")
+            admission = runner.local_admission_summary([task], 1, project)
+            self.assertEqual(admission["blocked_tasks"]["T1"], ["dependency_metadata_invalid:D1"])
 
     def test_synchronized_run_requires_model_capacity_before_claiming_or_cloud_import(self):
         output = io.StringIO()

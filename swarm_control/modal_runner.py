@@ -124,6 +124,66 @@ def validate_batch(tasks, workers, *, allow_overlap=False):
                 raise ValueError(f"overlapping tasks: {previous['id']} / {task['id']}")
 
 
+def infrastructure_reserve_cents(task_count):
+    return 100 + 30 * task_count
+
+
+def local_admission_summary(tasks, workers, project):
+    """Inspect metadata without contacting services or opening a budget ledger.
+
+    A positive result is preparation evidence only. Live issue/dependency checks,
+    remaining durable allowances and deployed provider capacity are not observed.
+    """
+    issues = {}
+    for task in tasks:
+        number = task.get("issue")
+        if type(number) is int and number > 0:
+            issues.setdefault(number, []).append(task["id"])
+    blockers = {}
+    for task in tasks:
+        reasons = []
+        if task.get("status", "ready") != "ready":
+            reasons.append("task_not_ready")
+        if task.get("blockedBy"):
+            reasons.append("declared_blockers")
+        number = task.get("issue")
+        if type(number) is not int or number <= 0:
+            reasons.append("missing_issue")
+        elif len(issues[number]) != 1:
+            reasons.append("duplicate_issue")
+        for dependency in task.get("dependsOn", []):
+            try:
+                path = project.tasks_dir / f"{dependency}.json"
+                if path.is_symlink() or not path.resolve().is_relative_to(project.tasks_dir.resolve()):
+                    raise ValueError("dependency metadata is outside the task directory")
+                metadata = json.loads(path.read_text())
+                pull_request = metadata.get("pullRequest")
+                if metadata.get("status") != "merged" or type(pull_request) is not int or pull_request <= 0:
+                    reasons.append(f"dependency_not_locally_merged:{dependency}")
+            except (OSError, ValueError, AttributeError):
+                reasons.append(f"dependency_metadata_invalid:{dependency}")
+        if reasons:
+            blockers[task["id"]] = reasons
+    ready = [task["id"] for task in tasks if task["id"] not in blockers]
+    reserve = infrastructure_reserve_cents(len(tasks))
+    return {
+        "scope": "local_metadata_only",
+        "ready_task_ids": ready,
+        "ready_task_count": len(ready),
+        "blocked_tasks": blockers,
+        "maximum_metadata_ready_agents": min(workers, len(ready)),
+        "project_capacity_sufficient": max(workers, len(tasks)) <= project.max_live_agents,
+        "minimum_infrastructure_reserve_cents": reserve,
+        "infrastructure_policy_covers_minimum_reserve": reserve <= project.infra_limit_cents,
+        "remaining_model_allowance_cents": None,
+        "remaining_infrastructure_allowance_cents": None,
+        "budget_ledger_checked": False,
+        "github_readiness_checked": False,
+        "provider_capacity_verified": False,
+        "launch_readiness_verified": False,
+    }
+
+
 def verify_gateway_capacity(admission, workers):
     # Older gateways had twenty upstream slots. Their missing field supports
     # small cohorts only; a larger cohort must attest its deployed capacity.
@@ -633,6 +693,7 @@ def main():
         "mode": args.command,
     }
     if args.command == "plan":
+        plan["local_admission"] = local_admission_summary(tasks, args.workers, project)
         print(json.dumps(plan, indent=2))
         return 0
     import modal
@@ -692,10 +753,10 @@ def main():
                 base_sha,
                 retry=args.retry,
                 budget_cents=int(amount),
-                infra_cents=100 + 30 * len(tasks),
+                infra_cents=infrastructure_reserve_cents(len(tasks)),
             )
         else:
-            ledger.allocate(batch.name, 0, infra_cents=100 + 30 * len(tasks))
+            ledger.allocate(batch.name, 0, infra_cents=infrastructure_reserve_cents(len(tasks)))
         try:
             if gateway:
                 admission = gateway["create_run"].remote(
