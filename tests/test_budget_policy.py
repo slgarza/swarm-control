@@ -1,11 +1,12 @@
 """Synthetic, offline accounting migrations; never touch a real target ledger."""
 
+import gc
 import io
 import json
 import sqlite3
 import tempfile
 import unittest
-from contextlib import redirect_stderr, redirect_stdout
+from contextlib import contextmanager, redirect_stderr, redirect_stdout
 from pathlib import Path
 from unittest.mock import patch
 
@@ -31,13 +32,25 @@ class BudgetPolicyTests(unittest.TestCase):
         ledger.finish("T01", "finished_batch", "merged", "private-report.json")
         self.increase = {"model_limit_cents": 4500, "infra_limit_cents": 5000}
 
+    @contextmanager
+    def database(self):
+        # sqlite3.Connection.__exit__ commits/rolls back but does not close.
+        # A delayed writer finalizer could otherwise checkpoint WAL during a
+        # subsequent read-only assertion, depending on the runner's GC timing.
+        db = sqlite3.connect(self.path)
+        try:
+            with db:
+                yield db
+        finally:
+            db.close()
+
     def rows(self):
-        with sqlite3.connect(self.path) as db:
+        with self.database() as db:
             return {table: db.execute(f"SELECT * FROM {table} ORDER BY 1").fetchall()
                     for table in ("tasks", "events", "pilot_allocations", "pilot_infra_allocations")}
 
     def remove_policy(self):
-        with sqlite3.connect(self.path) as db:
+        with self.database() as db:
             db.execute("DROP TABLE budget_policy")
 
     def reviewed(self, *, migration=None, authorization_id="approved_synthetic_001"):
@@ -71,7 +84,17 @@ class BudgetPolicyTests(unittest.TestCase):
         self.remove_policy()
         before = self.path.read_bytes()
         files = sorted(path.name for path in self.path.parent.iterdir())
-        with patch("swarm_control.pilot_state.Ledger", side_effect=AssertionError("Ledger constructor called")):
+        original_snapshot = budget.snapshot
+
+        def snapshot_after_collection(db):
+            # Force the timing that exposed an unclosed fixture writer on CI.
+            gc.collect()
+            return original_snapshot(db)
+
+        with (
+            patch("swarm_control.pilot_state.Ledger", side_effect=AssertionError("Ledger constructor called")),
+            patch.object(budget, "snapshot", side_effect=snapshot_after_collection),
+        ):
             result = budget.inspect(self.project)
             migration = budget.plan(self.project, self.increase)
         self.assertEqual(result["policy_source"], "legacy_inferred_v1_default")
@@ -81,7 +104,15 @@ class BudgetPolicyTests(unittest.TestCase):
         self.assertEqual(result["remaining_allowances"], {"model_cents": 0, "infra_cents": 30})
         self.assertFalse(migration["authorizes_spend"])
         self.assertEqual(self.path.read_bytes(), before)
-        self.assertEqual(sorted(path.name for path in self.path.parent.iterdir()), files)
+        # A read-only SQLite WAL connection may initialize coordination sidecars.
+        # These are not budget records or a new database; a newly created WAL
+        # must contain no transaction bytes. immutable=1 would hide live WAL.
+        after_files = {path.name for path in self.path.parent.iterdir()}
+        new_files = after_files - set(files)
+        self.assertTrue(set(files) <= after_files)
+        self.assertLessEqual(new_files, {self.path.name + "-wal", self.path.name + "-shm"})
+        if self.path.name + "-wal" in new_files:
+            self.assertEqual(self.path.with_name(self.path.name + "-wal").read_bytes(), b"")
 
     def test_reviewed_legacy_migration_preserves_every_allocation_task_and_event(self):
         self.remove_policy()
@@ -97,7 +128,7 @@ class BudgetPolicyTests(unittest.TestCase):
         self.assertEqual(inspected["policy"], self.increase)
         self.assertEqual(inspected["policy_source"], "stored")
         self.assertEqual(inspected["remaining_allowances"], {"model_cents": 2700, "infra_cents": 4330})
-        with sqlite3.connect(self.path) as db:
+        with self.database() as db:
             receipt = db.execute("SELECT authorization_receipt_sha256,previous_policy_source,"
                                  "allocation_totals_before_json,allocation_totals_after_json FROM policy_migrations").fetchone()
         self.assertEqual(receipt[0], receipt_hash)
@@ -172,7 +203,7 @@ class BudgetPolicyTests(unittest.TestCase):
         with self.assertRaisesRegex(ValueError, "plan digest mismatch"):
             self.apply(paths)
         paths = self.reviewed()
-        with sqlite3.connect(self.path) as db:
+        with self.database() as db:
             db.execute("INSERT INTO pilot_allocations VALUES ('new_zero_reservation',0)")
         with self.assertRaisesRegex(ValueError, "ledger changed"):
             self.apply(paths)
@@ -184,7 +215,7 @@ class BudgetPolicyTests(unittest.TestCase):
     def test_active_and_awaiting_tasks_prevent_planning_and_applying(self):
         paths = self.reviewed()
         for state in ("running", "awaiting_integration"):
-            with sqlite3.connect(self.path) as db:
+            with self.database() as db:
                 db.execute("UPDATE tasks SET state=?", (state,))
             with self.subTest(state=state):
                 with self.assertRaisesRegex(ValueError, "active/awaiting"):
@@ -225,7 +256,7 @@ class BudgetPolicyTests(unittest.TestCase):
 
     def test_audit_is_append_only_and_authorization_identity_cannot_be_reused(self):
         self.apply()
-        with sqlite3.connect(self.path) as db:
+        with self.database() as db:
             for statement in ("UPDATE policy_migrations SET confirming_authority='changed'", "DELETE FROM policy_migrations"):
                 with self.assertRaisesRegex(sqlite3.IntegrityError, "append-only"):
                     db.execute(statement)
@@ -236,11 +267,11 @@ class BudgetPolicyTests(unittest.TestCase):
         migration = budget.plan(self.project, {"model_limit_cents": 4600, "infra_limit_cents": 5100})
         with self.assertRaisesRegex(ValueError, "already been applied"):
             self.apply(self.reviewed(migration=migration))
-        with sqlite3.connect(self.path) as db:
+        with self.database() as db:
             self.assertEqual(db.execute("SELECT COUNT(*) FROM policy_migrations").fetchone()[0], 1)
 
     def test_unexpected_trigger_cannot_refund_allocations_during_migration(self):
-        with sqlite3.connect(self.path) as db:
+        with self.database() as db:
             db.execute("CREATE TRIGGER accidental_refund AFTER UPDATE ON budget_policy "
                        "BEGIN DELETE FROM pilot_allocations; END")
         before = self.rows()
@@ -249,8 +280,27 @@ class BudgetPolicyTests(unittest.TestCase):
             self.apply(paths)
         self.assertEqual(self.rows(), before)
         self.assertEqual(budget.inspect(self.project)["policy"], budget.LEGACY_POLICY)
-        with sqlite3.connect(self.path) as db:
+        with self.database() as db:
             self.assertFalse(db.execute("SELECT 1 FROM sqlite_schema WHERE name='policy_migrations'").fetchone())
+
+    def test_read_only_inspection_observes_live_wal_without_changing_database_or_wal_bytes(self):
+        with self.database() as writer:
+            writer.execute("PRAGMA wal_autocheckpoint = 0")
+            writer.execute("INSERT INTO pilot_infra_allocations VALUES ('live-wal-allocation',5)")
+            writer.commit()
+            wal = self.path.with_name(self.path.name + "-wal")
+            self.assertTrue(wal.exists())
+            before_main, before_wal = self.path.read_bytes(), wal.read_bytes()
+            files = sorted(path.name for path in self.path.parent.iterdir())
+            with patch("swarm_control.pilot_state.Ledger", side_effect=AssertionError("Ledger constructor called")):
+                inspected = budget.inspect(self.project)
+                migration = budget.plan(self.project, self.increase)
+            self.assertEqual(inspected["allocation_totals"], {"model_cents": 1800, "infra_cents": 675})
+            self.assertEqual(inspected["remaining_allowances"]["infra_cents"], 25)
+            self.assertEqual(migration["allocation_totals"], inspected["allocation_totals"])
+            self.assertEqual(self.path.read_bytes(), before_main)
+            self.assertEqual(wal.read_bytes(), before_wal)
+            self.assertEqual(sorted(path.name for path in self.path.parent.iterdir()), files)
 
     def test_symlinked_ledger_or_state_directory_is_rejected(self):
         original = self.path.with_name("retained.sqlite3")

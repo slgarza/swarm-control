@@ -29,6 +29,12 @@ inferring the original USD18 model/USD7 infrastructure limits. It preserves the
 absence of the policy table. Invalid history, allocations exceeding that policy,
 symlinked state/ledger files and malformed stored policy stop inspection.
 
+SQLite may create or update its own `-shm`/empty `-wal` coordination sidecars
+when reading a database configured for WAL. Read-only here means no SQL writes,
+policy initialization, allocation changes or budget lock files; it does not
+promise an immutable directory listing. Inspection reads committed live WAL
+transactions so pending checkpointing cannot hide existing reservations.
+
 Keep live execution disabled and the profile's limits equal to the old policy.
 Choose proposed whole-cent cumulative limits, then capture a private plan:
 
