@@ -2,16 +2,21 @@
 
 The pilot gateway holds the OpenAI credential in the trusted Modal function.
 Each coding worker receives a random credential scoped to one task, one run,
-and an expiry. The model budget is at most USD18 for the entire run, divided
-equally between at most ten tasks (USD1.80 each for ten). In the original
-Afterimage pilot, USD7 of its USD25 allowance was reserved for infrastructure.
-This module does not enforce or measure Modal billing.
+and an expiry. The hard limit is USD180 for a run of at most 100 tasks, divided
+equally between task credentials. `create_run` still defaults to USD18; the runner
+requires an explicit amount within the target's remaining durable allowance.
+Larger limits do not authorize spending or migrate existing budgets. In the
+original Afterimage pilot, USD7 of its USD25 allowance was reserved for
+infrastructure. This module does not enforce or measure Modal billing.
 
 ## Deployment and controller interface
 
 Use Modal 1.6.3 and Python 3.12. The deployment builds its pinned FastAPI/httpx
 image and references the project-configured Modal secret (`runtime.openai_secret`). Only `gateway`
 receives `CODEX_API_KEY`; the administrative functions have no model credential.
+`runtime.gateway_concurrency` (integer 1–100, default 20) is passed through
+`SWARM_GATEWAY_CONCURRENCY` into the deployed gateway image. Changing that setting
+requires redeployment and confirmation of actual upstream API capacity.
 
 ```sh
 swarm-control deploy-gateway --project /path/to/target/swarm.toml
@@ -100,8 +105,25 @@ failure. Inflight requests remain reserved after a crash. They are not reclaimed
 or silently retried. A task can have only one outstanding reservation.
 
 The durable Modal Dict is selected by `runtime.gateway_ledger`; Afterimage preserves
-its original `afterimage-pilot-budget-v1` identifier. One ASGI container serves
-up to 20 concurrent requests. Every ledger change obtains an atomic persistent
+its original `afterimage-pilot-budget-v1` identifier. A single ASGI serving container
+accepts up to 120 HTTP inputs. A semaphore limits concurrent provider requests to
+the configured gateway capacity, default 20 and maximum 100. After authentication
+and request validation, requests wait at most 15 seconds for a slot. Timeout returns
+`429 gateway_busy` with `Retry-After: 1` before a budget reservation or provider call.
+Accepted requests retain a slot through counting, generation and settlement/cleanup.
+The bounded Codex retries still apply; rejected requests do not acquire fresh funds.
+
+A synchronized live cohort cannot request more workers than the profile's gateway
+capacity. For 100, configure `runtime.gateway_concurrency = 100`, verify quota and
+redeploy first. The authenticated `create_run` response advertises deployed
+`gateway_concurrency`; the runner verifies enough capacity before synchronized
+sandbox launch. Missing capacity is accepted only for cohorts of at most 20 to
+support older deployments. A failed capacity check stops the run with its local
+allocation retained. The operator must still match the supplied HTTP URL to that
+gateway app. Capacity alone does not establish provider quota, throughput or
+useful agent concurrency.
+
+Every ledger change obtains an atomic persistent
 run lock, as well as the local asyncio lock. An ambiguous storage failure leaves
 the run locked and rejects further generation instead of guessing whether a
 debit or refund succeeded. Never delete or steal the lock while recovering a
@@ -122,6 +144,7 @@ allowance. Keep the actual OpenAI project and Modal invoices for reconciliation.
 | 402 `budget_exhausted` / `request_limit` | Stop the task; do not retry or replenish automatically. |
 | 403 `run_stopped` / `run_expired` | Recover artifacts and terminate the worker. |
 | 409 `task_inflight` | Do not issue concurrent requests with one credential; inspect the durable pending reservation. |
+| 429 `gateway_busy` | Capacity waiting expired before reservation/inference; bounded retry uses the same task/run allowance. Inspect configured slots and actual provider capacity. |
 | 429 `upstream_rate_limit` / `upstream_count_rate_limit` | Bounded backoff only; each attempted retry still needs budget. |
 | 503 `ledger_locked` | Read status, stop the run, recover artifacts; no lock stealing or budget resets. |
 | 400 / 413 / 415 policy errors | Fix the request/provider configuration before another run. |
@@ -135,7 +158,7 @@ provide access to Modal or the real OpenAI key.
 ## Validation
 
 Install the same pinned HTTP test dependencies in the local or CI Python
-environment; the standard-library subset deliberately skips the five HTTP
+environment; the standard-library subset deliberately skips the HTTP
 tests when these packages are absent:
 
 ```sh
@@ -148,16 +171,17 @@ python -m py_compile swarm_control/pilot_budget.py swarm_control/pilot_gateway.p
 ruff check --isolated swarm_control/pilot_budget.py swarm_control/pilot_gateway.py tests/test_pilot_budget.py
 ```
 
-The 26 standard-library tests cover money validation, ten task quotas,
+The offline policy tests cover money validation, 100-task quotas,
 concurrency, persistent locks, interrupted writes, restarts, cancellation,
 single-use runs, request bounds, forbidden remote tools/context, and incremental
 SSE accounting. They also cover the initial Codex request and tool-result
 replay shapes, stripped telemetry/collaboration definitions, and rejection of
-paid tools hidden inside additional tool items or namespaces. Five additional
+paid tools hidden inside additional tool items or namespaces. Additional
 offline HTTP tests run when `modal==1.6.3`,
 `fastapi==0.115.12`, and `httpx==0.28.1` are installed. They use a simulated
-upstream and in-memory ledger; no tests read an API key or make model calls.
-All 31 tests, scoped Ruff, and compilation passed locally. Codex 0.166 also
+upstream and in-memory ledger; no tests read an API key or make model calls. They
+exercise capacity exhaustion before reservation and slot release after failures.
+Codex 0.166 previously
 completed a two-request localhost SSE simulation: both real CLI request shapes
 passed the policy, the local printf command executed, and Codex returned READY.
 The simulation used a dummy credential and made no model calls. The original

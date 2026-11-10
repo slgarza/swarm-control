@@ -3,15 +3,45 @@
 The ten-agent pilot exercised small useful tasks on one repository with disjoint
 ownership. Large existing codebases need their own baseline, architecture map,
 useful backlog and acceptance criteria. The extraction is not evidence of 100-agent
-operation or autonomous end-to-end review.
+operation or autonomous end-to-end review. The runner and gateway now accept up to
+100 tasks per cohort, with offline tests for bounded dispatch, shared ownership,
+three-way integration and accounting at that size. This is implementation capacity;
+the qualifying live run and AFK comparison have not happened.
+
+## Implemented controls
+
+| Control | Behavior |
+| --- | --- |
+| Cohort admission | `budget.max_live_agents` accepts 1–100, defaults to ten; disabled/funding gates still apply |
+| Dispatch | At most the requested number of submitted workers; completion checkpoints happen before replacement submissions |
+| Shared ownership | `--allow-overlap` on `plan`/`run` records overlapping pairs; each worker still edits only its declared paths |
+| Integration | Strict application first; opted-in candidates can use three-way application, full combined validation and an additional applied-diff review hash |
+| Conflicts | Durable `needs_repair` receipt and cleaned partial application; no automatic repair or replacement spend |
+| Gateway capacity | One serving container, 120 HTTP inputs; configurable 1–100 provider slots, default 20, with at most 15 seconds of capacity waiting |
+| Pagination | Open PRs and exact-head checks are read across bounded pages; incomplete/inconsistent responses stop admission/merge |
+
+An exhausted gateway queue returns `429 gateway_busy` before reserving budget or
+calling the provider. The Codex retry bounds still apply. For a synchronized cohort
+of 100, configure `runtime.gateway_concurrency = 100` only after confirming actual
+API capacity, then redeploy. Synchronized live runs exceeding the profile's gateway
+capacity are rejected before allocation; plans report capacity insufficiency.
+Before sandbox launch the runner also checks the capacity returned by authenticated
+gateway admission. Cohorts above 20 require that deployed capacity field. A failed
+check stops the run with allocation retained; the operator must still verify the
+HTTP URL belongs to that gateway app.
+Provisioning, model quota and CI throughput must all be measured in live cohorts.
+
+## Remaining operational work
 
 1. Validate a small cohort on a second real public repository. Private targets
-   first need a scoped authentication/clone adapter.
-2. Add durable task leases, heartbeats and checkpoints before multiple controller
-   hosts. The current SQLite/host lock cannot coordinate separate clones.
+   first need a scoped authentication/clone adapter. The
+   [target assessment](contest/TARGET-ASSESSMENT.md) keeps Afterimage for the next
+   collision pilot and defines the gate for a more mature final benchmark target.
+2. Add distributed leases and heartbeats before multiple controller hosts. Existing
+   local completion checkpoints and locks cannot coordinate separate clones.
 3. Improve the integration queue and assign repair owners. Keep checks on combined
    changes; faster patch generation alone does not establish delivery velocity.
-4. Measure model API and Modal capacity, add backpressure, and preserve budget
+4. Measure model API and Modal capacity under the implemented backpressure, and preserve budget
    history when explicitly authorizing each new stage.
 5. Exercise shared-file conflicts, repair, CI contention and reverts. Disjoint
    ownership alone does not satisfy the prize's collision requirement.
@@ -33,15 +63,16 @@ failures and budget from that service. No dashboard is implemented yet.
 | Local tutorial | Controller installed, separate target generated | Passing baseline, readable plan and live execution disabled |
 | Two real agents | Own service accounts, useful tasks, passing CI and authorized cumulative allowance | Reviewed merged changes, preserved artifacts and confirmed cleanup |
 | Ten agents on another real project | Enough independent ready work and confirmed API/VM capacity | Delivery duration, actual cost, quality and integration bottlenecks |
-| 25 then 50 | Implemented/tested larger-cohort support, scheduling, backpressure and conflict recovery | Meaningful overlap, combined correctness, failure recovery and measured delivery rates |
-| 100 | Sufficient real work, repaired scale limits, auditable concurrency and a strong AFK comparison plan | At least 100 useful simultaneous sessions plus superior merged green PRs/hour and PRs/dollar |
+| 25 then 50 | Reviewed capacity profile, verified provider quota, assigned repair owners and authorized remaining budget | Meaningful overlap, combined correctness, failure recovery and measured delivery rates |
+| 100 | At least 100 useful unblocked tasks, gateway capacity/quota for the cohort, auditable concurrency and a strong AFK comparison plan | At least 100 useful simultaneous sessions plus superior merged green PRs/hour and PRs/dollar |
 
-The 25/50/100 rows require implementation work, not just a different CLI flag.
-The current gateway caps runs at ten tasks, has a single serving container, and
-uses pilot request/budget limits. The runner caps live task counts and timeouts;
-admission/integration also stop at conservative GitHub pagination boundaries.
-Review and test those constraints together with scheduling and integration.
-Raising one limit without addressing the others is insufficient.
+The gateway has a USD180 hard per-run model ceiling. Its administrative default
+remains USD18, and an existing project's durable policy may be much smaller. This
+does not authorize a new allowance or migrate one. The runner retains bounded
+timeouts, one local coordinator and assisted serial integration. A larger worker
+count can increase an integration backlog without improving delivered PRs/hour.
+Clean three-way application handles compatible edits; semantic conflicts, failed
+combined checks and CI contention still need observed recovery at each stage.
 
 Stop expansion when integration queues, quality, cost or recovery cannot meet the
 agreed criteria. Preserve failed attempts and prior allocations. A new approved

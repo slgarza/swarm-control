@@ -6,12 +6,14 @@ and logs remain available after any failure. No command force-pushes or bypasses
 """
 
 import argparse
+import fcntl
 import hashlib
 import json
 import os
 import re
 import subprocess
 import uuid
+from contextlib import contextmanager, nullcontext
 from datetime import UTC, datetime
 from pathlib import Path
 
@@ -48,6 +50,21 @@ def save(path, value):
     temporary = path.with_suffix(".tmp")
     temporary.write_text(json.dumps(value, indent=2) + "\n")
     temporary.replace(path)
+
+
+@contextmanager
+def integration_lock(state):
+    """Serialize credentialed integration across this checkout's worktrees."""
+    state.mkdir(parents=True, exist_ok=True)
+    with (state / "integration.lock").open("a") as handle:
+        try:
+            fcntl.flock(handle, fcntl.LOCK_EX | fcntl.LOCK_NB)
+        except BlockingIOError:
+            raise ValueError("another integrator is active for this repository") from None
+        try:
+            yield
+        finally:
+            fcntl.flock(handle, fcntl.LOCK_UN)
 
 
 def command(argv, cwd, *, data=None, log=None):
@@ -137,10 +154,22 @@ def candidate(state, task, *, committed=False):
     require(not git(root, "diff", "--name-only"), "unstaged changes after validation")
     require(not git(root, "ls-files", "--others", "--exclude-standard"), "untracked changes after validation")
     require(git(root, "write-tree") == state["tested_tree"], "candidate tree changed after validation")
+    if "applied_patch_sha256" in state:
+        require(applied_digest(root, state["tested_base_sha"]) == state["applied_patch_sha256"],
+                "applied patch changed after validation")
     if committed:
         require(git(root, "rev-parse", "HEAD^{tree}") == state["tested_tree"], "committed tree differs from validation")
         require(git(root, "rev-parse", "HEAD^") == state["tested_base_sha"], "commit parent differs from tested base")
     return root
+
+
+def applied_patch(root, base):
+    return command(["git", "diff", "--cached", "--binary", "--full-index", "--no-ext-diff",
+                    "--no-textconv", "--no-renames", base, "--"], root)
+
+
+def applied_digest(root, base):
+    return hashlib.sha256(applied_patch(root, base)).hexdigest()
 
 
 def prepare(directory, task, report, digest, worktree=None):
@@ -151,30 +180,78 @@ def prepare(directory, task, report, digest, worktree=None):
     root = (worktree or common_state(ROOT) / "integration-worktrees" / branch.split("/")[-1]).resolve()
     root.parent.mkdir(parents=True, exist_ok=True)
     git(ROOT, "worktree", "add", "-b", branch, str(root), base)
+    state = {"task_id": task["id"], "batch_id": directory.parent.name, "status": "preparing",
+             "patch_sha256": digest, "worker_base_sha": report["base_sha"], "tested_base_sha": base,
+             "worktree": str(root), "branch": branch, "preparation_started_at": now()}
+    save(directory / "integration.json", state)
     patch = (directory / "changes.patch").read_bytes()
     require(hashlib.sha256(patch).hexdigest() == digest, "patch changed before apply")
-    command(["git", "apply", "--check", "--index", "-"], root, data=patch)
-    command(["git", "apply", "--index", "-"], root, data=patch)
-    paths = audit(root, base, task["ownership"])
-    tree = git(root, "write-tree")
+    manifest = json.loads((directory / "manifest.json").read_text())
+    try:
+        command(["git", "apply", "--check", "--index", "-"], root, data=patch)
+    except ValueError:
+        if manifest.get("allow_overlap") is not True:
+            state.update(status="needs_repair", repair_reason="patch_does_not_apply", failed_at=now())
+            save(directory / "integration.json", state)
+            raise
+        state["application_method"] = "three_way"
+        try:
+            command(["git", "merge-base", "--is-ancestor", report["base_sha"], base], root)
+            command(["git", "apply", "--3way", "--index", "-"], root, data=patch,
+                    log=directory / "integration-apply.log")
+        except ValueError:
+            conflicts = command(["git", "diff", "--name-only", "--diff-filter=U", "-z"], root)
+            changed = command(["git", "diff", "--name-only", "-z", base, "--"], root)
+            state.update(status="needs_repair", repair_reason="three_way_apply_failed",
+                         conflicting_files=sorted(filter(None, conflicts.decode().split("\0"))),
+                         changed_files=sorted(filter(None, changed.decode().split("\0"))), failed_at=now())
+            # This is a newly created dedicated worktree; retain the original patch/logs,
+            # then remove partial application and conflict markers before any repair.
+            save(directory / "integration.json", state)
+            git(root, "reset", "--hard", base)
+            git(root, "clean", "-fd")
+            state["worktree_cleaned"] = True
+            save(directory / "integration.json", state)
+            raise ValueError("patch needs repair; preserved integration.json and original worker patch") from None
+    else:
+        command(["git", "apply", "--index", "-"], root, data=patch)
+        state["application_method"] = "direct"
+    try:
+        paths = audit(root, base, task["ownership"])
+        tree = git(root, "write-tree")
+        require(PROJECT is not None, "select a project before integration")
+    except ValueError:
+        state.update(status="needs_repair", repair_reason="candidate_validation_failed", failed_at=now())
+        save(directory / "integration.json", state)
+        raise
     started = now()
-    require(PROJECT is not None, "select a project before integration")
-    for phase, commands in (("install", PROJECT.install), ("checks", PROJECT.checks)):
-        for index, argv in enumerate(commands):
-            command(argv, root, log=directory / f"integration-{phase}-{index + 1}.log")
-    state = {"task_id": task["id"], "batch_id": directory.parent.name, "status": "prepared",
-             "patch_sha256": digest, "worker_base_sha": report["base_sha"], "tested_base_sha": base,
-             "tested_tree": tree, "worktree": str(root), "branch": branch, "changed_files": paths,
-             "checks_started_at": started, "checks_finished_at": now()}
-    candidate(state, task)
+    (directory / "integration.patch").write_bytes(applied_patch(root, base))
+    state.update(status="checking", tested_tree=tree, changed_files=paths,
+                 applied_patch_sha256=applied_digest(root, base),
+                 checks_started_at=started)
+    save(directory / "integration.json", state)
+    try:
+        for phase, commands in (("install", PROJECT.install), ("checks", PROJECT.checks)):
+            for index, argv in enumerate(commands):
+                command(argv, root, log=directory / f"integration-{phase}-{index + 1}.log")
+        candidate(state, task)
+    except ValueError:
+        state.update(status="needs_repair", repair_reason="candidate_validation_failed", failed_at=now())
+        save(directory / "integration.json", state)
+        raise
+    state.update(status="prepared", checks_finished_at=now())
     save(directory / "integration.json", state)
     return state
 
 
-def load_review(directory, digest, reviewed):
+def load_review(directory, digest, reviewed, reviewed_applied=None):
     require(reviewed == digest, "explicit --reviewed-patch-sha must match the verified worker patch")
     state = json.loads((directory / "integration.json").read_text())
     require(state.get("patch_sha256") == digest, "integration artifact changed")
+    if state.get("application_method") == "three_way":
+        require(isinstance(state.get("applied_patch_sha256"), str)
+                and reviewed_applied == state["applied_patch_sha256"],
+                "three-way integration requires --reviewed-applied-patch-sha for the validated diff")
     return state
 
 
@@ -196,6 +273,7 @@ def publish(directory, task, report, state):
         "Validation: all project-configured install and check commands passed on the candidate tree.",
         f"Ownership/public contract: limited to {', '.join(task['ownership'])}; acceptance defines the contract.",
         f"Reviewed patch SHA256: {state['patch_sha256']}", f"Tested base: {state['tested_base_sha']}",
+        f"Application: {state.get('application_method', 'direct')}; applied diff SHA256: {state.get('applied_patch_sha256', 'unrecorded')}",
         f"Tested tree: {state['tested_tree']}", f"Source: Modal worker {task['id']}, batch {state['batch_id']}.",
         f"Worker started: {report.get('started_at')}; finished: {report.get('finished_at')}; seconds: {report.get('wall_seconds')}.",
         f"Integration checks: {state['checks_started_at']} through {state['checks_finished_at']}.",
@@ -221,13 +299,39 @@ def green_checks(payload, head, required_checks=None):
                 and check.get("conclusion") == "success" for check in actions), "GitHub Actions checks are not all green for this head")
 
 
+def all_checks(head):
+    """Collect every check page, stopping safely on inconsistent or excessive data."""
+    checks, identifiers, expected = [], set(), None
+    for page in range(1, 101):
+        suffix = "" if page == 1 else f"&page={page}"
+        payload = github(f"commits/{head}/check-runs?per_page=100{suffix}")
+        entries = payload.get("check_runs")
+        total = payload.get("total_count")
+        require(isinstance(entries, list) and type(total) is int and total >= 0,
+                "invalid check pagination response")
+        require(expected is None or expected == total, "check list changed during pagination")
+        expected = total
+        for check in entries:
+            require(isinstance(check, dict), "invalid check pagination entry")
+            identity = check.get("id")
+            if identity is not None:
+                require(identity not in identifiers, "duplicate check during pagination")
+                identifiers.add(identity)
+        checks.extend(entries)
+        require(len(checks) <= expected, "check pagination exceeds total")
+        if len(checks) == expected:
+            return {"total_count": expected, "check_runs": checks}
+        require(len(entries) == 100, "check pagination incomplete")
+    raise ValueError("check pagination limit exceeded")
+
+
 def merge(directory, task, state):
     require(state["status"] in {"published", "merged"}, "integration has not been published")
     candidate(state, task, committed=True)
     pr = github(f"pulls/{state['pr_number']}")
     require(not pr.get("draft") and pr["base"]["ref"] == BASE_BRANCH
             and pr["head"]["sha"] == state["head_sha"] and pr["head"]["ref"] == state["branch"], "PR changed or is not mergeable work")
-    green_checks(github(f"commits/{state['head_sha']}/check-runs?per_page=100"), state["head_sha"], PROJECT.required_checks if PROJECT else None)
+    green_checks(all_checks(state["head_sha"]), state["head_sha"], PROJECT.required_checks if PROJECT else None)
     if not pr.get("merged"):
         require(pr.get("state") == "open" and state["status"] == "published", "PR is not open")
         require(github(f"git/ref/heads/{BASE_BRANCH}")["object"]["sha"] == state["tested_base_sha"], "main changed; prepare and test again")
@@ -256,19 +360,21 @@ def main():
     parser.add_argument("--worktree", type=Path)
     parser.add_argument("--project", type=Path, required=True)
     parser.add_argument("--reviewed-patch-sha")
+    parser.add_argument("--reviewed-applied-patch-sha")
     args = parser.parse_args()
     project = load_project(args.project)
     project.verify_origin()
     configure(project)
     directory = args.artifacts.resolve()
     task, report, digest = artifacts(directory)
-    if args.command == "plan":
-        result = {"task": task["id"], "ownership": task["ownership"], "patch_sha256": digest, "issue": task["issue"]}
-    elif args.command == "prepare":
-        result = prepare(directory, task, report, digest, args.worktree)
-    else:
-        state = load_review(directory, digest, args.reviewed_patch_sha)
-        result = publish(directory, task, report, state) if args.command == "publish" else merge(directory, task, state)
+    with integration_lock(common_state(ROOT)) if args.command != "plan" else nullcontext():
+        if args.command == "plan":
+            result = {"task": task["id"], "ownership": task["ownership"], "patch_sha256": digest, "issue": task["issue"]}
+        elif args.command == "prepare":
+            result = prepare(directory, task, report, digest, args.worktree)
+        else:
+            state = load_review(directory, digest, args.reviewed_patch_sha, args.reviewed_applied_patch_sha)
+            result = publish(directory, task, report, state) if args.command == "publish" else merge(directory, task, state)
     print(json.dumps(result, indent=2))
 
 

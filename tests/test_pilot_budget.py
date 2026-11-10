@@ -4,8 +4,10 @@ import asyncio
 import copy
 import importlib.util
 import json
+import os
 import time
 import unittest
+from unittest.mock import patch
 
 from swarm_control.pilot_budget import (
     MAX_BODY_BYTES,
@@ -149,7 +151,7 @@ class BudgetTests(unittest.TestCase):
             "Infinity",
             -1,
             0,
-            18.01,
+            180.01,
             "1.001",
             [],
             "secret",
@@ -158,6 +160,7 @@ class BudgetTests(unittest.TestCase):
                 money(value)
         self.assertEqual(money("18.00"), 18_000_000)
         self.assertEqual(money(0.25), 250_000)
+        self.assertEqual(money("180.00"), 180_000_000)
 
     def test_tokens_random_hashed_and_absent_from_report(self):
         self.assertNotEqual(self.tokens["A"], self.tokens["B"])
@@ -170,7 +173,7 @@ class BudgetTests(unittest.TestCase):
                 token_hash(token)
 
     def test_invalid_run_inputs(self):
-        for tasks in (["A", "A"], [], [None], ["../x"], [str(i) for i in range(11)]):
+        for tasks in (["A", "A"], [], [None], ["../x"], [str(i) for i in range(101)]):
             with self.assertRaises(PolicyError):
                 new_run("pilot", tasks, now=100)
         for ttl in (True, 59, 1801, -1):
@@ -494,6 +497,34 @@ class PersistenceTests(unittest.IsolatedAsyncioTestCase):
         report = await self.service.status("pilot", 101)
         self.assertEqual(report["tasks"]["A"]["requests"], 1)
 
+    async def test_100_concurrent_task_reservations_settle_once_within_unchanged_quota(self):
+        task_ids = [f"T{index:03}" for index in range(100)]
+        await self.service.create("hundred", task_ids, 180, 1800, 100)
+        pending = await asyncio.gather(*[
+            self.service.reserve("hundred", task, 1000, 100, 101) for task in task_ids
+        ])
+        report = await self.service.status("hundred", 101)
+        self.assertEqual(report["reserved_usd"], 100 * cost_micro(1000, 100) / 1_000_000)
+        self.assertTrue(all(task["budget_usd"] == 1.8 for task in report["tasks"].values()))
+        collisions = await asyncio.gather(*[
+            self.service.reserve("hundred", task, 1000, 100, 101) for task in task_ids
+        ], return_exceptions=True)
+        self.assertTrue(all(isinstance(error, PolicyError) and error.code == "task_inflight" for error in collisions))
+
+        async def settle(task, reservation):
+            await self.service.record_count("hundred", task, reservation["id"], 100, 102)
+            await self.service.finish("hundred", task, reservation["id"], completed())
+
+        await asyncio.gather(*[settle(task, reservation) for task, reservation in zip(task_ids, pending, strict=True)])
+        replacement = BudgetService(self.store)
+        report = await replacement.status("hundred", 103)
+        self.assertEqual(report["reserved_usd"], 0)
+        self.assertEqual(report["committed_usd"], 100 * cost_micro(100, 20) / 1_000_000)
+        self.assertLessEqual(report["maximum_charged_usd"], 180)
+        self.assertTrue(all(task["completed"] == 1 for task in report["tasks"].values()))
+        original = await replacement.status("pilot", 103)
+        self.assertEqual(original["budget_usd"], 18)
+
     async def test_restart_preserves_inflight_reservation(self):
         await self.service.reserve("pilot", "A", 1000, 100, 101)
         replacement = BudgetService(self.store)
@@ -607,6 +638,19 @@ class HTTPTests(unittest.IsolatedAsyncioTestCase):
     async def asyncTearDown(self):
         await self.client.aclose()
 
+    async def test_authenticated_admission_reports_actual_gateway_capacity(self):
+        from swarm_control import pilot_gateway
+
+        with (
+            patch.object(pilot_gateway, "BudgetService", return_value=self.service),
+            patch.object(pilot_gateway, "ModalStore", return_value=object()),
+            patch.object(pilot_gateway, "MAX_UPSTREAM_REQUESTS", 100),
+        ):
+            issued = await pilot_gateway.create_run.local("reported-capacity", ["A"], 18, 1800)
+        self.assertEqual(issued["gateway_concurrency"], 100)
+        self.assertEqual(issued["budget_usd"], 18)
+        self.assertEqual(set(issued["tokens"]), {"A"})
+
     async def test_round_trip_credentials_usage_and_immediate_followup(self):
         for _ in range(2):
             response = await self.client.post(
@@ -664,6 +708,183 @@ class HTTPTests(unittest.IsolatedAsyncioTestCase):
         )
         self.assertEqual(response.status_code, 415)
         self.assertFalse(self.calls)
+
+    async def test_capacity_wait_timeout_has_no_debit_and_stream_completion_releases_slot(self):
+        import httpx
+
+        from swarm_control.pilot_gateway import build_web_app
+
+        service = BudgetService(MemoryStore())
+        created = await service.create("capacity", ["A", "B"], 18, 1800, time.time())
+        streaming = asyncio.Event()
+        release = asyncio.Event()
+
+        class DelayedStream(httpx.AsyncByteStream):
+            async def __aiter__(self):
+                streaming.set()
+                await release.wait()
+                yield b"data: " + json.dumps(completed()).encode() + b"\n\n"
+
+        async def upstream(request):
+            if request.url.path.endswith("/input_tokens"):
+                return httpx.Response(200, json={"object": "response.input_tokens", "input_tokens": 100})
+            return httpx.Response(200, headers={"content-type": "text/event-stream"}, stream=DelayedStream())
+
+        web = build_web_app(service, "fake", transport=httpx.MockTransport(upstream),
+                            max_upstream_requests=1, capacity_wait_seconds=0.02)
+        async with httpx.AsyncClient(transport=httpx.ASGITransport(app=web), base_url="http://capacity.test") as client:
+            def headers(task):
+                return {"Authorization": "Bearer " + created["tokens"][task], "Content-Type": "application/json"}
+
+            first = asyncio.create_task(client.post("/v1/responses", headers=headers("A"), content=payload()))
+            try:
+                await asyncio.wait_for(streaming.wait(), 2)
+                rejected = await client.post("/v1/responses", headers=headers("B"), content=payload())
+                self.assertEqual(rejected.status_code, 429)
+                self.assertEqual(rejected.json()["error"]["code"], "gateway_busy")
+                self.assertEqual(rejected.headers["retry-after"], "1")
+                report = await service.status("capacity", time.time())
+                self.assertEqual(report["tasks"]["B"]["requests"], 0)
+                self.assertEqual(report["tasks"]["B"]["maximum_charged_usd"], 0)
+            finally:
+                release.set()
+                response = await first
+            self.assertEqual(response.status_code, 200)
+            retried = await client.post("/v1/responses", headers=headers("B"), content=payload())
+            self.assertEqual(retried.status_code, 200)
+        report = await service.status("capacity", time.time())
+        self.assertEqual(report["reserved_usd"], 0)
+        self.assertEqual(report["tasks"]["B"]["completed"], 1)
+
+    async def test_reservation_rejection_and_cancelled_connection_release_capacity(self):
+        import httpx
+
+        from swarm_control.pilot_gateway import build_web_app
+
+        service = BudgetService(MemoryStore())
+        created = await service.create("capacity", ["A", "B"], 18, 1800, time.time())
+        pending = await service.reserve("capacity", "A", 1000, 100, time.time())
+        connecting = asyncio.Event()
+        release = asyncio.Event()
+
+        async def upstream(request):
+            if request.url.path.endswith("/input_tokens"):
+                connecting.set()
+                await release.wait()
+                return httpx.Response(200, json={"object": "response.input_tokens", "input_tokens": 100})
+            return httpx.Response(200, headers={"content-type": "text/event-stream"},
+                                  content=b"data: " + json.dumps(completed()).encode() + b"\n\n")
+
+        web = build_web_app(service, "fake", transport=httpx.MockTransport(upstream),
+                            max_upstream_requests=1, capacity_wait_seconds=0.02)
+        async with httpx.AsyncClient(transport=httpx.ASGITransport(app=web), base_url="http://capacity.test") as client:
+            def headers(task):
+                return {"Authorization": "Bearer " + created["tokens"][task], "Content-Type": "application/json"}
+
+            response = await client.post("/v1/responses", headers=headers("A"), content=payload())
+            self.assertEqual(response.status_code, 409)
+            await service.finish("capacity", "A", pending["id"])
+            cancelled = asyncio.create_task(client.post("/v1/responses", headers=headers("A"), content=payload()))
+            await asyncio.wait_for(connecting.wait(), 2)
+            cancelled.cancel()
+            with self.assertRaises(asyncio.CancelledError):
+                await cancelled
+            release.set()
+            response = await client.post("/v1/responses", headers=headers("B"), content=payload())
+            self.assertEqual(response.status_code, 200)
+        report = await service.status("capacity", time.time())
+        self.assertGreater(report["tasks"]["A"]["retained_usd"], 0)
+        self.assertFalse(report["tasks"]["A"]["inflight"])
+
+    async def test_100_concurrent_http_tasks_use_bounded_upstream_capacity(self):
+        import httpx
+
+        from swarm_control.pilot_gateway import build_web_app
+
+        service = BudgetService(MemoryStore())
+        task_ids = [f"T{index:03}" for index in range(100)]
+        created = await service.create("http-hundred", task_ids, 180, 1800, time.time())
+        active = peak = 0
+
+        async def upstream(request):
+            nonlocal active, peak
+            if request.url.path.endswith("/input_tokens"):
+                active += 1
+                peak = max(peak, active)
+                await asyncio.sleep(0.01)
+                return httpx.Response(200, json={"object": "response.input_tokens", "input_tokens": 100})
+            active -= 1
+            return httpx.Response(200, headers={"content-type": "text/event-stream"},
+                                  content=b"data: " + json.dumps(completed()).encode() + b"\n\n")
+
+        web = build_web_app(service, "fake", transport=httpx.MockTransport(upstream))
+        async with httpx.AsyncClient(transport=httpx.ASGITransport(app=web), base_url="http://capacity.test") as client:
+            responses = await asyncio.gather(*[
+                client.post("/v1/responses", headers={
+                    "Authorization": "Bearer " + created["tokens"][task], "Content-Type": "application/json",
+                }, content=payload()) for task in task_ids
+            ])
+        self.assertTrue(all(response.status_code == 200 for response in responses))
+        self.assertGreater(peak, 1)
+        self.assertLessEqual(peak, 20)
+        report = await service.status("http-hundred", time.time())
+        self.assertEqual(report["reserved_usd"], 0)
+        self.assertTrue(all(task["completed"] == 1 for task in report["tasks"].values()))
+
+    async def test_configured_100_capacity_admits_full_cohort_before_any_response_finishes(self):
+        import httpx
+
+        from swarm_control.pilot_gateway import (
+            build_web_app,
+            configured_gateway_concurrency,
+        )
+
+        with patch.dict(os.environ, {}, clear=True):
+            self.assertEqual(configured_gateway_concurrency(), 20)
+        for value in ("0", "101", "true", "1.5", "-1", "", "9" * 5000):
+            with patch.dict(os.environ, {"SWARM_GATEWAY_CONCURRENCY": value}), self.assertRaisesRegex(ValueError, "SWARM_GATEWAY_CONCURRENCY"):
+                configured_gateway_concurrency()
+        with patch.dict(os.environ, {"SWARM_GATEWAY_CONCURRENCY": "100"}):
+            configured = configured_gateway_concurrency()
+        self.assertEqual(configured, 100)
+
+        service = BudgetService(MemoryStore())
+        task_ids = [f"T{index:03}" for index in range(100)]
+        created = await service.create("configured-hundred", task_ids, 180, 1800, time.time())
+        all_admitted = asyncio.Event()
+        finish = asyncio.Event()
+        active = 0
+
+        async def upstream(request):
+            nonlocal active
+            if request.url.path.endswith("/input_tokens"):
+                active += 1
+                if active == 100:
+                    all_admitted.set()
+                await finish.wait()
+                return httpx.Response(200, json={"object": "response.input_tokens", "input_tokens": 100})
+            return httpx.Response(200, headers={"content-type": "text/event-stream"},
+                                  content=b"data: " + json.dumps(completed()).encode() + b"\n\n")
+
+        web = build_web_app(service, "fake", max_upstream_requests=configured,
+                            capacity_wait_seconds=0.02, transport=httpx.MockTransport(upstream))
+        async with httpx.AsyncClient(transport=httpx.ASGITransport(app=web), base_url="http://capacity.test") as client:
+            requests = [asyncio.create_task(client.post("/v1/responses", headers={
+                "Authorization": "Bearer " + created["tokens"][task], "Content-Type": "application/json",
+            }, content=payload())) for task in task_ids]
+            try:
+                await asyncio.wait_for(all_admitted.wait(), 5)
+                report = await service.status("configured-hundred", time.time())
+                self.assertEqual(active, 100)
+                self.assertTrue(all(task["inflight"] for task in report["tasks"].values()))
+                self.assertTrue(all(task["completed"] == 0 for task in report["tasks"].values()))
+            finally:
+                finish.set()
+                responses = await asyncio.gather(*requests)
+        self.assertTrue(all(response.status_code == 200 for response in responses))
+        report = await service.status("configured-hundred", time.time())
+        self.assertEqual(report["reserved_usd"], 0)
+        self.assertTrue(all(task["completed"] == 1 for task in report["tasks"].values()))
 
     async def test_count_rate_limit_preserves_429_code_and_full_reservation(self):
         self.mode = "count_error"

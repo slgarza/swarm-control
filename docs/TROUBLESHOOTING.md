@@ -39,13 +39,15 @@ credential boundary and specific HTTP error codes.
 | --- | --- |
 | `live execution is disabled` | Expected for the demo and migrated Afterimage profile. A new owner-authorized paid run needs an explicitly enabled, funded policy. |
 | Task is merged, already recorded, or its issue is closed | Inspect the completed attempt. Choose genuinely new work; do not reset state to redispatch it. |
-| Overlapping tasks | Revisit dependencies and ownership. The current release cannot dispatch same-file work together. |
+| Overlapping tasks | Revisit dependencies and ownership, or explicitly use `plan`/`run --allow-overlap` for reviewed shared-file work in isolated checkouts. Scope enforcement still applies. |
 | Missing/unmerged dependency | Record the dependency's real merged PR and select a base containing its merge. |
-| At most ten live agents | This is an implementation limit. A successful 100-worker plan does not lift it. |
+| Project permits at most N live agents | `budget.max_live_agents` defaults to ten and supports up to 100. A larger authorized stage also needs verified gateway/provider capacity and sufficient remaining allowance. A plan grants neither. |
+| Synchronized cohort exceeds gateway capacity | Verify upstream quota, configure `runtime.gateway_concurrency`, then redeploy. Local capacity is checked before allocation and authenticated admission capacity before sandbox launch. Missing deployed capacity is rejected above 20 workers; admission mismatches stop the run with allocation retained. Verify the HTTP URL belongs to that gateway app. |
 | Model/infrastructure allowance exhausted | Prior allocations remain reserved. Reconcile the run and seek a reviewed budget change; retries still need remaining allowance. |
 | Stored budget policy differs | Editing the TOML limits does not migrate an existing ledger. No budget-migration CLI is supplied yet. Preserve state until a migration is explicitly designed and reviewed. |
 | Legacy pilot allowance must be preserved | The imported Afterimage ledger retains USD18/USD7 and prior spend. Do not create a replacement ledger to evade that ceiling. |
-| PR pagination requires review | This release stops at its conservative pagination boundary; it does not claim to have inspected unreturned PRs. |
+| PR/check pagination incomplete, changed or limit exceeded | Pagination is bounded to 100 pages. Inspect the remote list and retry read-only inspection after it stabilizes; do not ignore unreturned PRs or checks. |
+| `gateway_busy` | Configured provider slots remained full for 15 seconds; the rejected request made no provider call or reservation. Inspect `runtime.gateway_concurrency` and actual API quota; a synchronized 100-worker stage needs explicit adequate capacity. Existing Codex retry limits still apply. |
 
 The `--retry` flag is only for a reviewed failed task with remaining allowance.
 It does not override a merged/running claim, replenish funds or restart an entire
@@ -76,6 +78,19 @@ A changed base requires a fresh candidate with full combined validation. Preserv
 the old worktree and artifact directory; use a separate attempt and keep provenance.
 There is currently no automatic rebase/retry manager. Do not remove fields from
 `integration.json` to trick `prepare` into overwriting a reviewed attempt.
+
+For an opted-in shared-ownership candidate, prepare tries three-way application
+after strict application fails. `needs_repair` with `three_way_apply_failed`
+preserves conflicting paths and the apply log; the dedicated candidate worktree
+is reset and cleaned after the failed application. Assign a separate repair and
+preserve the original patch/receipt. `candidate_validation_failed` means combined
+checks or candidate integrity failed, even if the patch applied cleanly.
+
+If publish/merge requires `--reviewed-applied-patch-sha`, review the saved
+`integration.patch` on its recorded base and supply its `applied_patch_sha256` in
+addition to the original worker hash. Editing the manifest or hashes does not
+constitute review. `another integrator is active` means a local command holds
+`integration.lock`; inspect that process rather than deleting a lock file.
 
 If a candidate tree or patch changes after validation, review and test the new
 candidate before publishing. If GitHub CI is missing, pending, failed or attached

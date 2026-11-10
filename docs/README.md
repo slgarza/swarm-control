@@ -11,22 +11,26 @@ accounts or knowledge of the development conversation.
 | --- | --- | --- |
 | First-time user | [Quickstart: a local two-task example](QUICKSTART.md) | [Architecture](ARCHITECTURE.md) |
 | Operator launching real agents | [Two-agent walkthrough](TWO_AGENT_WALKTHROUGH.md) | [Project settings](PROJECTS.md), [operations](OPERATIONS.md), [troubleshooting](TROUBLESHOOTING.md) |
-| Competition reviewer | [Presentation and current evidence](contest/PRESENTATION.md) | [Benchmark protocol](contest/BENCHMARK.md), [evidence requirements](contest/EVIDENCE.md) |
+| Competition reviewer | [Presentation and current evidence](contest/PRESENTATION.md) | [Target assessment](contest/TARGET-ASSESSMENT.md), [benchmark protocol](contest/BENCHMARK.md), [evidence requirements](contest/EVIDENCE.md) |
 | Contributor | [Architecture](ARCHITECTURE.md) | [Repository contract](../AGENTS.md), [scaling roadmap](SCALING.md), [gateway policy](GATEWAY.md) |
 
 ## What is available today
 
-The controller can plan work, launch up to ten independent Codex workers in Modal,
-retrieve patches, enforce a project budget, and integrate explicitly reviewed
-changes through GitHub Actions. The target is a public GitHub repository with
-prepared tasks and configured validation commands. Review and integration still
-require an operator; there is no automatic backlog generator or dashboard.
+The controller can plan work, dispatch up to 100 independent Codex workers in Modal
+under an explicitly configured project capacity, retrieve patches, enforce a budget,
+and integrate reviewed changes through GitHub Actions. Defaults remain ten workers
+and disabled execution. Shared ownership is opt-in; clean three-way integration
+reruns combined checks, while actual conflicts require a separate repair attempt.
+The target is a public GitHub repository with prepared tasks and validation commands.
+Review and integration still require an operator; there is no automatic backlog
+generator or dashboard.
 
 The original Afterimage pilot ran ten real workers and merged ten green PRs.
 One delivery needed a coordinator code repair. It did not run 100 agents, test
 shared-file conflict repair, or compare against the strongest AFK pipeline.
-The extracted controller has been validated offline; a new real run of that
-extraction is a separate, budgeted operation.
+The larger-cohort dispatcher, gateway backpressure and collision handling have
+offline coverage. Useful 100-agent operation and AFK efficiency remain unproven;
+a real run is a separate, budgeted operation.
 
 ## Terminology
 

@@ -22,6 +22,7 @@ required_checks = ["checks"]
 worker_app = "your-project-workers"
 gateway_app = "your-project-gateway"
 gateway_ledger = "your-project-budget-v1"
+gateway_concurrency = 20
 openai_secret = "your-project-openai"
 environment = "main"
 image = "node:24.6.0-bookworm-slim"
@@ -39,8 +40,9 @@ The disabled flag and zero budgets are intentional. Specify an allowance only
 when authorized. Recorded limits are immutable without an explicit budget
 migration; never delete a ledger to obtain new allowance. The original Afterimage
 policy remains USD18 model/USD7 infrastructure with all prior allocations intact.
-The gateway caps each run at USD18 and ten tasks in this release even when a
-project's cumulative policy is larger.
+The gateway hard ceiling is USD180 and 100 tasks per run. Its administrative
+default remains USD18, and the profile's default capacity remains ten. Larger
+capacity does not increase an existing durable allowance or authorize spending.
 
 Install/check commands are argument arrays executed in order, without shell
 interpolation. Choose the actual project's language and tests. A Python target
@@ -51,8 +53,8 @@ Git/ripgrep/certificates and adds Python; setup commands supply the rest.
 The same configuration drives both worker and integration checks.
 
 `required_checks` lists GitHub Actions check names required on the exact PR head.
-All returned Actions checks must succeed. Missing checks, pagination, stale heads
-and changes to the base stop integration.
+All returned Actions checks must succeed. Check pages are read with bounded
+pagination; missing/inconsistent pages, stale heads and changed bases stop integration.
 
 Each `swarm/tasks/A1.json` needs one GitHub issue and precise acceptance criteria:
 
@@ -94,20 +96,34 @@ a nested template directory is not a separate target checkout.
 | `runtime.worker_app` | `swarm-control-workers` | Modal application for worker sandboxes |
 | `runtime.gateway_app` | `swarm-control-gateway` | Modal application hosting the trusted model gateway |
 | `runtime.gateway_ledger` | `swarm-control-budget-v1` | Durable Modal Dict name; preserve it across deployment/migration |
+| `runtime.gateway_concurrency` | `20` | Integer 1–100 limiting concurrent upstream requests in the single gateway container |
 | `runtime.openai_secret` | `swarm-control-openai` | Modal secret name containing `CODEX_API_KEY` |
 | `runtime.environment` | `main` | Modal environment within the authenticated workspace |
 | `runtime.image` | `node:24.6.0-bookworm-slim` | Worker container image; the current build expects apt support |
 | `runtime.setup_commands` | Pinned npm/Codex install shown above | Nonempty list of trusted image-build command strings |
 | `runtime.network_domains` | The four GitHub hostnames shown above | Exact DNS names permitted for worker egress; add dependency registries as needed |
 | `budget.live_enabled` | `false` | Explicit gate for deploy, probe, smoke and run |
-| `budget.max_live_agents` | `10` | Integer from 1 to 10; caps both task count and requested live workers |
+| `budget.max_live_agents` | `10` | Integer from 1 to 100; caps both task count and requested live workers |
 | `budget.model_limit_cents` | `0` | Cumulative local model allocation limit in whole USD cents |
 | `budget.infra_limit_cents` | `0` | Cumulative infrastructure admission reserve in whole USD cents |
 
 Both budgets must be positive when live execution is enabled. Each schema limit
-can be at most 1,000,000 cents, but that does not remove the per-run USD18 gateway
-ceiling, the ten-worker limit or the original user's authorization. Existing
+can be at most 1,000,000 cents, but that does not remove the per-run USD180 gateway
+ceiling or the original user's authorization. Existing
 SQLite policy limits must match the stored policy exactly.
+
+For a synchronized 100-agent stage, the target must explicitly configure both
+`budget.max_live_agents = 100` and `runtime.gateway_concurrency = 100`, after
+verifying model/API and VM quota. Synchronized live runs exceeding the configured
+gateway capacity are rejected before allocation. Plans report that insufficiency.
+Deployment carries the
+latter through `SWARM_GATEWAY_CONCURRENCY`. The serving container admits 120 HTTP
+inputs; provider capacity waits at most 15 seconds before a no-charge 429. Keep
+the checked-in tutorial's disabled live policy and zero budgets. Changing gateway
+capacity requires redeployment. The runner checks authenticated gateway admission
+capacity before synchronized worker launch; cohorts above 20 reject a missing
+capacity field. Admission mismatches stop the run with its allocation retained.
+The operator must still verify the supplied HTTP URL belongs to that gateway app.
 
 Runtime app/ledger/secret/environment names accept 1–100 letters, digits,
 underscores or hyphens. Network entries are hostnames, without URL schemes,
@@ -142,16 +158,20 @@ dependency domains and local integration tools.
 
 Ownership includes a path and its descendants. `src/search` therefore conflicts
 with `src/search/parser.py`, while separate sibling files can be dispatched
-together. Duplicate tasks and overlapping paths are rejected. Paths may not
-escape the repository; workers must not edit shared files outside their task's
-ownership. Split work only where the architecture and acceptance criteria make
-that separation meaningful.
+together. Duplicate tasks are always rejected. Overlap is rejected by default;
+`plan`/`run --allow-overlap` explicitly permits shared ownership and records the
+overlapping pairs in the plan and worker manifests. Paths may not escape the
+repository, and every worker remains restricted to its own declared ownership.
+Shared-file tasks execute from the same base in isolated checkouts. Integration
+validates each combined result; real conflicts produce a repair receipt rather
+than an automatic repair worker.
 
-Planning validates local task structure and disjoint ownership. Live `run` also
+Planning validates local task structure and the selected ownership policy. Live `run` also
 checks the issue is open, there is no existing open PR titled with `[ID]`, and
 each dependency has a real merged PR whose merge commit is an ancestor of the
-selected base. At 100 returned open PRs, admission stops rather than assuming the
-first page is complete. Resolve that implementation boundary before a larger run.
+selected base. Open PR admission reads up to 100 pages of 100 entries and stops
+on invalid/repeated data or an exhausted page bound instead of assuming the first
+page is complete.
 
 The controller does not generate a backlog, open issues or update task JSON to
 `merged`. Its ledger records integration, and the PR closes the linked issue.
@@ -171,7 +191,7 @@ completed pilot tickets.
 4. Run a local plan, then an authorized compatibility probe and small cohort
    using [the walkthrough](TWO_AGENT_WALKTHROUGH.md).
 5. Measure integration and quality before expanding the workload. Use the
-   [scaling roadmap](SCALING.md) for capabilities needed above ten workers.
+   [scaling roadmap](SCALING.md) for larger-cohort capacity and evidence gates.
 
 The repository remains owned by its maintainers; the controller is an installed
 tool targeting it. Copying controller source or the author's credential names

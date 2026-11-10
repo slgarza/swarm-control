@@ -8,7 +8,7 @@ import re
 import subprocess
 import time
 import uuid
-from concurrent.futures import ThreadPoolExecutor
+from concurrent.futures import ThreadPoolExecutor, as_completed
 from contextlib import contextmanager
 from datetime import UTC, datetime
 from pathlib import Path
@@ -99,15 +99,96 @@ def overlaps(left, right):
     )
 
 
-def validate_batch(tasks, workers):
-    if not 1 <= workers <= 100:
+def overlap_pairs(tasks):
+    return [
+        [previous["id"], task["id"]]
+        for index, task in enumerate(tasks)
+        for previous in tasks[:index]
+        if overlaps(task["ownership"], previous["ownership"])
+    ]
+
+
+def validate_batch(tasks, workers, *, allow_overlap=False):
+    if type(workers) is not int or not 1 <= workers <= 100:
         raise ValueError("workers must be between 1 and 100")
+    if not tasks:
+        raise ValueError("a batch requires at least one task")
     for index, task in enumerate(tasks):
         for previous in tasks[:index]:
-            if task["id"] == previous["id"] or overlaps(
+            if task["id"] == previous["id"]:
+                raise ValueError(f"duplicate task: {task['id']}")
+            if not allow_overlap and overlaps(
                 task["ownership"], previous["ownership"]
             ):
                 raise ValueError(f"overlapping tasks: {previous['id']} / {task['id']}")
+
+
+def verify_gateway_capacity(admission, workers):
+    # Older gateways had twenty upstream slots. Their missing field supports
+    # small cohorts only; a larger cohort must attest its deployed capacity.
+    capacity = admission.get("gateway_concurrency", 20)
+    if type(capacity) is not int or not workers <= capacity <= 100:
+        raise ValueError(
+            "deployed gateway capacity is missing or insufficient for this synchronized cohort; "
+            "redeploy the configured gateway before another explicitly budgeted attempt"
+        )
+
+
+def dispatch_tasks(tasks, workers, execute, on_complete):
+    """Bound submitted work and checkpoint each completion before admitting more.
+
+    Provider failures produce a failed attempt, never an automatic replacement.
+    A checkpoint failure stops new submissions; already submitted workers still
+    finish and are recovered by the caller's final reconciliation.
+    """
+    if not tasks:
+        return []
+    if type(workers) is not int or not 1 <= workers <= 100:
+        raise ValueError("workers must be between 1 and 100")
+    remaining = iter(tasks)
+    reports = []
+    with ThreadPoolExecutor(max_workers=min(workers, len(tasks))) as pool:
+        pending = {}
+
+        def submit_next():
+            task = next(remaining, None)
+            if task is not None:
+                pending[pool.submit(execute, task)] = task
+
+        for _ in range(min(workers, len(tasks))):
+            submit_next()
+        while pending:
+            future = next(as_completed(pending))
+            task = pending.pop(future)
+            try:
+                report = future.result()
+            except Exception as error:  # noqa: BLE001 - preserve a launch failure without retrying
+                report = {
+                    "task_id": task["id"], "status": "launch_failed",
+                    "error_type": type(error).__name__, "finished_at": now(),
+                }
+            on_complete(task, report)
+            reports.append(report)
+            submit_next()
+    return reports
+
+
+def record_task_result(ledger, batch, task, report=None):
+    directory = batch / task["id"]
+    directory.mkdir(exist_ok=True)
+    path = directory / "report.json"
+    if report is None:
+        report = json.loads(path.read_text()) if path.exists() else {
+            "task_id": task["id"], "status": "launch_failed", "finished_at": now(),
+        }
+    if report["status"] in {"starting", "preparing", "ready", "working", "checking"}:
+        report["status"] = "interrupted"
+    write_json(path, report)
+    ledger.finish(
+        task["id"], batch.name,
+        "awaiting_integration" if report["status"] == "validated" else report["status"],
+        path,
+    )
 
 
 def redact(text):
@@ -250,6 +331,10 @@ def execute_task(task, args, base_sha, batch, image, app, secret, barrier=None):
         "base_sha": base_sha,
         "task": task,
         "branch": f"swarm/{task['id'].lower()}-{batch.name[-12:]}",
+        "allow_overlap": bool(getattr(args, "allow_overlap", False)),
+        "overlap_pairs": [
+            pair for pair in getattr(args, "overlap_pairs", []) if task["id"] in pair
+        ],
         **(PROJECT.worker_manifest() if PROJECT else {}),
     }
     report = {
@@ -462,6 +547,10 @@ def main():
         "--synchronized", action="store_true", help="start one full cohort together"
     )
     parser.add_argument(
+        "--allow-overlap", action="store_true",
+        help="allow shared ownership in isolated workers; integration must reconcile collisions",
+    )
+    parser.add_argument(
         "--retry",
         action="store_true",
         help="explicitly retry a reviewed failed attempt",
@@ -479,11 +568,19 @@ def main():
     if args.command == "run" and not args.model:
         parser.error("run requires --model")
     tasks = [load_task(task) for task in args.tasks]
-    validate_batch(tasks, args.workers)
+    if args.allow_overlap and args.command == "smoke":
+        parser.error("--allow-overlap is supported by plan and run")
+    validate_batch(tasks, args.workers, allow_overlap=args.allow_overlap)
+    args.overlap_pairs = overlap_pairs(tasks)
     if args.synchronized and len(tasks) != args.workers:
         parser.error("a synchronized cohort needs exactly one task per worker")
     if args.command != "plan" and (len(tasks) > project.max_live_agents or args.workers > project.max_live_agents):
         parser.error(f"this project permits at most {project.max_live_agents} live agents")
+    if args.command == "run" and args.synchronized and args.workers > project.gateway_concurrency:
+        parser.error(
+            "a synchronized run requires runtime.gateway_concurrency at least its worker count; "
+            "update the profile and redeploy the gateway after verifying provider capacity"
+        )
     if args.command == "run":
         if args.model_budget is None:
             parser.error(
@@ -513,6 +610,10 @@ def main():
         "tasks": [task["id"] for task in tasks],
         "task_states": {task["id"]: task.get("status", "ready") for task in tasks},
         "live_execution_enabled": project.live_enabled,
+        "gateway_concurrency": project.gateway_concurrency,
+        "gateway_capacity_sufficient": min(args.workers, len(tasks)) <= project.gateway_concurrency,
+        "allow_overlap": args.allow_overlap,
+        "overlap_pairs": args.overlap_pairs,
         "requested_workers": args.workers,
         "maximum_active_agents": min(args.workers, len(tasks)),
         "enough_tasks_for_100": len(tasks) >= 100 and args.workers >= 100,
@@ -554,6 +655,7 @@ def main():
         gateway = None
         tokens = {}
         reports = []
+        recorded = set()
         if args.command == "run":
             from decimal import Decimal
 
@@ -561,10 +663,10 @@ def main():
             if (
                 not amount.is_finite()
                 or amount != amount.to_integral_value()
-                or not 0 < amount <= min(project.model_limit_cents, 1800)
+                or not 0 < amount <= min(project.model_limit_cents, 18000)
             ):
                 raise ValueError(
-                    "model budget requires positive whole cents, at most USD18"
+                    "model budget requires positive whole cents within project policy, at most USD180"
                 )
             gateway = {
                 name: modal.Function.from_name(
@@ -589,15 +691,16 @@ def main():
                 )
                 tokens = admission.pop("tokens")
                 write_json(batch / "budget-start.json", admission)
+                if args.synchronized:
+                    verify_gateway_capacity(admission, args.workers)
             barrier = (
                 Barrier(len(tasks))
                 if args.synchronized and args.command == "run"
                 else None
             )
-            with ThreadPoolExecutor(max_workers=min(args.workers, len(tasks))) as pool:
-                futures = [
-                    pool.submit(
-                        execute_task,
+            def launch(task):
+                try:
+                    return execute_task(
                         task,
                         args,
                         base_sha,
@@ -609,9 +712,21 @@ def main():
                         else None,
                         barrier,
                     )
-                    for task in tasks
-                ]
-                reports = [future.result() for future in futures]
+                except BaseException:
+                    if barrier is not None:
+                        barrier.abort()
+                    raise
+
+            def checkpoint(task, report):
+                if args.command == "run":
+                    record_task_result(ledger, batch, task, report)
+                    recorded.add(task["id"])
+                else:
+                    directory = batch / task["id"]
+                    directory.mkdir(exist_ok=True)
+                    write_json(directory / "report.json", report)
+
+            reports = dispatch_tasks(tasks, args.workers, launch, checkpoint)
         finally:
             tokens.clear()
             if gateway:
@@ -629,32 +744,12 @@ def main():
                         },
                     )
                 for task in tasks:
-                    path = batch / task["id"] / "report.json"
-                    outcome = (
-                        json.loads(path.read_text())
-                        if path.exists()
-                        else {"status": "launch_failed"}
-                    )
-                    if outcome["status"] in {
-                        "starting",
-                        "preparing",
-                        "ready",
-                        "working",
-                        "checking",
-                    }:
-                        outcome["status"] = "interrupted"
-                    ledger.finish(
-                        task["id"],
-                        batch.name,
-                        "awaiting_integration"
-                        if outcome["status"] == "validated"
-                        else outcome["status"],
-                        path,
-                    )
+                    if task["id"] not in recorded:
+                        record_task_result(ledger, batch, task)
             write_json(batch / "summary.json", batch_summary(batch))
         return (
             0
-            if all(
+            if len(reports) == len(tasks) and reports and all(
                 report["status"] in {"validated", "smoke_passed"} for report in reports
             )
             else 1

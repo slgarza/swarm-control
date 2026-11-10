@@ -15,15 +15,28 @@ from .pilot_budget import (
     prepare_request,
 )
 
+
+def configured_gateway_concurrency():
+    value = os.environ.get("SWARM_GATEWAY_CONCURRENCY", "20")
+    if len(value) > 3 or not value.isascii() or not value.isdecimal() or not 1 <= int(value) <= 100:
+        raise ValueError("SWARM_GATEWAY_CONCURRENCY must be an integer between 1 and 100")
+    return int(value)
+
+
+# Validate deployment settings before constructing Modal resources. The same
+# value is embedded into the image so container imports retain the policy.
+MAX_UPSTREAM_REQUESTS = configured_gateway_concurrency()
 APP_NAME = os.environ.get("SWARM_GATEWAY_APP", "swarm-control-gateway")
 DICT_NAME = os.environ.get("SWARM_GATEWAY_LEDGER", "swarm-control-budget-v1")
 SECRET_NAME = os.environ.get("SWARM_OPENAI_SECRET", "swarm-control-openai")
 UPSTREAM = "https://api.openai.com/v1/responses"
 REQUEST_SECONDS = 120
+CAPACITY_WAIT_SECONDS = 15
 app = modal.App(APP_NAME)
 image = (
     modal.Image.debian_slim(python_version="3.12")
     .env({"SWARM_GATEWAY_APP": APP_NAME, "SWARM_GATEWAY_LEDGER": DICT_NAME,
+          "SWARM_GATEWAY_CONCURRENCY": str(MAX_UPSTREAM_REQUESTS),
           "SWARM_OPENAI_SECRET": SECRET_NAME})
     .pip_install("fastapi==0.115.12", "httpx==0.28.1")
     .add_local_python_source("swarm_control")
@@ -50,9 +63,10 @@ async def create_run(
     ttl_seconds: int = 1800,
 ):
     """Workspace-authenticated SDK function; caller must never print its tokens."""
-    return await BudgetService(ModalStore()).create(
+    issued = await BudgetService(ModalStore()).create(
         run_id, task_ids, model_budget_usd, ttl_seconds, time.time()
     )
+    return {**issued, "gateway_concurrency": MAX_UPSTREAM_REQUESTS}
 
 
 @app.function(image=image, timeout=60, cpu=0.125, memory=256)
@@ -65,7 +79,11 @@ async def stop_run(run_id: str):
     return await BudgetService(ModalStore()).stop(run_id, time.time())
 
 
-def build_web_app(service, api_key, *, transport=None):
+def build_web_app(
+    service, api_key, *, transport=None,
+    max_upstream_requests=MAX_UPSTREAM_REQUESTS,
+    capacity_wait_seconds=CAPACITY_WAIT_SECONDS,
+):
     """Injectable HTTP app; tests may use an in-memory store/mock transport."""
     import httpx
     from fastapi import FastAPI, Request
@@ -73,9 +91,14 @@ def build_web_app(service, api_key, *, transport=None):
     from starlette.background import BackgroundTask
     from starlette.requests import ClientDisconnect
 
+    if type(max_upstream_requests) is not int or not 1 <= max_upstream_requests <= 100:
+        raise ValueError("max_upstream_requests must be between 1 and 100")
+    if type(capacity_wait_seconds) not in (int, float) or not 0 < capacity_wait_seconds <= 15:
+        raise ValueError("capacity_wait_seconds must be positive and at most 15")
+    capacity = asyncio.BoundedSemaphore(max_upstream_requests)
     web = FastAPI(docs_url=None, redoc_url=None, openapi_url=None)
 
-    def error_response(code, status):
+    def error_response(code, status, *, headers=None):
         return JSONResponse(
             {
                 "error": {
@@ -85,6 +108,7 @@ def build_web_app(service, api_key, *, transport=None):
                 }
             },
             status_code=status,
+            headers=headers,
         )
 
     @web.exception_handler(PolicyError)
@@ -111,16 +135,28 @@ def build_web_app(service, api_key, *, transport=None):
         except (TimeoutError, ClientDisconnect) as exc:
             raise PolicyError("request_body_interrupted", 408) from exc
         body, upper = prepare_request(bytes(raw))
-        pending = await service.reserve(
-            run_id, task_id, upper, body["max_output_tokens"], time.time()
-        )
-        request_id = pending["id"]
-        client = httpx.AsyncClient(
-            transport=transport,
-            follow_redirects=False,
-            trust_env=False,
-            timeout=httpx.Timeout(30, read=REQUEST_SECONDS),
-        )
+        # A bounded queue absorbs synchronized cohorts. Capacity rejection makes
+        # no provider call and acquires no budget reservation; a retry still
+        # uses the same task/run allowance.
+        try:
+            async with asyncio.timeout(capacity_wait_seconds):
+                await capacity.acquire()
+        except TimeoutError:
+            return error_response("gateway_busy", 429, headers={"Retry-After": "1"})
+        try:
+            pending = await service.reserve(
+                run_id, task_id, upper, body["max_output_tokens"], time.time()
+            )
+            request_id = pending["id"]
+            client = httpx.AsyncClient(
+                transport=transport,
+                follow_redirects=False,
+                trust_env=False,
+                timeout=httpx.Timeout(30, read=REQUEST_SECONDS),
+            )
+        except BaseException:
+            capacity.release()
+            raise
         headers = {
             "Authorization": "Bearer " + api_key,
             "Content-Type": "application/json",
@@ -154,6 +190,8 @@ def build_web_app(service, api_key, *, transport=None):
                     )
                 except Exception:  # noqa: BLE001 - uncertain writes must never be retried/refunded
                     print("gateway_settlement_failed")
+                finally:
+                    capacity.release()
 
         try:
             # Exact provider token counting handles tool schemas and opaque
@@ -276,7 +314,7 @@ def build_web_app(service, api_key, *, transport=None):
     cpu=0.25,
     memory=256,
 )
-@modal.concurrent(max_inputs=20)
+@modal.concurrent(max_inputs=120)
 @modal.asgi_app()
 def gateway():
     return build_web_app(BudgetService(ModalStore()), os.environ["CODEX_API_KEY"])

@@ -29,6 +29,7 @@ delivered ten reviewed, merged PRs, including one coordinator code repair.
 | [Operations](docs/OPERATIONS.md) | Commands, side effects, flags and integration gates |
 | [Troubleshooting](docs/TROUBLESHOOTING.md) | Setup, budget, worker and integration failures |
 | [Presentation](docs/contest/PRESENTATION.md) | Seven-minute outline, real pilot results and remaining contest requirements |
+| [Target assessment](docs/contest/TARGET-ASSESSMENT.md) | Why Afterimage suits the next collision pilot and what the final benchmark target needs |
 | [Benchmark and evidence](docs/contest/BENCHMARK.md) | Fair AFK comparison; [reporting checklist and template](docs/contest/EVIDENCE.md) |
 
 All guides and the example are in English. The standalone extraction and tutorial
@@ -75,19 +76,24 @@ Connect another repository using [project configuration](docs/PROJECTS.md).
 Read [operations](docs/OPERATIONS.md) before any paid run. Semantic review remains
 explicit; no autonomous backlog generator or dashboard is implemented yet.
 
-## Current limits
+## Capacity and remaining proof
 
-Live execution supports at most ten workers. Plans may describe 100 without
-launching them. Ownership is disjoint, scheduling uses local SQLite, and one
-integrator validates the combined changes. Other clones/machines are outside that
-lock. Private target cloning needs a scoped authentication adapter; the current
-clone path supports public GitHub targets. This controller repository may itself
-be private without changing target behavior.
+The runner accepts cohorts of up to 100 workers when the target explicitly sets
+that capacity and has an authorized allowance. Defaults remain ten workers and
+disabled live execution. Dispatch is bounded and checkpoints each completed task.
+`--allow-overlap` permits declared shared-file work in isolated checkouts; the
+integrator applies patches on the current base, uses three-way application when
+needed, and validates the combined tree. Actual conflicts produce a durable repair
+receipt; they still need an assigned repair and review.
 
-The next stages are a second real project, improved integration throughput,
-durable distributed scheduling and observable conflict repair, then 25 → 50 → 100
-with new authorized budgets. See [scaling](docs/SCALING.md). No AFK efficiency
-comparison or qualifying 100-agent submission has run.
+Scheduling uses local SQLite. Separate dispatcher and integration locks cover Git
+worktrees sharing one checkout, not other clones or hosts. Private target cloning
+still needs a scoped authentication adapter. Review and integration remain assisted.
+
+Offline tests cover the new capacity, backpressure and collision paths. Real provider
+capacity, useful 100-agent overlap and efficiency remain unproven. The next steps
+are a second real target, measured 25 → 50 → 100 cohorts and the strong AFK comparison
+with separately authorized budgets. See [scaling](docs/SCALING.md).
 
 ## Validation
 

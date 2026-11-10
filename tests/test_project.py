@@ -64,11 +64,39 @@ class ProjectTests(unittest.TestCase):
         with self.assertRaisesRegex(ValueError, "unknown project setting"):
             load_project(project.path)
 
+    def test_larger_agent_capacity_is_explicit_and_does_not_authorize_spend(self):
+        project = make_project(self.root)
+        self.assertEqual(project.max_live_agents, 10)
+        self.assertEqual(project.gateway_concurrency, 20)
+        project.path.write_text(project.path.read_text() + "max_live_agents = 100\n")
+        larger = load_project(project.path)
+        self.assertEqual(larger.max_live_agents, 100)
+        self.assertFalse(larger.live_enabled)
+        self.assertEqual(larger.model_limit_cents, 1800)
+        with self.assertRaisesRegex(ValueError, "live execution is disabled"):
+            larger.require_live()
+        project.path.write_text(project.path.read_text().replace("max_live_agents = 100", "max_live_agents = 101"))
+        with self.assertRaisesRegex(ValueError, "between 1 and 100"):
+            load_project(project.path)
+
+    def test_gateway_concurrency_is_validated_separately_from_live_spend(self):
+        project = make_project(self.root)
+        original = project.path.read_text()
+        for value in (0, 101, True, 1.5, "100"):
+            project.path.write_text(original.replace("[budget]", "[runtime]\ngateway_concurrency = " + json.dumps(value) + "\n[budget]"))
+            with self.subTest(value=value), self.assertRaisesRegex(ValueError, "gateway_concurrency"):
+                load_project(project.path)
+        project.path.write_text(original.replace("[budget]", "[runtime]\ngateway_concurrency = 100\n[budget]"))
+        configured = load_project(project.path)
+        self.assertEqual(configured.gateway_concurrency, 100)
+        self.assertFalse(configured.live_enabled)
+        self.assertEqual(configured.model_limit_cents, 1800)
+
     def test_deployment_preserves_configured_app_ledger_and_secret_names(self):
         project = make_project(self.root)
         project.path.write_text(project.path.read_text().replace(
             "[budget]", '[runtime]\ngateway_app = "existing-gateway"\n'
-            'gateway_ledger = "existing-budget"\nopenai_secret = "existing-secret"\n[budget]'
+            'gateway_ledger = "existing-budget"\ngateway_concurrency = 100\nopenai_secret = "existing-secret"\n[budget]'
         ).replace("live_enabled = false", "live_enabled = true"))
         from swarm_control import deployment
         project = load_project(project.path)
@@ -81,6 +109,7 @@ class ProjectTests(unittest.TestCase):
         call = run.call_args
         self.assertEqual(call.kwargs["env"]["SWARM_GATEWAY_APP"], "existing-gateway")
         self.assertEqual(call.kwargs["env"]["SWARM_GATEWAY_LEDGER"], "existing-budget")
+        self.assertEqual(call.kwargs["env"]["SWARM_GATEWAY_CONCURRENCY"], "100")
         self.assertEqual(call.kwargs["env"]["SWARM_OPENAI_SECRET"], "existing-secret")
 
     def test_disabled_migration_profile_cannot_start_workers_or_probes(self):
@@ -143,6 +172,7 @@ class ProjectTests(unittest.TestCase):
         artifacts = self.root / "artifacts"
         artifacts.mkdir()
         (artifacts / "changes.patch").write_bytes(patch_bytes)
+        (artifacts / "manifest.json").write_text(json.dumps({"allow_overlap": False}))
         task = json.loads((project.tasks_dir / "A1.json").read_text())
 
         def local_git(root, *args):

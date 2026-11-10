@@ -5,13 +5,15 @@ import json
 import subprocess
 import tempfile
 import unittest
-from contextlib import redirect_stdout
+from contextlib import redirect_stderr, redirect_stdout
 from pathlib import Path
+from threading import Barrier, Event, Lock
 from types import SimpleNamespace
 from unittest.mock import patch
 
 from swarm_control import modal_runner as runner
 from swarm_control.modal_worker import collect, valid_path
+from swarm_control.pilot_state import Ledger
 from tests.support import make_project
 
 
@@ -92,6 +94,29 @@ class WorkerTests(unittest.TestCase):
 
 
 class PlanningTests(unittest.TestCase):
+    def test_actual_gateway_capacity_must_attest_larger_cohorts(self):
+        runner.verify_gateway_capacity({}, 20)
+        runner.verify_gateway_capacity({"gateway_concurrency": 100}, 100)
+        for admission in ({}, {"gateway_concurrency": 20}, {"gateway_concurrency": None},
+                          {"gateway_concurrency": True}, {"gateway_concurrency": "100"},
+                          {"gateway_concurrency": 101}):
+            with self.subTest(admission=admission), self.assertRaisesRegex(ValueError, "deployed gateway"):
+                runner.verify_gateway_capacity(admission, 100)
+
+    def test_shared_paths_require_explicit_opt_in_but_duplicates_never_pass(self):
+        tasks = [
+            {"id": "A1", "ownership": ["src/shared.py"]},
+            {"id": "A2", "ownership": ["src"]},
+        ]
+        runner.validate_batch(tasks, 2, allow_overlap=True)
+        self.assertEqual(runner.overlap_pairs(tasks), [["A1", "A2"]])
+        with self.assertRaisesRegex(ValueError, "overlapping"):
+            runner.validate_batch(tasks, 2)
+        with self.assertRaisesRegex(ValueError, "duplicate"):
+            runner.validate_batch([tasks[0], tasks[0]], 2, allow_overlap=True)
+        with self.assertRaisesRegex(ValueError, "at least one"):
+            runner.validate_batch([], 1)
+
     def test_duplicate_and_parent_child_ownership_are_blocked(self):
         for second in ["packages/ui", "packages/ui/src", "packages"]:
             with self.assertRaises(ValueError):
@@ -159,6 +184,56 @@ class PlanningTests(unittest.TestCase):
         self.assertFalse(plan["enough_tasks_for_100"])
         self.assertFalse(plan["live_execution_enabled"])
 
+    def test_100_shared_file_tasks_have_explicit_collision_plan_without_execution(self):
+        output = io.StringIO()
+        with tempfile.TemporaryDirectory() as temporary:
+            project = make_project(Path(temporary))
+            template = json.loads((project.tasks_dir / "A1.json").read_text())
+            task_ids = [f"T{index:03}" for index in range(100)]
+            for index, task_id in enumerate(task_ids):
+                (project.tasks_dir / f"{task_id}.json").write_text(json.dumps({
+                    **template, "id": task_id, "issue": index + 1,
+                }))
+            with (
+                patch.multiple(runner, ROOT=project.root, PROJECT=None, REPOSITORY=None, APP=None),
+                patch("sys.argv", ["swarm-control", "plan", *task_ids,
+                                   "--project", str(project.path), "--workers", "100",
+                                   "--synchronized", "--allow-overlap", "--base", "HEAD"]),
+                redirect_stdout(output),
+            ):
+                self.assertEqual(runner.main(), 0)
+            self.assertFalse((project.root / ".swarm").exists())
+        plan = json.loads(output.getvalue())
+        self.assertEqual(plan["maximum_active_agents"], 100)
+        self.assertEqual(plan["gateway_concurrency"], 20)
+        self.assertFalse(plan["gateway_capacity_sufficient"])
+        self.assertTrue(plan["allow_overlap"])
+        self.assertEqual(len(plan["overlap_pairs"]), 4950)
+        self.assertFalse(plan["live_execution_enabled"])
+
+    def test_synchronized_run_requires_model_capacity_before_claiming_or_cloud_import(self):
+        output = io.StringIO()
+        with tempfile.TemporaryDirectory() as temporary:
+            project = make_project(Path(temporary))
+            project.path.write_text(project.path.read_text().replace(
+                "live_enabled = false", "live_enabled = true"
+            ).replace("[budget]", "[runtime]\ngateway_concurrency = 1\n[budget]"))
+            template = json.loads((project.tasks_dir / "A1.json").read_text())
+            (project.tasks_dir / "A2.json").write_text(json.dumps({**template, "id": "A2", "issue": 2}))
+            with (
+                patch.multiple(runner, ROOT=project.root, PROJECT=None, REPOSITORY=None, APP=None),
+                patch.dict("sys.modules", {"modal": None}),
+                patch("sys.argv", ["swarm-control", "run", "A1", "A2", "--project", str(project.path),
+                                   "--workers", "2", "--synchronized", "--allow-overlap", "--base", "HEAD",
+                                   "--model", "gpt-6.1-sol", "--model-budget", "1",
+                                   "--gateway-url", "https://fake.modal.run"]),
+                redirect_stderr(output), self.assertRaises(SystemExit) as stopped,
+            ):
+                runner.main()
+            self.assertEqual(stopped.exception.code, 2)
+            self.assertIn("runtime.gateway_concurrency", output.getvalue())
+            self.assertFalse((project.root / ".swarm").exists())
+
     def test_second_local_dispatcher_cannot_claim_work(self):
         with (
             tempfile.TemporaryDirectory() as directory,
@@ -180,6 +255,182 @@ class PlanningTests(unittest.TestCase):
 
 
 class LifecycleTests(unittest.TestCase):
+    def test_mocked_100_agent_run_keeps_one_budget_and_incremental_task_state(self):
+        self.run_mocked_100_agent_cohort(100)
+
+    def test_stale_deployed_capacity_stops_100_agent_run_without_spawning_or_refunding(self):
+        self.run_mocked_100_agent_cohort(20)
+
+    def test_missing_deployed_capacity_stops_100_agent_run_without_spawning_or_refunding(self):
+        self.run_mocked_100_agent_cohort(None)
+
+    def run_mocked_100_agent_cohort(self, actual_capacity):
+        class Image:
+            @classmethod
+            def from_registry(cls, *_args, **_kwargs):
+                return cls()
+
+            def apt_install(self, *_):
+                return self
+
+            def run_commands(self, *_):
+                return self
+
+            def add_local_file(self, *_):
+                return self
+
+        gateway_calls = []
+
+        def remote(name, *args):
+            gateway_calls.append((name, args))
+            if name == "create_run":
+                return {"tokens": {task: "fake-task-token" for task in args[1]},
+                        "budget_usd": args[2], **(
+                            {"gateway_concurrency": actual_capacity} if actual_capacity is not None else {}
+                        )}
+            return {"state": "stopped"}
+
+        fake_modal = SimpleNamespace(
+            App=SimpleNamespace(lookup=lambda *_args, **_kwargs: object()), Image=Image,
+            Function=SimpleNamespace(from_name=lambda _app, name, **_: SimpleNamespace(
+                remote=lambda *args: remote(name, *args))),
+            Secret=SimpleNamespace(from_dict=lambda _: object()),
+        )
+        rendezvous = Barrier(100)
+
+        def execute(task, args, base, batch, *_):
+            rendezvous.wait(timeout=10)
+            return {"task_id": task["id"], "status": "validated", "sandbox_terminated": True}
+
+        with tempfile.TemporaryDirectory() as temporary:
+            project = make_project(Path(temporary))
+            project.path.write_text(project.path.read_text().replace(
+                "live_enabled = false", "live_enabled = true\nmax_live_agents = 100"
+            ).replace("model_limit_cents = 1800", "model_limit_cents = 18000").replace(
+                "infra_limit_cents = 700", "infra_limit_cents = 4000"
+            ).replace("[budget]", "[runtime]\ngateway_concurrency = 100\n[budget]"))
+            template = json.loads((project.tasks_dir / "A1.json").read_text())
+            task_ids = [f"T{index:03}" for index in range(100)]
+            for index, task_id in enumerate(task_ids):
+                (project.tasks_dir / f"{task_id}.json").write_text(json.dumps({
+                    **template, "id": task_id, "issue": index + 1,
+                }))
+            with (
+                patch.multiple(runner, ROOT=project.root, PROJECT=None, REPOSITORY=None, APP=None),
+                patch.dict("sys.modules", {"modal": fake_modal}),
+                patch.object(runner, "verify_github_tasks"),
+                patch.object(runner, "execute_task", side_effect=execute) as execute_worker,
+                patch("sys.argv", ["swarm-control", "run", *task_ids,
+                                   "--project", str(project.path), "--workers", "100",
+                                   "--synchronized", "--allow-overlap", "--base", "HEAD",
+                                   "--model", "gpt-6.1-sol", "--model-budget", "180",
+                                   "--gateway-url", "https://fake.modal.run"]),
+                redirect_stdout(io.StringIO()),
+            ):
+                if actual_capacity == 100:
+                    self.assertEqual(runner.main(), 0)
+                    self.assertEqual(execute_worker.call_count, 100)
+                else:
+                    with self.assertRaisesRegex(ValueError, "deployed gateway capacity"):
+                        runner.main()
+                    execute_worker.assert_not_called()
+            ledger = Ledger(project.root / ".swarm/control.sqlite3", model_limit_cents=18000, infra_limit_cents=4000)
+            self.assertEqual(len(ledger.rows()), 100)
+            expected_state = "awaiting_integration" if actual_capacity == 100 else "launch_failed"
+            self.assertTrue(all(row["state"] == expected_state for row in ledger.rows()))
+            with ledger.connect() as db:
+                self.assertEqual(db.execute("SELECT cents FROM pilot_allocations").fetchone()[0], 18000)
+                self.assertEqual(db.execute("SELECT cents FROM pilot_infra_allocations").fetchone()[0], 3100)
+            for path in (project.root / ".swarm").rglob("*.json"):
+                self.assertNotIn("fake-task-token", path.read_text())
+        self.assertEqual([name for name, _ in gateway_calls], ["create_run", "stop_run"])
+
+    def test_dispatch_checkpoints_fast_task_before_slow_one_and_bounds_submissions(self):
+        slow_released = Event()
+        checkpointed = Event()
+        tasks = [{"id": name} for name in ("A1", "A2", "A3")]
+        checkpoints = []
+
+        def execute(task):
+            if task["id"] == "A1":
+                self.assertTrue(slow_released.wait(timeout=2))
+            if task["id"] == "A3":
+                self.assertTrue(checkpointed.is_set())
+                slow_released.set()
+            return {"task_id": task["id"], "status": "validated"}
+
+        def checkpoint(task, report):
+            checkpoints.append(task["id"])
+            if task["id"] == "A2":
+                checkpointed.set()
+
+        reports = runner.dispatch_tasks(tasks, 2, execute, checkpoint)
+        self.assertEqual(checkpoints[0], "A2")
+        self.assertEqual(len(reports), 3)
+        self.assertEqual(runner.dispatch_tasks([], 2, execute, checkpoint), [])
+
+    def test_100_concurrent_fake_workers_checkpoint_failures_without_replacements(self):
+        tasks = [{"id": f"T{index:03}"} for index in range(100)]
+        barrier = Barrier(100)
+        counter_lock = Lock()
+        active = peak = calls = 0
+
+        def execute(task):
+            nonlocal active, peak, calls
+            with counter_lock:
+                calls += 1
+                active += 1
+                peak = max(peak, active)
+            barrier.wait(timeout=10)
+            with counter_lock:
+                active -= 1
+            if task["id"] == "T001":
+                raise RuntimeError("simulated launch failure")
+            return {"task_id": task["id"], "status": "validated"}
+
+        with tempfile.TemporaryDirectory() as temporary:
+            batch = Path(temporary) / "batch-test"
+            batch.mkdir()
+            path = Path(temporary) / "state.db"
+            ledger = Ledger(path)
+            ledger.claim(tasks, batch.name, "a" * 40)
+            reports = runner.dispatch_tasks(
+                tasks, 100, execute,
+                lambda task, report: runner.record_task_result(ledger, batch, task, report),
+            )
+            rows = Ledger(path).rows()
+        self.assertEqual(calls, 100)
+        self.assertEqual(peak, 100)
+        self.assertEqual(len(reports), 100)
+        self.assertEqual(sum(row["state"] == "awaiting_integration" for row in rows), 99)
+        self.assertEqual(sum(row["state"] == "launch_failed" for row in rows), 1)
+
+    def test_checkpoint_failure_stops_admitting_new_work(self):
+        calls = []
+
+        def execute(task):
+            calls.append(task["id"])
+            return {"task_id": task["id"], "status": "validated"}
+
+        def checkpoint(task, report):
+            raise OSError("simulated durable state failure")
+
+        with self.assertRaises(OSError):
+            runner.dispatch_tasks([{"id": "A1"}, {"id": "A2"}], 1, execute, checkpoint)
+        self.assertEqual(calls, ["A1"])
+
+    def test_reconciliation_records_missing_and_interrupted_workers_durably(self):
+        tasks = [{"id": "A1"}, {"id": "A2"}]
+        with tempfile.TemporaryDirectory() as temporary:
+            batch = Path(temporary) / "batch-test"
+            batch.mkdir()
+            ledger = Ledger(Path(temporary) / "state.db")
+            ledger.claim(tasks, batch.name, "a" * 40)
+            runner.record_task_result(ledger, batch, tasks[0])
+            runner.record_task_result(ledger, batch, tasks[1], {"status": "working"})
+            self.assertEqual([row["state"] for row in ledger.rows()], ["launch_failed", "interrupted"])
+            self.assertEqual(json.loads((batch / "A2/report.json").read_text())["status"], "interrupted")
+
     def test_chunked_events_are_individually_timestamped_and_split_keys_redacted(self):
         process = SimpleNamespace(
             stdout=iter(
@@ -289,7 +540,8 @@ class LifecycleTests(unittest.TestCase):
             exception=SimpleNamespace(SandboxFilesystemNotFoundError=FileNotFoundError),
         )
         args = SimpleNamespace(
-            command="smoke", model=None, timeout=30, environment="main"
+            command="smoke", model=None, timeout=30, environment="main",
+            allow_overlap=True, overlap_pairs=[["A1", "A2"], ["A2", "A3"]],
         )
         task = {"id": "A1", "ownership": ["packages/ui"]}
         with (
@@ -307,6 +559,9 @@ class LifecycleTests(unittest.TestCase):
                 (Path(directory) / "A1/changes.patch").read_text(), "partial work\n"
             )
             self.assertTrue(sandbox.terminated)
+            manifest = json.loads((Path(directory) / "A1/manifest.json").read_text())
+            self.assertIs(manifest["allow_overlap"], True)
+            self.assertEqual(manifest["overlap_pairs"], [["A1", "A2"]])
 
 
 if __name__ == "__main__":
