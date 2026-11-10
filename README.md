@@ -27,6 +27,7 @@ delivered ten reviewed, merged PRs, including one coordinator code repair.
 | [Two-agent walkthrough](docs/TWO_AGENT_WALKTHROUGH.md) | Own-account setup, real issues, budget, execution, review, PRs, merge and cleanup |
 | [Project reference](docs/PROJECTS.md) | Every configuration field and the task format |
 | [Operations](docs/OPERATIONS.md) | Commands, side effects, flags and integration gates |
+| [Budget migration](docs/BUDGET_MIGRATION.md) | Read-only proposals and separately authorized cumulative increases preserving every allocation |
 | [Troubleshooting](docs/TROUBLESHOOTING.md) | Setup, budget, worker and integration failures |
 | [Presentation](docs/contest/PRESENTATION.md) | Seven-minute outline, real pilot results and remaining contest requirements |
 | [Target assessment](docs/contest/TARGET-ASSESSMENT.md) | Why Afterimage suits the next collision pilot and what the final benchmark target needs |

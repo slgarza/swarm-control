@@ -76,8 +76,9 @@ combined checks and CI contention still need observed recovery at each stage.
 
 Stop expansion when integration queues, quality, cost or recovery cannot meet the
 agreed criteria. Preserve failed attempts and prior allocations. A new approved
-budget requires an explicit migration design for an existing ledger; no general
-migration CLI is provided yet.
+budget requires the [explicit migration workflow](BUDGET_MIGRATION.md) for an
+existing ledger. Read-only proposals do not authorize increases; separately
+approved apply preserves all existing allocations and keeps execution disabled.
 
 Use the [benchmark protocol](contest/BENCHMARK.md) and
 [evidence checklist](contest/EVIDENCE.md) throughout, and keep the

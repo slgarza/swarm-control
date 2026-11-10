@@ -123,6 +123,12 @@ funds or authorize a policy migration. Live execution, durable budget admission,
 open issues, deployed gateway capacity and provider quota still need their real
 gates before launch. Preparation can be complete while execution remains disabled.
 
+Use [budget migration](BUDGET_MIGRATION.md) to inspect an existing cumulative
+ledger and propose a larger ceiling without changing it. Its separately gated
+apply operation requires real owner authorization, locks both controller paths
+and preserves every prior allocation. It never enables execution or launches a
+provider resource.
+
 ## Runner flags
 
 These flags apply to `plan`, `smoke` and `run` unless stated otherwise:
