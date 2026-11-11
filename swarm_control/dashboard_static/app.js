@@ -81,7 +81,10 @@
     const summary = data.summary || {};
     setText('chart-total', number(summary.provisional_product) + ' provisionales');
     const split = byId('recovery-split'); clear(split);
-    for (const [value, label] of [[summary.unchanged_recoveries, 'bytes originales'], [summary.coordinator_repaired, 'con reparación local'], [summary.provisional_support, 'de soporte']]) {
+    const productTasks = tasks().filter((task) => task.provisional && task.feature_candidate !== false);
+    const repairedProducts = productTasks.filter(repaired).length;
+    const unchangedProducts = productTasks.length - repairedProducts;
+    for (const [value, label] of [[unchangedProducts, 'producto sin cambios'], [repairedProducts, 'producto reparado'], [summary.provisional_support, 'soporte aparte']]) {
       const item = node('span'); item.append(node('strong', '', number(value)), document.createTextNode(' ' + label)); split.append(item);
     }
     const t0 = date(data.clock?.t0);
