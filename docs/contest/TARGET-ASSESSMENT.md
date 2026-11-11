@@ -1,9 +1,32 @@
 # Target assessment: Afterimage
 
-Assessment date: 2026-11-10, updated after locating the owner's full design pack.
-Afterimage is a viable staged pilot target with a new source-based implementation
-backlog. Its qualifying 100-agent concurrency and efficiency remain unproven.
+Assessment date: 2026-11-10; updated after the November 11 hundred-worker pilot.
+Afterimage supported a real source-based implementation cohort with 100 worker
+VMs, distinct coding threads and per-task command/model activity. Its qualifying
+useful concurrency, collision handling and comparative efficiency remain unproven.
 Repository size is not the binding requirement; useful simultaneous work is.
+
+## Update: observed hundred-worker pilot
+
+The [November 11 report](https://github.com/slgarza/Afterimage/blob/main/docs/swarm/pilot100-2026-11-11.md)
+records the separate frozen B001–B100 workload and its execution from target
+commit `79404fe6d4ed5cf1b59b5610a3aebbe9d1f8021f`. These tasks used disjoint leaf
+ownership and explicit UI, engine, protocol and client-policy contracts. They are
+distinct from the earlier dependency-bearing A graph described below.
+
+All 100 original reports ended `needs_repair`: 63 contained nonempty patches and
+37 were empty. The report preserves those failures and separately identifies
+unchanged patch recovery, coordinator repairs, independent review, exact-head CI,
+combined checks and actual merges. It does not equate 100 VMs with 100 useful
+contributors or describe the disconnected leaf modules as a playable MVP.
+
+This establishes that Afterimage was sufficient for a real infrastructure and
+delivery pilot. It does not settle whether it is the best contest target. The
+disjoint workload did not exercise live shared-file collisions; the assisted
+recovery and serial integration tail are measured costs of this run. Actual
+billing, the full quality window and a strong AFK comparison remain necessary
+before claiming efficiency. The earlier inspection below remains historical
+evidence at its original commit, rather than a description of today's repository.
 
 ## Update: full design source and 100-task backlog
 
@@ -69,7 +92,9 @@ initial workload for the swarm and the strongest approved AFK baseline.
 
 Afterimage can exercise same-file clean merges, genuine conflicts, combined test
 failures, repair receipts and original-versus-integrated patch review. Expand only
-as real product requirements become ready. Then stage the selected final target
-through 25, 50 and 100 live agents, preserving failures, interventions, spending
-and cleanup evidence. Offline tests of this controller establish plumbing; the
-live cohort and an efficiency advantage remain unproven.
+as real product requirements become ready. Then use bounded follow-up cohorts
+to address the observed failures before a qualifying collision and AFK benchmark,
+preserving failures, interventions, spending and cleanup evidence. Each new paid
+run needs its own authorized allowance. The observed hundred-worker execution
+establishes infrastructure scale; useful simultaneous contribution and an
+efficiency advantage remain unproven.

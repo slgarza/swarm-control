@@ -115,6 +115,12 @@ and [JSON](https://github.com/slgarza/Afterimage/blob/main/docs/swarm/pilot10-20
 are useful examples of reporting limits and repair attribution. They are not
 completed evidence for the 100-agent requirement or an AFK efficiency comparison.
 
+The separate [hundred-worker report](https://github.com/slgarza/Afterimage/blob/main/docs/swarm/pilot100-2026-11-11.md)
+adds per-task original failures, explicitly attributed local recovery, public
+methods and curated timing/activity evidence. It still does not establish
+continuous useful 100-way contribution, a completed quality window, reconciled
+cost or a paired AFK advantage. Preserve that distinction when reusing its data.
+
 ## Exporting measured aggregates
 
 Run this after integration and the agreed observation window. Store inputs and

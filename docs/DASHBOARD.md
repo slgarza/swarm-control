@@ -5,6 +5,69 @@ local JSON and serves local assets. It does not start workers, change a budget,
 review code, merge PRs, refresh provider billing, or contact GitHub or Modal.
 The interface uses English, USD amounts and UTC timestamps.
 
+Choose a project, then a run to inspect. A project identifies a repository; a run
+identifies a recorded execution or evidence source for it. Selecting either
+changes the view. Launching workers remains an explicit controller operation with
+its own budget and authorization gates.
+
+## Project selection
+
+Use an explicit catalog to register several local projects:
+
+```sh
+swarm-control dashboard --catalog /path/to/local-catalog.json --port 8787
+```
+
+```json
+{
+  "schema_version": 1,
+  "workspace_label": "My projects",
+  "projects": [
+    {
+      "id": "alpha",
+      "label": "Alpha",
+      "repository": "example/alpha",
+      "runs": [
+        {"id": "pilot-1", "label": "First pilot", "snapshot": "evidence/curated.json"}
+      ]
+    },
+    {"id": "beta", "label": "Beta", "repository": "example/beta", "runs": []}
+  ]
+}
+```
+
+Relative snapshot paths resolve against the catalog directory. Paths stay on the
+server and are never sent to the browser. The catalog is loaded at startup;
+snapshot contents are reread on refresh. Restart to change registered projects.
+The legacy `--snapshot` option still exposes one selected project/run.
+
+Projects without evidence show an empty state, with no previous project's metrics
+or invented results. A selected source must match its registered repository.
+Project/run selection survives a bookmark and refresh; stale selection requests
+cannot overwrite a newer choice. An expired delivery window is labeled closed
+while unfinished integration retains an unknown final T1.
+
+## Screenshots
+
+The following English captures use actual configured data from November 11,
+2026, at 16:11 Mexico City time (22:11 UTC). They are historical views of an
+incomplete pilot, with 100 original failed workers, 56 provisional product
+recoveries and two separate supporting recoveries. Actual invoices and final
+quality remain unknown. The empty view uses this public controller repository;
+private project names, local paths, credentials and raw logs are excluded.
+The [capture receipt](images/dashboard-gallery-2026-11-11.json) records image
+dimensions, SHA-256 hashes, the source timestamp and seven browser checks.
+
+![Project and run selection](images/dashboard-workspace-overview-2026-11-11.png)
+
+![Original outcome, review and repair evidence](images/dashboard-task-detail-2026-11-11.png)
+
+![Reserved budget and unknown actual cost](images/dashboard-budget-evidence-2026-11-11.png)
+
+![English mobile project selector](images/dashboard-workspace-mobile-2026-11-11.png)
+
+![Registered project with no run evidence](images/dashboard-workspace-empty-2026-11-11.png)
+
 From an installed checkout:
 
 ```sh
@@ -49,7 +112,7 @@ The backend accepts at most 8 MiB of JSON and 1,000 unique task rows. It project
 an explicit field allowlist; raw logs, arbitrary input fields, secrets, account
 payloads and local paths are not forwarded. Links are restricted to the selected
 GitHub repository. The HTTP interface exposes the page, its two bundled assets,
-an empty favicon response, `/api/snapshot`, and `/api/health`. Write methods are
+an empty favicon response, `/api/catalog`, `/api/snapshot`, and `/api/health`. Write methods are
 rejected. Host and
 Origin checks, a restrictive Content Security Policy, no-store responses and no
 CORS support keep the viewer local and read-only.
@@ -86,7 +149,7 @@ the source file is the adapter's responsibility, outside this controller viewer.
 Run the focused checks from the controller checkout:
 
 ```sh
-python -m unittest tests.test_dashboard -v
+python -m unittest tests.test_dashboard tests.test_dashboard_catalog tests.test_dashboard_selection -v
 ```
 
 These tests use synthetic curated data and temporary local HTTP servers. They

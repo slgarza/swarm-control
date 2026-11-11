@@ -6,7 +6,17 @@ useful backlog and acceptance criteria. The extraction is not evidence of 100-ag
 operation or autonomous end-to-end review. The runner and gateway now accept up to
 100 tasks per cohort, with offline tests for bounded dispatch, shared ownership,
 three-way integration and accounting at that size. This is implementation capacity;
-the qualifying live run and AFK comparison have not happened.
+useful 100-way operation and the AFK comparison remain unproven.
+
+The [November 11 hundred-worker pilot](https://github.com/slgarza/Afterimage/blob/main/docs/swarm/pilot100-2026-11-11.md)
+subsequently exercised the real dispatcher and provider infrastructure. It observed
+100 distinct VMs, coding threads and per-task command/model activity, with 63
+nonempty patches and 37 empty patches. All 100 original reports ended
+`needs_repair`. Independently reviewed local recovery and coordinator repairs are
+separate evidence, with the integration tail retained on the original clock.
+The disjoint leaf workload did not exercise live shared-file conflicts. These
+results justify diagnosing worker completion and integration throughput before
+another large run; they do not justify expansion from VM counts alone.
 
 ## Implemented controls
 
@@ -76,8 +86,10 @@ readiness or provider admission.
    history when explicitly authorizing each new stage.
 5. Exercise shared-file conflicts, repair, CI contention and reverts. Disjoint
    ownership alone does not satisfy the prize's collision requirement.
-6. Scale 25 → 50 → 100 with enough useful unblocked tasks and evidence of each
-   active agent's commands, patch, tests and delivery. Idle containers do not count.
+6. Use smaller controlled experiments for the hundred-worker run's observed
+   completion and overhead problems before repeating scale. Keep per-agent
+   command, patch, test and delivery evidence and the same full clock. New paid
+   cohorts require separate authorization; idle containers do not count.
 
 Compare the same initial commit, backlog and acceptance criteria against an AFK
 baseline. Measure merged green PRs per hour including reviews, CI and retries, and
@@ -90,6 +102,10 @@ admission/estimate/billing fields. It reads local snapshots; execution controls
 and a persistent shared control service remain future work.
 
 ## Gates for each stage
+
+These are expansion criteria, not a schedule or a claim that every intermediate
+stage has run. The observed hundred-worker cohort has not met its quality and
+comparative-efficiency gate.
 
 | Stage | Before starting | Evidence needed before expanding |
 | --- | --- | --- |

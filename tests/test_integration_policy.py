@@ -178,7 +178,10 @@ class IntegrationPolicyTests(unittest.TestCase):
                 if existing:
                     self.assertEqual(self.ledger.rows()[0]["state"], "merged")
                 else:
-                    self.assertFalse(accounting.exists())
+                    # Operational action receipts are separate from financial
+                    # accounting; a merge must still never initialize a budget.
+                    self.assertFalse((accounting / "control.sqlite3").exists())
+                    self.assertTrue((accounting / "operations.sqlite3").is_file())
         self.assertEqual(self.project.ledger.call_count, 1)
 
 

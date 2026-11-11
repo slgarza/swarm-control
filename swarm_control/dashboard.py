@@ -8,7 +8,7 @@ import re
 from datetime import UTC, datetime
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
-from urllib.parse import urlsplit
+from urllib.parse import parse_qs, urlsplit
 
 MAX_BYTES = 8 * 1024 * 1024
 STATIC = Path(__file__).parent / "dashboard_static"
@@ -292,6 +292,10 @@ def project_snapshot(source, source_hash, now):
     end = datetime.fromisoformat(t1 if finished else as_of)
     elapsed = max(0, (end - datetime.fromisoformat(t0)).total_seconds()) if t0 else None
     paused = dictionary(source.get("queue")).get("paused") is True
+    cutoff_at = timestamp(clock.get("delivery_cutoff_utc"))
+    window_closed = bool(not finished and cutoff_at and t0
+                         and datetime.fromisoformat(t0) <= datetime.fromisoformat(cutoff_at)
+                         <= datetime.fromisoformat(as_of))
     provisional = [task for task in tasks if task["provisional"]]
     financials = dictionary(source.get("dashboard_financials"))
     money = {key: number(financials.get(key)) for key in FINANCES}
@@ -324,7 +328,7 @@ def project_snapshot(source, source_hash, now):
         "stale": age > 120,
         "repository": repository,
         "run_id": source["run_id"],
-        "phase": "paused" if paused else "complete" if finished else "integration",
+        "phase": "complete" if finished else "window_closed" if window_closed else "paused" if paused else "integration",
         "clock": {
             "t0": t0,
             "t1": t1,
@@ -400,9 +404,25 @@ def load_snapshot(path, now=None):
         return unavailable(now)
 
 
-def make_server(snapshot_path, host="127.0.0.1", port=0):
+def make_server(snapshot_path=None, host="127.0.0.1", port=0, *, catalog_path=None):
     if host not in {"127.0.0.1", "localhost"}:
         raise ValueError("dashboard requires a loopback address")
+    if (snapshot_path is None) == (catalog_path is None):
+        raise ValueError("select exactly one curated snapshot or local catalog")
+    catalog = None
+    if catalog_path is not None:
+        from .dashboard_catalog import load_catalog
+        catalog = load_catalog(catalog_path)
+
+    def public_catalog():
+        if catalog is not None:
+            return catalog.public()
+        source = load_snapshot(snapshot_path)
+        repository = source.get("repository", "")
+        return {"workspace_label": "Local workspace", "projects": [
+            {"id": "default", "label": repository or "Selected project", "repository": repository,
+             "runs": [{"id": "current", "label": source.get("run_id") or "Current snapshot"}]}],
+            "default_project_id": "default", "default_run_id": "current"}
 
     class Handler(BaseHTTPRequestHandler):
         def log_message(self, _format, *_args):
@@ -463,11 +483,30 @@ def make_server(snapshot_path, host="127.0.0.1", port=0):
                 self.respond(403, b'{"error":"Forbidden"}')
                 return
             if parsed.path == "/api/snapshot":
-                data = load_snapshot(snapshot_path)
+                try:
+                    query = parse_qs(parsed.query, keep_blank_values=True, strict_parsing=True)
+                    if set(query) - {"project", "run"} or any(len(v) != 1 or not v[0] for v in query.values()):
+                        raise ValueError("invalid selection")
+                    project_id, run_id = query.get("project", [None])[0], query.get("run", [None])[0]
+                    if catalog is None:
+                        if project_id not in {None, "default"} or run_id not in {None, "current"}:
+                            raise ValueError("unknown selection")
+                        selected, repository, project_id, run_id = snapshot_path, None, "default", "current"
+                    else:
+                        selected, repository, project_id, run_id = catalog.resolve(project_id, run_id)
+                    data = load_snapshot(selected) if selected is not None else unavailable(datetime.now(UTC))
+                    if repository and data.get("available") and data.get("repository") != repository:
+                        data = unavailable(datetime.now(UTC))
+                    data.update(selected_project_id=project_id, selected_run_id=run_id)
+                except ValueError:
+                    self.respond(400, b'{"error":"Invalid project or run selection"}')
+                    return
                 self.respond(
                     200 if data["available"] else 503,
                     json.dumps(data, allow_nan=False).encode(),
                 )
+            elif parsed.path == "/api/catalog":
+                self.respond(200, json.dumps(public_catalog(), allow_nan=False).encode())
             elif parsed.path == "/api/health":
                 self.respond(200, b'{"ok":true,"read_only":true}')
             elif parsed.path == "/favicon.ico":
@@ -500,15 +539,16 @@ def make_server(snapshot_path, host="127.0.0.1", port=0):
 
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument(
+    source = parser.add_mutually_exclusive_group(required=True)
+    source.add_argument(
         "--snapshot",
-        required=True,
         type=Path,
         help="Explicit curated JSON evidence file; never a raw worker log or ledger",
     )
+    source.add_argument("--catalog", type=Path, help="Explicit local project/run catalog; source paths remain private")
     parser.add_argument("--port", default=8787, type=int)
     args = parser.parse_args()
-    server = make_server(args.snapshot, port=args.port)
+    server = make_server(args.snapshot, port=args.port, catalog_path=args.catalog)
     print(
         f"Swarm Control: http://127.0.0.1:{server.server_port} (read only)", flush=True
     )

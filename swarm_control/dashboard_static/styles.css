@@ -1710,3 +1710,18 @@ dialog::backdrop {
     font-size: 7px;
   }
 }
+
+/* Explicitly configured project/run navigation; never an execution control. */
+[data-run-content][hidden], .workspace-empty[hidden] { display: none !important; }
+.workspace-picker { margin: 24px 0 18px; padding: 22px; border: 1px solid var(--line); border-radius: var(--radius); background: var(--surface); }
+.workspace-intro h2 { margin: 0 0 8px; font-size: 17px; letter-spacing: -.3px; }
+.workspace-intro p { margin: 0; color: var(--muted); line-height: 1.6; max-width: 780px; }
+.workspace-fields { display: grid; grid-template-columns: 1fr 1.6fr; gap: 16px; margin: 20px 0 14px; }
+.workspace-fields > div { min-width: 0; }
+.workspace-fields label { display: block; margin-bottom: 8px; color: var(--muted); font-size: 10px; letter-spacing: 1.4px; font-weight: 650; }
+.workspace-fields select { width: 100%; min-width: 0; min-height: 44px; color: var(--text); background: var(--bg); border: 1px solid var(--line); border-radius: 7px; padding: 10px 12px; text-overflow: ellipsis; }
+.workspace-picker > p { margin: 0; font-size: 12px; line-height: 1.6; }
+.workspace-empty { padding: 38px 22px; margin: 18px 0; border: 1px dashed var(--line); border-radius: var(--radius); }
+.workspace-empty h2 { margin: 0 0 12px; font-size: 22px; }
+.workspace-empty p { color: var(--muted); max-width: 620px; line-height: 1.7; margin: 0; }
+@media(max-width:760px) { .workspace-fields { grid-template-columns: 1fr; gap: 14px; } .workspace-picker { padding: 18px; } }

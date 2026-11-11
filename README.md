@@ -6,6 +6,17 @@ enforces budgets and ownership, and integrates reviewed changes through passing
 GitHub Actions. OpenAI supplies the model; Modal supplies temporary machines.
 The coordinator currently runs on one host.
 
+The local dashboard supports project and run selection from an explicit local
+catalog. Operational feedback adds persistent failure brakes, CI classification
+and restart-safe merge-action receipts. See [operations safety](docs/OPERATIONS_SAFETY.md)
+and the [dashboard guide and screenshots](docs/DASHBOARD.md).
+
+![Project and run selection in the English dashboard](docs/images/dashboard-workspace-overview-2026-11-11.png)
+
+Historical capture on November 11, 2026, at 16:11 Mexico City time (22:11 UTC):
+100 original failed workers, 56 provisional product recoveries and two separate
+support recoveries. Final quality, billed cost and AFK comparison remain unknown.
+
 **Start with the [local quickstart](docs/QUICKSTART.md)** to understand the system
 without credentials or cloud resources. Then follow the
 [two-agent walkthrough](docs/TWO_AGENT_WALKTHROUGH.md) to run real workers using
@@ -32,6 +43,7 @@ unknowns. The loopback viewer makes no provider calls or execution/accounting wr
 | [Two-agent walkthrough](docs/TWO_AGENT_WALKTHROUGH.md) | Own-account setup, real issues, budget, execution, review, PRs, merge and cleanup |
 | [Project reference](docs/PROJECTS.md) | Every configuration field and the task format |
 | [Operations](docs/OPERATIONS.md) | Commands, side effects, flags and integration gates |
+| [Operational feedback](docs/OPERATIONS_SAFETY.md) | Failure brakes, durable action reservations, CI diagnosis and conservative scaling advice |
 | [Deployment preflight](docs/DEPLOYMENT_PREFLIGHT.md) | Read-only source, ledger, GitHub and resource checks before a separately authorized deployment |
 | [Spend reporting](docs/BILLING.md) | Provider cost evidence, source freshness and local reservations without invented account balances |
 | [Budget migration](docs/BUDGET_MIGRATION.md) | Read-only proposals and separately authorized cumulative increases preserving every allocation |

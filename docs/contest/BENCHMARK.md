@@ -3,6 +3,9 @@
 This is a proposed evaluation protocol. No completed comparison is included in
 this repository. The controller supports explicitly configured cohorts up to 100,
 but offline load tests do not establish a qualifying live 100-agent system.
+The [November 11 real hundred-worker pilot](https://github.com/slgarza/Afterimage/blob/main/docs/swarm/pilot100-2026-11-11.md)
+is an assisted execution/recovery experiment, with all original failures retained;
+it is not the paired AFK comparison specified here.
 
 ## 1. Define the experiment before running it
 

@@ -8,6 +8,9 @@ def main():
         if len(sys.argv) > 1 and sys.argv[1] == "dashboard":
             from .dashboard import main as run
             del sys.argv[1]
+        elif len(sys.argv) > 1 and sys.argv[1] == "ops":
+            from .operations import main as run
+            del sys.argv[1]
         elif len(sys.argv) > 1 and sys.argv[1] == "preflight":
             from .preflight import main as run
             del sys.argv[1]

@@ -3,7 +3,7 @@
 
 (() => {
   const byId = (id) => document.getElementById(id);
-  const state = {snapshot: null, autoRefresh: true, fetching: false, selected: null, fetchFailed: false};
+  const state = {snapshot: null, autoRefresh: true, fetching: false, selected: null, fetchFailed: false, catalog: null, catalogLoading: false, projectId: null, runId: null, requestVersion: 0, controller: null};
   const countFormat = new Intl.NumberFormat("en-US");
   const moneyFormat = new Intl.NumberFormat("en-US", {style: 'currency', currency: 'USD', maximumFractionDigits: 2});
   const dateFormat = new Intl.DateTimeFormat("en-US", {dateStyle: 'medium', timeStyle: 'medium', timeZone: 'UTC'});
@@ -28,7 +28,7 @@
   };
   const pill = (text, type = 'neutral') => node('span', 'pill ' + type, text);
   const tasks = () => Array.isArray(state.snapshot?.tasks) ? state.snapshot.tasks : [];
-  const phaseLabels = {integration: "Integration in progress", complete: "Cohort closed", paused: "Integration paused", unavailable: "No snapshot"};
+  const phaseLabels = {integration: "Integration in progress", complete: "Cohort closed", window_closed: "Delivery window closed", paused: "Integration paused", unavailable: "No snapshot"};
   const originalLabel = (task) => ({needs_repair: "Needs repair", validated: "Validated", working: "Running", preparing: "Preparing", checking: "Checking", failed: "Failed", rejected: "Rejected", needs_recovery: "Needs recovery"}[task.original_status] || "No status");
   const repaired = (task) => task.attribution === 'coordinator_code_or_test_repair';
   const recoveredLabel = (task) => task.provisional ? (repaired(task) ? "Coordinator repair" : "Unchanged recovery") : task.empty_patch ? "Empty patch" : "Not qualified";
@@ -36,6 +36,76 @@
   const secondsLabel = (value) => {if (!finite(value)) return "No data"; if (value < 60) return value.toFixed(1) + ' s'; const hours = Math.floor(value / 3600); const minutes = Math.floor(value % 3600 / 60); return hours ? hours + ' h ' + minutes + ' min' : minutes + ' min';};
 
   function announce(message) {setText('screen-reader-status', message);}
+
+  function runContent(visible) {
+    for (const element of document.querySelectorAll('[data-run-content]')) element.hidden = !visible;
+    byId('workspace-empty').hidden = visible;
+  }
+
+  function resetSelection(title, copy) {
+    state.controller?.abort(); state.requestVersion += 1; state.fetching = false;
+    state.snapshot = null; state.selected = null; state.fetchFailed = false;
+    byId('task-dialog').close(); byId('export-button').disabled = true;
+    for (const id of ['worker-grid', 'task-rows', 'recovery-chart', 'timeline', 'evidence-links', 'recovery-split', 'detail-content']) clear(byId(id));
+    for (const id of ['metric-workers', 'metric-validated', 'metric-recovered', 'metric-active', 'budget-reserved', 'budget-authorized', 'budget-ceiling', 'budget-invoice', 'metric-per-dollar']) setText(id, '—');
+    byId('refresh-button').disabled = false; byId('data-alert').hidden = true;
+    setText('workspace-empty-title', title); setText('workspace-empty-copy', copy);
+    setText('run-name', state.runId || 'No run selected'); setText('run-phase', 'No snapshot');
+    byId('run-phase').className = 'pill neutral';
+    clear(byId('connection-status')); byId('connection-status').append(node('span', 'status-dot amber'), document.createTextNode(state.runId ? 'Loading source' : 'No run evidence'));
+    setText('snapshot-time', 'Source pending'); setText('nav-worker-count', '—');
+    setText('last-fetch', 'Not read yet'); runContent(false);
+  }
+
+  function persistSelection() {
+    const url = new URL(window.location.href);
+    for (const [key, value] of [['project', state.projectId], ['run', state.runId]]) {
+      if (value) url.searchParams.set(key, value); else url.searchParams.delete(key);
+    }
+    window.history.replaceState(null, '', url);
+  }
+
+  function selectOptions(element, rows, placeholder) {
+    clear(element);
+    if (!rows.length) element.append(node('option', '', placeholder));
+    for (const row of rows) {const option = node('option', '', row.label || row.id); option.value = row.id; element.append(option);}
+    element.disabled = rows.length === 0;
+  }
+
+  function chooseProject(id, preferredRun) {
+    const project = state.catalog?.projects.find((item) => item.id === id);
+    if (!project) return;
+    state.projectId = project.id;
+    state.runId = project.runs.some((run) => run.id === preferredRun) ? preferredRun : project.runs[0]?.id || null;
+    byId('project-select').value = state.projectId;
+    selectOptions(byId('run-select'), project.runs, 'No runs yet');
+    if (state.runId) byId('run-select').value = state.runId;
+    setText('repo-name', project.repository || project.label || project.id);
+    setText('workspace-summary', number(state.catalog.projects.length) + ' configured project(s) · ' + number(project.runs.length) + ' recorded run(s) in this project. This viewer is read only.');
+    persistSelection();
+    resetSelection(state.runId ? 'Loading selected run…' : 'No run evidence yet', state.runId ? 'Reading the reviewed evidence for this selection.' : 'This project has no recorded runs in the local catalog. Run agents through the controller, then load their reviewed evidence here.');
+    if (state.runId) refresh();
+  }
+
+  async function loadCatalog() {
+    if (state.catalogLoading) return;
+    state.catalogLoading = true;
+    const controller = new AbortController(), timeout = window.setTimeout(() => controller.abort(), 15000);
+    try {
+      const response = await fetch('/api/catalog', {cache: 'no-store', credentials: 'same-origin', signal: controller.signal, headers: {'Accept': 'application/json'}});
+      if (!response.ok) throw new Error('CATALOG');
+      const data = await response.json(), validId = (id) => typeof id === 'string' && id.length > 0;
+      if (!Array.isArray(data?.projects) || data.projects.some((project) => !validId(project.id) || !Array.isArray(project.runs) || project.runs.some((run) => !validId(run.id)) || new Set(project.runs.map((run) => run.id)).size !== project.runs.length) || new Set(data.projects.map((project) => project.id)).size !== data.projects.length) throw new Error('CATALOG');
+      state.catalog = data;
+      selectOptions(byId('project-select'), data.projects, 'No configured projects');
+      const query = new URL(window.location.href).searchParams;
+      const wanted = state.projectId || query.get('project') || data.default_project_id;
+      const project = data.projects.find((item) => item.id === wanted) || data.projects.find((item) => item.id === data.default_project_id) || data.projects[0];
+      if (project) chooseProject(project.id, state.runId || query.get('run') || data.default_run_id);
+      else {state.projectId = null; state.runId = null; persistSelection(); selectOptions(byId('run-select'), [], 'No runs yet'); resetSelection('No configured projects', 'Add your projects to the local server catalog to inspect their reviewed run evidence. No example projects or results are displayed.'); setText('workspace-summary', 'No projects are configured on this local server.');}
+    } catch {resetSelection('Workspace unavailable', 'The local server did not provide a valid project catalog. Refresh to try reading it again. No example projects or results are displayed.'); showError('Could not read the local project catalog.');}
+    finally {clearTimeout(timeout); state.catalogLoading = false;}
+  }
 
   function renderOverview(data) {
     const summary = data.summary || {};
@@ -135,7 +205,7 @@
       item.append(point, copy, timestamp); list.append(item);
     }
     const elapsed = secondsLabel(data.clock?.elapsed_seconds);
-    setText('clock-note', "Since release: " + elapsed + '. ' + (data.clock?.t1 ? "Closed: " + timeLabel(data.clock.t1) + '.' : "The clock remains open.") + " Review, repairs and CI included. " + (sorted.length > 5 ? sorted.length + " milestones in the exported JSON." : ''));
+    setText('clock-note', "Since release: " + elapsed + '. ' + (data.phase === 'window_closed' ? "The delivery window ended before integration completed; final T1 remains unknown." : data.clock?.t1 ? "Closed: " + timeLabel(data.clock.t1) + '.' : "The clock remains open.") + " Review, repairs and CI included. " + (sorted.length > 5 ? sorted.length + " milestones in the exported JSON." : ''));
   }
 
   function renderTable() {
@@ -219,6 +289,7 @@
   }
 
   function render(data) {
+    runContent(true);
     renderOverview(data); renderGrid(data); renderChart(data); renderTimeline(data); renderTable(); renderBudget(data); renderEvidence(data);
     if (state.selected && byId('task-dialog').open) {const selected = tasks().find((item) => item.id === state.selected); if (selected) renderDetail(selected);}
     byId('export-button').disabled = false;
@@ -228,26 +299,37 @@
     state.fetchFailed = true;
     const alert = byId('data-alert'); alert.hidden = false; alert.textContent = message + (state.snapshot ? " The last received snapshot is retained; it does not represent live state." : " No example data is displayed.");
     const connection = byId('connection-status'); clear(connection); connection.append(node('span', 'status-dot amber'), document.createTextNode("Source unavailable"));
-    if (!state.snapshot) {setText('run-phase', "No snapshot"); setText('run-name', "Waiting for a valid source");}
+    if (!state.snapshot) {setText('run-phase', "No snapshot"); setText('run-name', state.runId || "Waiting for a valid source"); if (state.runId) {setText('workspace-empty-title', 'Run evidence unavailable'); setText('workspace-empty-copy', 'The selected run could not be read. Refresh to try again, or choose another configured run. No previous project data is displayed.');}}
     announce("Could not refresh the source.");
   }
 
   async function refresh() {
+    if (!state.projectId || !state.runId) {loadCatalog(); return;}
     if (state.fetching) return;
     state.fetching = true; byId('refresh-button').disabled = true;
-    const controller = new AbortController(), timeout = window.setTimeout(() => controller.abort(), 15000);
+    const controller = new AbortController(), timeout = window.setTimeout(() => controller.abort(), 15000), version = ++state.requestVersion;
+    state.controller = controller;
+    const query = new URLSearchParams({project: state.projectId, run: state.runId});
     try {
-      const response = await fetch('/api/snapshot', {cache: 'no-store', credentials: 'same-origin', signal: controller.signal, headers: {'Accept': 'application/json'}});
+      const response = await fetch('/api/snapshot?' + query, {cache: 'no-store', credentials: 'same-origin', signal: controller.signal, headers: {'Accept': 'application/json'}});
       if (!response.ok) throw new Error('HTTP');
       const data = await response.json();
+      if (version !== state.requestVersion) return;
       if (data?.schema_version !== 1 || data.available !== true || !Array.isArray(data.tasks) || !data.summary) throw new Error('SNAPSHOT');
       state.snapshot = data; state.fetchFailed = false; render(data);
       setText('last-fetch', "Read: " + timeLabel(new Date().toISOString()));
       announce("Snapshot updated: " + number(data.summary.provisional_product) + " provisional modules.");
-    } catch {showError("Could not read the sanitized snapshot from the local server.");}
-    finally {clearTimeout(timeout); state.fetching = false; byId('refresh-button').disabled = false;}
+    } catch {if (version === state.requestVersion) showError("Could not read the sanitized snapshot from the local server.");}
+    finally {clearTimeout(timeout); if (version === state.requestVersion) {state.fetching = false; state.controller = null; byId('refresh-button').disabled = false;}}
   }
 
+  byId('project-select').addEventListener('change', () => chooseProject(byId('project-select').value, null));
+  byId('run-select').addEventListener('change', () => {
+    const project = state.catalog?.projects.find((item) => item.id === state.projectId);
+    if (!project?.runs.some((run) => run.id === byId('run-select').value)) return;
+    state.runId = byId('run-select').value; persistSelection();
+    resetSelection('Loading selected run…', 'Reading the reviewed evidence for this selection.'); refresh();
+  });
   byId('refresh-button').addEventListener('click', refresh);
   byId('task-filter').addEventListener('change', renderTable);
   byId('task-search').addEventListener('input', renderTable);
@@ -266,5 +348,5 @@
   document.querySelector('.nav-item')?.setAttribute('aria-current', 'location');
   window.setInterval(() => {if (state.autoRefresh && !document.hidden) refresh();}, 10000);
   document.addEventListener('visibilitychange', () => {if (!document.hidden && state.autoRefresh) refresh();});
-  refresh();
+  loadCatalog();
 })();

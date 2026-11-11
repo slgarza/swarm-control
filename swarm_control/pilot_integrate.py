@@ -369,8 +369,17 @@ def merge(directory, task, state):
         require(pr.get("state") == "open" and state["status"] == "published", "PR is not open")
         require(github(f"git/ref/heads/{BASE_BRANCH}")["object"]["sha"] == state["tested_base_sha"], "main changed; prepare and test again")
         require_recorded_budget_policy()
-        result = github(f"pulls/{state['pr_number']}/merge", method="PUT", body={
-            "merge_method": "squash", "sha": state["head_sha"], "commit_title": f"[{task['id']}] {task['title']}"})
+        from .operations import OperationsJournal
+
+        journal = OperationsJournal(common_state(ROOT) / "operations.sqlite3")
+        reservation = journal.reserve_action("merge_pr", f"{state['pr_number']}:{state['head_sha']}")
+        try:
+            result = github(f"pulls/{state['pr_number']}/merge", method="PUT", body={
+                "merge_method": "squash", "sha": state["head_sha"], "commit_title": f"[{task['id']}] {task['title']}"})
+        except BaseException:
+            journal.finish_action(reservation, "uncertain")
+            raise
+        journal.finish_action(reservation, "succeeded" if result.get("merged") is True else "uncertain")
         require(result.get("merged") is True, "GitHub did not merge the reviewed head")
         state.update(status="merged", merge_commit_sha=result["sha"], merge_recorded_at=now(), green_head_sha=state["head_sha"])
         save(directory / "integration.json", state)
