@@ -428,6 +428,19 @@ def make_server(snapshot_path, host="127.0.0.1", port=0):
             self.do_GET()
 
         def do_GET(self):
+            try:
+                parsed = urlsplit(self.path)
+            except ValueError:
+                self.respond(400, b'{"error":"Invalid request"}')
+                return
+            if parsed.scheme or parsed.netloc:
+                self.respond(400, b'{"error":"Invalid request"}')
+                return
+            root_navigation = (
+                parsed.path == "/"
+                and self.headers.get("Sec-Fetch-Mode") == "navigate"
+                and self.headers.get("Sec-Fetch-Dest") == "document"
+            )
             authorities = {
                 f"127.0.0.1:{self.server.server_port}",
                 f"localhost:{self.server.server_port}",
@@ -442,13 +455,12 @@ def make_server(snapshot_path, host="127.0.0.1", port=0):
                 or len(origins) > 1
                 or origins
                 and origins[0] not in {f"http://{value}" for value in authorities}
-                or self.headers.get("Sec-Fetch-Site") == "cross-site"
+                or (
+                    self.headers.get("Sec-Fetch-Site") == "cross-site"
+                    and not root_navigation
+                )
             ):
                 self.respond(403, b'{"error":"Forbidden"}')
-                return
-            parsed = urlsplit(self.path)
-            if parsed.scheme or parsed.netloc:
-                self.respond(400, b'{"error":"Invalid request"}')
                 return
             if parsed.path == "/api/snapshot":
                 data = load_snapshot(snapshot_path)

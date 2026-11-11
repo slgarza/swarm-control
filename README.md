@@ -89,7 +89,8 @@ false and budget/provider/authorization blockers remain explicit. See the
 
 Connect another repository using [project configuration](docs/PROJECTS.md).
 Read [operations](docs/OPERATIONS.md) before any paid run. Semantic review remains
-explicit; no autonomous backlog generator or dashboard is implemented yet.
+explicit. The local dashboard views an explicitly selected curated snapshot;
+backlog generation and execution controls still require the controller workflow.
 
 ## Capacity and remaining proof
 

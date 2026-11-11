@@ -84,8 +84,10 @@ baseline. Measure merged green PRs per hour including reviews, CI and retries, a
 per dollar with reconciled billing. Current accounting ceilings are not invoices.
 
 A persistent control service and shared database can later replace the local
-coordinator. A dashboard should show actual tasks, workers, patches, CI, PRs,
-failures and budget from that service. No dashboard is implemented yet.
+coordinator. The local dashboard now shows explicitly selected curated evidence
+for original worker outcomes, attributed recovery, PR/check links and separate
+admission/estimate/billing fields. It reads local snapshots; execution controls
+and a persistent shared control service remain future work.
 
 ## Gates for each stage
 

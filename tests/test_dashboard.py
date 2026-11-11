@@ -571,6 +571,59 @@ class HttpTests(SnapshotFixture):
                 )
         self.assertEqual(before, {p.name: p.read_bytes() for p in self.root.iterdir()})
 
+    def test_external_top_level_navigation_opens_only_the_page_and_keeps_api_guards(
+        self,
+    ):
+        navigation = {
+            "Sec-Fetch-Site": "cross-site",
+            "Sec-Fetch-Mode": "navigate",
+            "Sec-Fetch-Dest": "document",
+        }
+        for method in ("GET", "HEAD"):
+            with self.subTest(method=method):
+                status, headers, body = self.request(
+                    "/", method=method, headers=navigation
+                )
+                self.assertEqual(status, 200)
+                self.assertIn("text/html", headers["Content-Type"])
+                self.assertNotIn("Access-Control-Allow-Origin", headers)
+                self.assertEqual(bool(body), method == "GET")
+        for route in (
+            "/api/snapshot",
+            "/api/health",
+            "/assets/app.js",
+            "/assets/styles.css",
+        ):
+            with self.subTest(route=route):
+                self.assertEqual(self.request(route, headers=navigation)[0], 403)
+        for mode, destination in (
+            ("cors", "empty"),
+            ("no-cors", "image"),
+            ("navigate", "iframe"),
+        ):
+            with self.subTest(mode=mode, destination=destination):
+                headers = dict(
+                    navigation,
+                    **{"Sec-Fetch-Mode": mode, "Sec-Fetch-Dest": destination},
+                )
+                self.assertEqual(self.request("/", headers=headers)[0], 403)
+        self.assertEqual(
+            self.request("/", headers=dict(navigation, Origin="https://evil.invalid"))[
+                0
+            ],
+            403,
+        )
+        self.assertEqual(
+            self.request("/", headers=dict(navigation, Host="evil.invalid"))[0], 403
+        )
+        # Assets loaded by the successfully opened page remain normal same-origin reads.
+        self.assertEqual(
+            self.request("/assets/app.js", headers={"Sec-Fetch-Site": "same-origin"})[
+                0
+            ],
+            200,
+        )
+
     def test_missing_and_duplicate_hosts_fail_closed(self):
         for hosts in ([], [f"127.0.0.1:{self.port}", "evil.invalid"]):
             with self.subTest(hosts=hosts):

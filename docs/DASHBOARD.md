@@ -51,6 +51,8 @@ an empty favicon response, `/api/snapshot`, and `/api/health`. Write methods are
 rejected. Host and
 Origin checks, a restrictive Content Security Policy, no-store responses and no
 CORS support keep the viewer local and read-only.
+Top-level navigation to the public page works when following a link from another
+site; that exception does not expose the snapshot API to cross-site requests.
 
 ## Curated input
 

@@ -24,8 +24,8 @@ and integrate reviewed changes through GitHub Actions. Defaults remain ten worke
 and disabled execution. Shared ownership is opt-in; clean three-way integration
 reruns combined checks, while actual conflicts require a separate repair attempt.
 The target is a public GitHub repository with prepared tasks and validation commands.
-Review and integration still require an operator; there is no automatic backlog
-generator or dashboard.
+Review and integration still require an operator. The local dashboard presents
+curated evidence and links; backlog generation is not automated.
 
 The original Afterimage pilot ran ten real workers and merged ten green PRs.
 One delivery needed a coordinator code repair. It did not run 100 agents, test
