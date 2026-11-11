@@ -11,9 +11,10 @@ import hashlib
 import json
 import os
 import re
+import sqlite3
 import subprocess
 import uuid
-from contextlib import contextmanager, nullcontext
+from contextlib import closing, contextmanager, nullcontext
 from datetime import UTC, datetime
 from pathlib import Path
 
@@ -173,6 +174,30 @@ def applied_digest(root, base):
     return hashlib.sha256(applied_patch(root, base)).hexdigest()
 
 
+def require_recorded_budget_policy():
+    """Check existing accounting read-only before irreversible integration writes."""
+    path = common_state(ROOT) / "control.sqlite3"
+    if not path.exists():
+        return
+    require(PROJECT is not None, "select a project before checking the recorded budget policy")
+    try:
+        with closing(sqlite3.connect(path.resolve().as_uri() + "?mode=ro", uri=True, timeout=0)) as db:
+            db.execute("PRAGMA query_only = ON")
+            rows = db.execute(
+                "SELECT singleton,model_limit_cents,infra_limit_cents FROM budget_policy"
+            ).fetchall()
+    except sqlite3.Error:
+        raise ValueError(
+            "cannot verify the existing budget policy read-only; reconcile the ledger "
+            "before publishing or merging; no policy was changed"
+        ) from None
+    require(len(rows) == 1 and rows[0][0] == 1,
+            "existing ledger has no single recorded budget policy; reconcile it before integration")
+    require(rows[0][1:] == (PROJECT.model_limit_cents, PROJECT.infra_limit_cents),
+            "selected profile differs from the recorded budget policy; select a matching profile "
+            "before publishing or merging; no policy was changed")
+
+
 def prepare(directory, task, report, digest, worktree=None):
     require(not (directory / "integration.json").exists(), "integration already exists; preserve it and use a new artifact copy for a new attempt")
     git(ROOT, "fetch", "origin", f"{BASE_BRANCH}:refs/remotes/origin/{BASE_BRANCH}")
@@ -257,6 +282,7 @@ def load_review(directory, digest, reviewed, reviewed_applied=None):
 
 
 def publish(directory, task, report, state):
+    require_recorded_budget_policy()
     require(state["status"] in {"prepared", "committed"}, "integration is not publishable")
     root = candidate(state, task, committed=state["status"] == "committed")
     require(github(f"git/ref/heads/{BASE_BRANCH}")["object"]["sha"] == state["tested_base_sha"], "main changed; prepare and test again")
@@ -268,6 +294,7 @@ def publish(directory, task, report, state):
         state.update(status="committed", head_sha=git(root, "rev-parse", "HEAD"), reviewed_at=now())
         save(directory / "integration.json", state)
     candidate(state, task, committed=True)
+    require_recorded_budget_policy()
     git(root, "push", "--set-upstream", "origin", f"HEAD:refs/heads/{state['branch']}")
     body = "\n".join([
         task["title"], "", "Acceptance:", *(f"- {item}" for item in task["acceptance"]), "",
@@ -282,8 +309,12 @@ def publish(directory, task, report, state):
     ])
     require(not SECRET.search(body.encode()), "credential content prohibited in PR metadata")
     existing = github(f"pulls?state=open&head={REPO.split('/')[0]}:{state['branch']}&base={BASE_BRANCH}")
-    pr = existing[0] if existing else github("pulls", method="POST", body={
-        "title": title, "body": body, "head": state["branch"], "base": BASE_BRANCH})
+    if existing:
+        pr = existing[0]
+    else:
+        require_recorded_budget_policy()
+        pr = github("pulls", method="POST", body={
+            "title": title, "body": body, "head": state["branch"], "base": BASE_BRANCH})
     require(pr["head"]["sha"] == state["head_sha"], "published PR head differs")
     state.update(status="published", pr_number=pr["number"], pr_url=pr["html_url"], published_at=now())
     save(directory / "integration.json", state)
@@ -327,6 +358,7 @@ def all_checks(head):
 
 
 def merge(directory, task, state):
+    require_recorded_budget_policy()
     require(state["status"] in {"published", "merged"}, "integration has not been published")
     candidate(state, task, committed=True)
     pr = github(f"pulls/{state['pr_number']}")
@@ -336,8 +368,18 @@ def merge(directory, task, state):
     if not pr.get("merged"):
         require(pr.get("state") == "open" and state["status"] == "published", "PR is not open")
         require(github(f"git/ref/heads/{BASE_BRANCH}")["object"]["sha"] == state["tested_base_sha"], "main changed; prepare and test again")
-        result = github(f"pulls/{state['pr_number']}/merge", method="PUT", body={
-            "merge_method": "squash", "sha": state["head_sha"], "commit_title": f"[{task['id']}] {task['title']}"})
+        require_recorded_budget_policy()
+        from .operations import OperationsJournal
+
+        journal = OperationsJournal(common_state(ROOT) / "operations.sqlite3")
+        reservation = journal.reserve_action("merge_pr", f"{state['pr_number']}:{state['head_sha']}")
+        try:
+            result = github(f"pulls/{state['pr_number']}/merge", method="PUT", body={
+                "merge_method": "squash", "sha": state["head_sha"], "commit_title": f"[{task['id']}] {task['title']}"})
+        except BaseException:
+            journal.finish_action(reservation, "uncertain")
+            raise
+        journal.finish_action(reservation, "succeeded" if result.get("merged") is True else "uncertain")
         require(result.get("merged") is True, "GitHub did not merge the reviewed head")
         state.update(status="merged", merge_commit_sha=result["sha"], merge_recorded_at=now(), green_head_sha=state["head_sha"])
         save(directory / "integration.json", state)

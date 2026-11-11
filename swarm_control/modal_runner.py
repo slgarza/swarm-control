@@ -217,7 +217,7 @@ def run_ttl_seconds(agent_timeout):
     return max(1800, agent_timeout + 900)
 
 
-def dispatch_tasks(tasks, workers, execute, on_complete):
+def dispatch_tasks(tasks, workers, execute, on_complete, *, admit=None):
     """Bound submitted work and checkpoint each completion before admitting more.
 
     Provider failures produce a failed attempt, never an automatic replacement.
@@ -229,13 +229,21 @@ def dispatch_tasks(tasks, workers, execute, on_complete):
     if type(workers) is not int or not 1 <= workers <= 100:
         raise ValueError("workers must be between 1 and 100")
     remaining = iter(tasks)
-    reports = []
+    reports, skipped = [], []
+    held = False
     with ThreadPoolExecutor(max_workers=min(workers, len(tasks))) as pool:
         pending = {}
 
         def submit_next():
+            nonlocal held
+            if held:
+                return
             task = next(remaining, None)
             if task is not None:
+                if admit is not None and not admit():
+                    held = True
+                    skipped.extend([task, *remaining])
+                    return
                 pending[pool.submit(execute, task)] = task
 
         for _ in range(min(workers, len(tasks))):
@@ -253,6 +261,11 @@ def dispatch_tasks(tasks, workers, execute, on_complete):
             on_complete(task, report)
             reports.append(report)
             submit_next()
+    for task in skipped:
+        report = {"task_id": task["id"], "status": "not_dispatched",
+                  "reason": "operations_hold", "finished_at": now()}
+        on_complete(task, report)
+        reports.append(report)
     return reports
 
 
@@ -728,10 +741,15 @@ def main():
         plan["local_admission"] = local_admission_summary(tasks, args.workers, project)
         print(json.dumps(plan, indent=2))
         return 0
+    from .operations import OperationsJournal
+
+    operations = OperationsJournal(common_state(ROOT) / "operations.sqlite3")
+    operations.require_admission(project.failure_policy)
     import modal
 
     state = common_state(ROOT)
     with controller_lock(state):
+        operations.require_admission(project.failure_policy)
         ledger = project.ledger(state / "control.sqlite3")
         if args.command == "run":
             verify_github_tasks(tasks, ROOT, base_sha, repository=project.repository, tasks_dir=project.tasks_dir)
@@ -806,6 +824,11 @@ def main():
             )
             def launch(task):
                 try:
+                    if operations.status(project.failure_policy)["admission_held"]:
+                        if barrier is not None:
+                            barrier.abort()
+                        return {"task_id": task["id"], "status": "not_dispatched",
+                                "reason": "operations_hold", "finished_at": now()}
                     return execute_task(
                         task,
                         args,
@@ -827,12 +850,20 @@ def main():
                 if args.command == "run":
                     record_task_result(ledger, batch, task, report)
                     recorded.add(task["id"])
+                    if report.get("status") != "not_dispatched":
+                        operations.observe(batch.name, task["id"], report, project.failure_policy)
                 else:
                     directory = batch / task["id"]
                     directory.mkdir(exist_ok=True)
                     write_json(directory / "report.json", report)
 
-            reports = dispatch_tasks(tasks, args.workers, launch, checkpoint)
+            def admit():
+                allowed = not operations.status(project.failure_policy)["admission_held"]
+                if not allowed and barrier is not None:
+                    barrier.abort()
+                return allowed
+
+            reports = dispatch_tasks(tasks, args.workers, launch, checkpoint, admit=admit)
         finally:
             tokens.clear()
             if gateway:

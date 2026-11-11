@@ -12,8 +12,13 @@ green PRs. One delivery required a coordinator code repair. The standalone
 controller has offline regression coverage and a reproducible local tutorial.
 Its runner/gateway now accept explicitly configured cohorts up to 100, with
 bounded dispatch, completion checkpoints and opted-in shared-file integration.
-It has **not yet demonstrated the 100-agent requirement or an efficiency advantage
-over the best AFK pipeline**.
+The November 11 run then observed 100 distinct worker VMs, coding threads,
+command activity and known model completions. All 100 original reports ended
+`needs_repair`; 63 patches contained code and 37 were empty. Its separately
+attributed local recovery is documented in the
+[hundred-worker report](https://github.com/slgarza/Afterimage/blob/main/docs/swarm/pilot100-2026-11-11.md).
+It has **not established 100 simultaneously useful contributors, live collision
+handling at that scale or an efficiency advantage over the best AFK pipeline**.
 
 This document is a presentation outline, not a completed prize submission.
 The requirements below come from the announcement provided by the organizer in
@@ -27,21 +32,22 @@ the submission format and applicable review date with the organizer.
 | 0:00–0:45 | Problem and goal | A real backlog must become accepted, merged code. More simultaneous agents only help if delivery improves per hour and per dollar. |
 | 0:45–1:45 | System architecture | Show the [component diagram](../ARCHITECTURE.md). Explain separate controller, target repository, worker VMs, model gateway and GitHub CI. |
 | 1:45–2:45 | Reproducibility | Show the [local tutorial](../QUICKSTART.md): create a separate target, run two baseline tests, inspect a two-task plan. State that this step launches no agents. |
-| 2:45–4:00 | Real pilot evidence | Open the original report and one delivered PR. Distinguish generated patch, local validation, semantic review, CI and actual merge. Show the recorded coordinator repair. |
+| 2:45–4:00 | Real pilot evidence | Open both cohort reports. Show the hundred-worker original failures, recovery attribution and a PR's reviewed head, combined checks and merge. A corrective PR is not an extra feature. |
 | 4:00–5:00 | Coordination and budget | Explain default disjoint ownership, opt-in shared-file work, three-way application, combined validation, completion checkpoints and bounded gateway capacity. Show that actual conflicts still require repair. |
 | 5:00–6:15 | Competition test | Show the requirements table and [comparison protocol](BENCHMARK.md). Explain how useful overlap, delivery rate, cost and interventions will be measured. |
-| 6:15–7:00 | Next milestone | Confirm real provider capacity, run a second target, then evaluate 25, 50 and 100 agents with approved budgets and a strong AFK comparison. |
+| 6:15–7:00 | Next milestone | Explain the measured worker and integration failure modes, then propose bounded experiments, a live collision workload and a strong paired AFK comparison with approved budgets. |
 
 For a short opening:
 
 > Swarm Control separates the orchestration system from the software it changes.
 > You bring a repository and a reviewed backlog. Independent agents work in Modal,
 > while a controller preserves their patches, budgets and test evidence. Changes
-> reach GitHub through review and CI. Our first ten-agent pilot delivered ten PRs;
-> the next challenge is proving that this scales and beats a strong AFK workflow.
+> reach GitHub through review and CI. We ran ten workers and then one hundred.
+> The larger run exposed failed handoffs and assisted recovery. The evidence
+> separates physical scale from useful delivery; an AFK advantage is still unproven.
 
-Do not introduce the current pilot as fully unattended. The operator prepared
-tasks, reviewed changes, repaired one delivery and managed integration.
+Do not introduce either pilot as fully unattended. The operator prepared tasks,
+invoked independent review, made documented repairs and managed integration.
 
 ## Current evidence
 
@@ -71,13 +77,22 @@ that every worker performed useful computation continuously.
 
 ## Requirements and remaining proof
 
+For the hundred-worker run, use its current
+[machine-readable evidence](https://github.com/slgarza/Afterimage/blob/main/docs/swarm/pilot100-2026-11-11.json)
+and linked methods, rather than carrying the ten-agent rates forward. It preserves
+all original outcomes, local repair attempts and the original T0 clock. Sampled
+VM counts and process envelopes contain observation or idle gaps; model-request
+latencies and actual billing remain unavailable. Dollar rates cannot be inferred
+from admission reserves or conservative accounting ceilings. Recovery counts
+remain provisional until their 24-hour quality observation is completed.
+
 | Requirement from the announcement | Current position | Evidence still needed |
 | --- | --- | --- |
 | Real codebase and backlog | Afterimage pilot delivered foundation modules | Larger independently reviewed backlog and acceptance criteria |
-| Minimum 100 agents live on the same repository | Ten demonstrated; configurable 100-worker implementation tested offline | At least 100 genuine sessions with meaningful overlapping work |
-| Useful agents rather than idle containers | Pilot includes commands, patches and tests | Complete per-agent evidence and contribution attribution at 100 |
+| Minimum 100 agents live on the same repository | Hundred-worker VM/process and per-task command/model activity observed | Stronger evidence of simultaneous useful work; process envelopes alone are insufficient |
+| Useful agents rather than idle containers | All 100 had command activity and known model completions; 63 produced nonempty patches, all original reports failed validation | Useful contribution and recovery attribution, quality observation and a repeatable successful cohort |
 | Handle collisions and CI contention | Opt-in shared ownership, clean three-way application, combined checks and durable conflict receipts tested offline | Live shared-file scenarios, repair, CI contention and combined validation at scale |
-| Merged, passing PRs | Ten observed | Repeatable delivery and post-merge quality on the benchmark workload |
+| Merged, passing PRs | Ten-agent deliveries plus separately reported assisted hundred-worker recoveries | Completed quality observation and repeatable delivery on the benchmark workload |
 | Beat best available AFK on PRs/hour | No comparison | Fair repeated runs against a strong baseline |
 | Beat best available AFK on PRs/dollar | Billing incomplete; no comparison | Reconciled eligible cost for both pipelines under the same rules |
 | Replicable system | Standalone controller and local example | Another operator reproduces a paid run using their own accounts |

@@ -4,8 +4,10 @@ import re
 import subprocess
 import tomllib
 from dataclasses import dataclass
+from dataclasses import field as dataclass_field
 from pathlib import Path
 
+from .health import FailurePolicy
 from .modal_worker import valid_path
 
 
@@ -52,6 +54,7 @@ class Project:
     gateway_concurrency: int = 20
     gateway_tokens_per_minute: int | None = None
     gateway_requests_per_minute: int | None = None
+    failure_policy: FailurePolicy = dataclass_field(default_factory=FailurePolicy)
 
     @property
     def clone_url(self):
@@ -92,13 +95,14 @@ def load_project(path):
     path = Path(path).expanduser().resolve()
     raw = tomllib.loads(path.read_text())
     require(raw.get("version") == 1, "project config requires version = 1")
-    allowed = {"version", "project", "validation", "runtime", "budget"}
+    allowed = {"version", "project", "validation", "runtime", "budget", "operations"}
     require(not set(raw) - allowed, "unknown top-level project settings")
     project = raw.get("project", {})
     validation = raw.get("validation", {})
     runtime = raw.get("runtime", {})
     budget = raw.get("budget", {})
-    for section in (project, validation, runtime, budget):
+    operations = raw.get("operations", {})
+    for section in (project, validation, runtime, budget, operations):
         require(isinstance(section, dict), "project settings sections must be tables")
     for section, keys in (
         (project, {"repository", "base_branch", "tasks_dir", "instructions"}),
@@ -107,6 +111,7 @@ def load_project(path):
                    "gateway_concurrency", "gateway_tokens_per_minute", "gateway_requests_per_minute",
                    "openai_secret", "environment", "image", "setup_commands"}),
         (budget, {"live_enabled", "max_live_agents", "model_limit_cents", "infra_limit_cents"}),
+        (operations, {"window_seconds", "minimum_failures", "minimum_tasks", "minimum_share"}),
     ):
         require(not set(section) - keys, "unknown project setting; check the configuration schema")
     repository = project.get("repository")
@@ -179,4 +184,4 @@ def load_project(path):
                    domains, names["worker_app"], names["gateway_app"], names["gateway_ledger"],
                    names["openai_secret"], names["environment"],
                    image, setup, live, maximum, **limits, gateway_concurrency=gateway_concurrency,
-                   **rates)
+                   **rates, failure_policy=FailurePolicy(**operations))

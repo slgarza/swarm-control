@@ -1,0 +1,110 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="color-scheme" content="dark">
+  <meta name="description" content="Local Swarm Control evidence, results and recovery dashboard.">
+  <title>Swarm Control · Local dashboard</title>
+  <link rel="stylesheet" href="/assets/styles.css">
+  <script src="/assets/app.js" defer></script>
+</head>
+<body>
+  <a class="skip-link" href="#main">Skip to content</a>
+  <aside class="sidebar" aria-label="Main navigation">
+    <a class="brand" href="#overview" aria-label="Swarm Control overview">
+      <span class="brand-mark" aria-hidden="true"><i></i><i></i><i></i><i></i></span>
+      <span>SWARM<span class="brand-light">CONTROL</span></span>
+    </a>
+    <div class="workspace-label">WORKSPACE</div>
+    <nav class="nav-list">
+      <a class="nav-item is-active" href="#overview"><span aria-hidden="true">◫</span> Overview <span class="nav-shortcut">01</span></a>
+      <a class="nav-item" href="#workers"><span aria-hidden="true">▦</span> Workers <span id="nav-worker-count" class="nav-count">—</span></a>
+      <a class="nav-item" href="#tasks"><span aria-hidden="true">☷</span> Tasks & PRs</a>
+      <a class="nav-item" href="#budget"><span aria-hidden="true">◈</span> Budget</a>
+      <a class="nav-item" href="#evidence"><span aria-hidden="true">↗</span> Evidence</a>
+    </nav>
+    <div class="sidebar-bottom">
+      <div class="local-badge"><span class="status-dot mint"></span> LOCAL · READ ONLY</div>
+      <p>Reviewed data.<br>Traceable outcomes.</p>
+      <span class="sidebar-version">SWARM CONTROL / LOCAL EVIDENCE</span>
+    </div>
+  </aside>
+
+  <div class="app-shell">
+    <header class="topbar">
+      <div class="breadcrumb"><span class="repo-icon" aria-hidden="true">⌘</span><span id="repo-name">Repository</span><span class="crumb-slash">/</span><span>Operations</span></div>
+      <div class="topbar-right"><span class="local-tag">LOCAL DASHBOARD</span><span id="connection-status" class="connection"><span class="status-dot amber"></span>Loading source</span></div>
+    </header>
+
+    <main id="main" tabindex="-1">
+      <section id="overview" class="overview section-anchor" aria-labelledby="page-title">
+        <div class="page-heading">
+          <div><div class="eyebrow"><span class="status-dot mint"></span> PILOT OBSERVABILITY</div><h1 id="page-title">The swarm, in view<span class="title-dot">.</span></h1><p class="page-description">From worker to merge. Evidence behind every result.</p></div>
+          <div class="heading-actions"><button id="refresh-button" class="button button-quiet" type="button"><span aria-hidden="true">↻</span> Refresh</button><button id="export-button" class="button button-primary" type="button" disabled><span aria-hidden="true">↓</span> Export JSON</button></div>
+        </div>
+        <section class="workspace-picker" aria-labelledby="workspace-title">
+          <div class="workspace-intro"><h2 id="workspace-title">Your workspace</h2><p>Choose a project, then a run to inspect its reviewed results. Only projects configured on this local server are listed.</p></div>
+          <div class="workspace-fields"><div><label for="project-select">PROJECT</label><select id="project-select" disabled><option>Loading projects…</option></select></div><div><label for="run-select">RUN</label><select id="run-select" disabled><option>Select a project first</option></select></div></div>
+          <p id="workspace-summary" class="subtle" aria-live="polite">Loading your configured workspace.</p>
+        </section>
+        <div id="workspace-empty" class="workspace-empty" role="status" hidden><h2 id="workspace-empty-title">No run evidence yet</h2><p id="workspace-empty-copy">Run agents through the controller, then load their reviewed evidence here. This viewer does not launch agents or change budgets.</p></div>
+        <div class="run-strip"><div><span class="run-label">RUN</span><span id="run-name" class="mono">Waiting for snapshot…</span></div><div class="run-strip-right"><span id="run-phase" class="pill neutral">No data</span><span id="snapshot-time" class="subtle">Source pending</span></div></div>
+        <div id="data-alert" class="data-alert" role="status" hidden></div>
+        <div data-run-content hidden class="metrics-grid" aria-label="Key metrics">
+          <article class="metric-card"><div class="metric-label">ORIGINAL WORKERS <span class="metric-symbol" aria-hidden="true">▦</span></div><div id="metric-workers" class="metric-value">—</div><div id="metric-workers-note" class="metric-note">Awaiting evidence</div></article>
+          <article class="metric-card"><div class="metric-label">ORIGINAL VALIDATED <span class="metric-symbol coral-text" aria-hidden="true">⊘</span></div><div id="metric-validated" class="metric-value">—</div><div id="metric-validated-note" class="metric-note">Original worker outcome</div></article>
+          <article class="metric-card metric-highlight"><div class="metric-label">PROVISIONAL RECOVERIES <span class="metric-symbol mint-text" aria-hidden="true">↗</span></div><div id="metric-recovered" class="metric-value mint-text">—</div><div id="metric-recovered-note" class="metric-note">Review, PR and CI tracked separately</div></article>
+          <article class="metric-card"><div class="metric-label">ACTIVE WORKERS <span class="metric-symbol" aria-hidden="true">◉</span></div><div id="metric-active" class="metric-value">—</div><div id="metric-active-note" class="metric-note">Infrastructure observation</div></article>
+        </div>
+        <div data-run-content hidden class="truth-note"><span aria-hidden="true">ⓘ</span><p id="truth-note">Original execution and recovery are separate. An active VM does not prove simultaneous useful work.</p></div>
+      </section>
+
+      <section data-run-content hidden id="workers" class="panel workers-panel section-anchor" aria-labelledby="workers-title">
+        <div class="panel-heading"><div><div class="eyebrow">ORIGINAL COHORT</div><h2 id="workers-title">A worker cohort. The complete picture.</h2></div><div class="panel-meta"><span class="legend-key"><i class="legend-swatch coral"></i> Original failed</span><span class="legend-key"><i class="legend-dot mint"></i> Provisional recovery</span></div></div>
+        <div id="worker-grid" class="worker-grid" aria-label="Original cohort tasks"></div>
+        <div class="panel-footer"><span id="worker-summary">No results loaded</span><span>Select a worker to inspect its evidence <span aria-hidden="true">↗</span></span></div>
+      </section>
+
+      <div data-run-content hidden class="analysis-grid">
+        <section class="panel progress-panel" aria-labelledby="progress-title">
+          <div class="panel-heading"><div><div class="eyebrow">ASSISTED RECOVERY</div><h2 id="progress-title">From patch to module</h2></div><span id="chart-total" class="pill mint-pill">— provisional</span></div>
+          <div class="chart-legend"><span class="legend-key"><i class="legend-dot mint"></i> Modules with verified PR and CI</span><span class="subtle">Quality window pending</span></div>
+          <div id="recovery-chart" class="recovery-chart" role="img" aria-label="Provisional module progress; no data yet"></div>
+          <div id="recovery-split" class="recovery-split"><span>No integration snapshot</span></div>
+        </section>
+        <section class="panel timeline-panel" aria-labelledby="timeline-title">
+          <div class="panel-heading"><div><div class="eyebrow">FULL DELIVERY CLOCK</div><h2 id="timeline-title">The run, step by step</h2></div><span class="panel-icon" aria-hidden="true">◷</span></div>
+          <ol id="timeline" class="timeline"></ol>
+          <div id="clock-note" class="clock-note">Includes cohort startup, review, repairs and CI from release.</div>
+        </section>
+      </div>
+
+      <section data-run-content hidden id="tasks" class="panel tasks-panel section-anchor" aria-labelledby="tasks-title">
+        <div class="panel-heading"><div><div class="eyebrow">PER-TASK EVIDENCE</div><h2 id="tasks-title">Code, review and outcome</h2></div><span id="table-count" class="subtle">— tasks</span></div>
+        <div class="table-toolbar"><div class="filter-group"><label class="sr-only" for="task-filter">Filter tasks</label><select id="task-filter"><option value="all">All tasks</option><option value="recovered">Provisional recoveries</option><option value="pending">Not qualified</option><option value="empty">Empty patch</option><option value="support">Supporting tasks</option></select></div><div class="search-box"><span aria-hidden="true">⌕</span><label class="sr-only" for="task-search">Search task or title</label><input id="task-search" type="search" placeholder="Search task, title or PR…" autocomplete="off"></div></div>
+        <div class="table-scroll"><table><thead><tr><th scope="col">Task</th><th scope="col">Original</th><th scope="col">Recovery</th><th scope="col">Pull request</th><th scope="col">CI</th><th scope="col"><span class="sr-only">Details</span></th></tr></thead><tbody id="task-rows"></tbody></table></div>
+        <div class="panel-footer"><span id="table-summary">Product and support are counted separately.</span><span>Candidates are not deliveries.</span></div>
+      </section>
+
+      <section data-run-content hidden id="budget" class="section-anchor" aria-labelledby="budget-title">
+        <div class="section-heading"><div><div class="eyebrow">ACCOUNTING IN CONTEXT</div><h2 id="budget-title">Reserved is not spent.</h2></div><span class="pill amber-pill">Billing unreconciled</span></div>
+        <div class="budget-grid">
+          <article class="panel budget-card"><div class="budget-icon mint-text" aria-hidden="true">◈</div><div class="metric-label">ADMISSION RESERVES · USD</div><div id="budget-reserved" class="budget-value">—</div><p id="budget-reserved-note">Retained limits for work admission. These are not invoices.</p><div class="budget-baseline"><span>Authorized budget</span><strong id="budget-authorized">—</strong></div><progress id="budget-fill" class="budget-track" max="100" value="0" aria-label="Share of admission budget reserved"></progress></article>
+          <article class="panel budget-card"><div class="budget-icon amber-text" aria-hidden="true">≋</div><div class="metric-label">GATEWAY EXPOSURE CEILING · USD</div><div id="budget-ceiling" class="budget-value">—</div><p id="budget-ceiling-note">Gateway accounting. This is not actual spend.</p><div class="budget-baseline"><span id="budget-ceiling-source">Source pending</span><span class="pill amber-pill">Estimate</span></div></article>
+          <article class="panel budget-card"><div class="budget-icon muted-text" aria-hidden="true">▤</div><div class="metric-label">ACTUAL ATTRIBUTABLE COST · USD</div><div id="budget-invoice" class="budget-value invoice-value">Unknown</div><p id="budget-invoice-note">Invoices, shared services, local review and CI await reconciliation.</p><div class="budget-baseline"><span>PRs / dollar</span><strong id="metric-per-dollar">—</strong></div></article>
+        </div>
+      </section>
+
+      <section data-run-content hidden id="evidence" class="panel evidence-panel section-anchor" aria-labelledby="evidence-title"><div><div class="eyebrow">OPEN TO REVIEW</div><h2 id="evidence-title">Evidence is part of the outcome.</h2><p>Sanitized sources and measurement limits, without private logs or credentials.</p></div><div id="evidence-links" class="evidence-links"></div></section>
+      <footer class="footer"><span><span class="status-dot mint"></span> Swarm Control <span class="footer-divider">/</span> Local evidence dashboard</span><div><span id="last-fetch">Not read yet</span><button id="autorefresh-button" type="button" class="auto-refresh" aria-pressed="true"><span class="status-dot mint"></span> Auto-refresh · 10 s</button></div></footer>
+    </main>
+  </div>
+
+  <dialog id="task-dialog" aria-labelledby="detail-title">
+    <div class="drawer-header"><div><div class="eyebrow">TASK EVIDENCE</div><h2 id="detail-title" tabindex="-1">Details</h2></div><button id="close-detail" class="icon-button" type="button" aria-label="Close details">×</button></div>
+    <div id="detail-content" class="drawer-content"></div>
+  </dialog>
+  <div id="screen-reader-status" class="sr-only" role="status" aria-live="polite"></div>
+</body>
+</html>

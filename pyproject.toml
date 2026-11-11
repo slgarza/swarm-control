@@ -18,5 +18,8 @@ swarm-control = "swarm_control.cli:main"
 [tool.setuptools.packages.find]
 include = ["swarm_control*"]
 
+[tool.setuptools.package-data]
+swarm_control = ["dashboard_static/*.html", "dashboard_static/*.js", "dashboard_static/*.css"]
+
 [tool.ruff]
 target-version = "py312"

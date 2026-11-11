@@ -1,0 +1,99 @@
+{
+  "schema_version": 1,
+  "kind": "Public English workspace screenshot gallery from actual configured data",
+  "status": "passed",
+  "started_at_utc": "2026-11-11T22:12:12.461Z",
+  "finished_at_utc": "2026-11-11T22:12:14.460Z",
+  "wall_seconds": 1.998163192,
+  "source_as_of": "2026-11-11T22:11:43.831143+00:00",
+  "original_workers": 100,
+  "original_validated": 0,
+  "provisional_product": 56,
+  "provisional_support": 2,
+  "delivery_t1": null,
+  "quality_acceptance": null,
+  "actual_billed_cost": null,
+  "images": [
+    {
+      "filename": "docs/images/dashboard-workspace-overview-2026-11-11.png",
+      "sha256": "ccf0b8e96987bc0984f6bda665c49b5162faf6e1089ac67df806722d6a690f19",
+      "bytes": 163414,
+      "width": 1600,
+      "height": 1220,
+      "caption": "Configured project and run selection; Afterimage historical observation, source 2026-11-11T22:11:43.831143+00:00. Original 100 need repair, zero validated; 56 product and two support recoveries remain provisional. T1 unknown."
+    },
+    {
+      "filename": "docs/images/dashboard-task-detail-2026-11-11.png",
+      "sha256": "e9e902f9a925092e74e251b20e1faa40dabf28f66457b84148a993870d2034df",
+      "bytes": 242850,
+      "width": 1600,
+      "height": 1220,
+      "caption": "B003 independent evidence and separate coordinator repair; original worker failure remains preserved. Historical source 2026-11-11T22:11:43.831143+00:00."
+    },
+    {
+      "filename": "docs/images/dashboard-budget-evidence-2026-11-11.png",
+      "sha256": "a7506df481deb186a0f1f2a60be130ee613f223493472c228b28a34aba054a3d",
+      "bytes": 139428,
+      "width": 1600,
+      "height": 1220,
+      "caption": "Retained admission reservations and conservative exposure ceilings are separate from unknown actual attributable invoices; historical source 2026-11-11T22:11:43.831143+00:00."
+    },
+    {
+      "filename": "docs/images/dashboard-workspace-mobile-2026-11-11.png",
+      "sha256": "9733406a45494440b2630c969036306b8ac917e73f09935a2c388e6297432d18",
+      "bytes": 54336,
+      "width": 390,
+      "height": 844,
+      "caption": "English local workspace selection at 390 pixels; actual historical Afterimage observation 2026-11-11T22:11:43.831143+00:00."
+    },
+    {
+      "filename": "docs/images/dashboard-workspace-empty-2026-11-11.png",
+      "sha256": "040ee41076c69e822b1a9d74a362a4603c7d3ac98d79f4cab4f58bca7d891289",
+      "bytes": 87744,
+      "width": 1600,
+      "height": 1220,
+      "caption": "The public swarm-control project has no run evidence in this explicitly configured catalog; no example metrics are fabricated."
+    }
+  ],
+  "tests": [
+    {
+      "test": "actual_incomplete_pilot_source",
+      "passed": true,
+      "observed_at_utc": "2026-11-11T22:12:13.305Z"
+    },
+    {
+      "test": "actual_reviewed_task_detail",
+      "passed": true,
+      "observed_at_utc": "2026-11-11T22:12:13.527Z"
+    },
+    {
+      "test": "public_empty_project_no_fabricated_data",
+      "passed": true,
+      "observed_at_utc": "2026-11-11T22:12:14.319Z"
+    },
+    {
+      "test": "empty_header_does_not_claim_snapshot_available",
+      "passed": true,
+      "observed_at_utc": "2026-11-11T22:12:14.456Z"
+    },
+    {
+      "test": "selected_project_labels_public_only",
+      "passed": true,
+      "observed_at_utc": "2026-11-11T22:12:14.460Z"
+    },
+    {
+      "test": "console_zero_errors",
+      "passed": true,
+      "observed_at_utc": "2026-11-11T22:12:14.460Z"
+    },
+    {
+      "test": "network_local_only",
+      "passed": true,
+      "observed_at_utc": "2026-11-11T22:12:14.460Z"
+    }
+  ],
+  "private_project_names_or_paths_published": false,
+  "worker_task_credit": 0,
+  "source_data_mutations": 0,
+  "paid_model_provider_calls": 0
+}

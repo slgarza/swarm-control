@@ -11,6 +11,8 @@ accounts or knowledge of the development conversation.
 | --- | --- | --- |
 | First-time user | [Quickstart: a local two-task example](QUICKSTART.md) | [Architecture](ARCHITECTURE.md) |
 | Operator preparing deployment | [Deployment preflight](DEPLOYMENT_PREFLIGHT.md) | [Project settings](PROJECTS.md), [spend reporting](BILLING.md), [operations](OPERATIONS.md) |
+| Operator viewing a run | [Local evidence dashboard](DASHBOARD.md) | [Spend reporting](BILLING.md), [evidence requirements](contest/EVIDENCE.md) |
+| Operator investigating failures | [Operational feedback](OPERATIONS_SAFETY.md) | [Operations](OPERATIONS.md), [troubleshooting](TROUBLESHOOTING.md) |
 | Operator launching real agents | [Two-agent walkthrough](TWO_AGENT_WALKTHROUGH.md) | [Deployment preflight](DEPLOYMENT_PREFLIGHT.md), [operations](OPERATIONS.md), [troubleshooting](TROUBLESHOOTING.md) |
 | Competition reviewer | [Presentation and current evidence](contest/PRESENTATION.md) | [Target assessment](contest/TARGET-ASSESSMENT.md), [benchmark protocol](contest/BENCHMARK.md), [evidence requirements](contest/EVIDENCE.md) |
 | Contributor | [Architecture](ARCHITECTURE.md) | [Repository contract](../AGENTS.md), [scaling roadmap](SCALING.md), [gateway policy](GATEWAY.md) |
@@ -23,15 +25,26 @@ and integrate reviewed changes through GitHub Actions. Defaults remain ten worke
 and disabled execution. Shared ownership is opt-in; clean three-way integration
 reruns combined checks, while actual conflicts require a separate repair attempt.
 The target is a public GitHub repository with prepared tasks and validation commands.
-Review and integration still require an operator; there is no automatic backlog
-generator or dashboard.
+Review and integration still require an operator. The local dashboard presents
+curated evidence and links, with explicit project and run selection; backlog
+generation is not automated. The [dashboard gallery](DASHBOARD.md#screenshots)
+contains actual English desktop, mobile, task, budget and empty-state captures.
 
 The original Afterimage pilot ran ten real workers and merged ten green PRs.
 One delivery needed a coordinator code repair. It did not run 100 agents, test
 shared-file conflict repair, or compare against the strongest AFK pipeline.
-The larger-cohort dispatcher, gateway backpressure and collision handling have
-offline coverage. Useful 100-agent operation and AFK efficiency remain unproven;
-a real run is a separate, budgeted operation.
+The November 11 hundred-worker pilot observed 100 distinct machines, but its
+original reports were all failures: zero validated deliveries. The screenshot
+gallery records 56 provisional product recoveries and two separate support
+recoveries after operator assistance. Final acceptance, attributable invoices
+and the AFK comparison remain unknown. Machine concurrency does not establish
+100 useful agents or an efficiency advantage.
+
+Persistent operational brakes now hold new admission after shared failures;
+already admitted workers drain normally. Merge actions have durable attempt
+reservations, and CI diagnosis and scaling advice are read-only. These controls
+have offline coverage and were added after that worker cohort; they receive no
+delivery credit in its benchmark and authorize no additional spending.
 
 Read-only `preflight` separates checked source preparation from local admission,
 current provider capacity and actual authorization. Its successful exit never
