@@ -151,5 +151,5 @@ runs; original unknown timings remain unknown. Raw timing logs remain private.
 
 See [the next-pilot protocol](NEXT_PILOT.md), [operational feedback](OPERATIONS_SAFETY.md)
 and [the dashboard gallery](DASHBOARD.md#screenshots).
-The [validation receipt](evidence/run-workspace-validation-2026-11-11.json)
+The [validation receipt](evidence/run-workspace-validation-v2-2026-11-11.json)
 records full offline checks, source hashes, measured durations and their limits.

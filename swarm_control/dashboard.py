@@ -452,9 +452,14 @@ def make_server(snapshot_path=None, host="127.0.0.1", port=0, *, catalog_path=No
                 "Content-Security-Policy",
                 "default-src 'none'; script-src 'self'; style-src 'self'; connect-src 'self'; img-src 'self' data:; font-src 'self'; base-uri 'none'; frame-ancestors 'none'; form-action 'none'",
             )
-            self.end_headers()
-            if self.command != "HEAD":
-                self.wfile.write(body)
+            try:
+                self.end_headers()
+                if self.command != "HEAD":
+                    self.wfile.write(body)
+            except (BrokenPipeError, ConnectionResetError):
+                # Switching repositories aborts superseded fetches. A closed
+                # browser connection must not trigger a second HTTP response.
+                self.close_connection = True
 
         def do_HEAD(self):
             self.do_GET()

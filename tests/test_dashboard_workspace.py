@@ -4,7 +4,7 @@ import http.client
 import json
 import threading
 from copy import deepcopy
-from unittest.mock import patch
+from unittest.mock import MagicMock, patch
 
 from swarm_control.dashboard import make_server
 from tests.test_dashboard import SnapshotFixture
@@ -135,3 +135,24 @@ class WorkspaceHTTPTests(SnapshotFixture):
     def test_catalog_is_reread_without_restart(self):
         self.workspace.catalog["projects"][0]["runs"].append({"id": "new", "label": "New draft", "status": "draft"})
         self.assertEqual(len(self.request("GET", "/api/runs?project=first")[1]["runs"]), 2)
+
+    def test_aborted_fetch_during_headers_does_not_attempt_another_response(self):
+        handler = object.__new__(self.server.RequestHandlerClass)
+        handler.command, handler.close_connection = "GET", False
+        handler.send_response, handler.send_header = MagicMock(), MagicMock()
+        handler.end_headers = MagicMock(side_effect=BrokenPipeError)
+        handler.wfile = MagicMock()
+        handler.respond(200, b'{"ok":true}')
+        self.assertTrue(handler.close_connection)
+        handler.send_response.assert_called_once_with(200)
+        handler.wfile.write.assert_not_called()
+
+    def test_reset_during_body_does_not_escape_the_request_handler(self):
+        handler = object.__new__(self.server.RequestHandlerClass)
+        handler.command, handler.close_connection = "GET", False
+        handler.send_response, handler.send_header, handler.end_headers = MagicMock(), MagicMock(), MagicMock()
+        handler.wfile = MagicMock()
+        handler.wfile.write.side_effect = ConnectionResetError
+        handler.respond(200, b'{"ok":true}')
+        self.assertTrue(handler.close_connection)
+        handler.send_response.assert_called_once_with(200)
