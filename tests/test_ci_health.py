@@ -27,7 +27,8 @@ class CIHealthTests(unittest.TestCase):
             self.sha, ["checks"],
             {"total_count": 1, "check_runs": [self.check]} if checks is None else checks,
             [self.run] if runs is None else runs,
-            observed_at=kwargs.pop("observed_at", self.now), **kwargs,
+            observed_at=kwargs.pop("observed_at", self.now),
+            fetched_at=kwargs.pop("fetched_at", self.now), **kwargs,
         )
 
     def assert_closed(self, result, state=None, action=None):
@@ -138,8 +139,31 @@ class CIHealthTests(unittest.TestCase):
     def test_stale_and_future_source_fail_closed(self):
         for seconds, state in ((-601, "stale_metadata"), (1, "future_metadata")):
             with self.subTest(seconds=seconds):
-                self.check["completed_at"] = (self.now + timedelta(seconds=seconds)).isoformat()
-                self.assert_closed(self.classify(), state)
+                fetched = self.now + timedelta(seconds=seconds)
+                self.assert_closed(self.classify(fetched_at=fetched), state)
+
+    def test_old_successful_events_freshly_observed_remain_green(self):
+        self.check["completed_at"] = (self.now - timedelta(days=7)).isoformat()
+        self.run["updated_at"] = self.check["completed_at"]
+        result = self.classify()
+        self.assertEqual(result["state"], "green")
+        self.assertEqual(result["fetched_at"], self.now.isoformat())
+
+    def test_missing_or_naive_fetch_time_is_not_fresh_evidence(self):
+        for fetched in (None, self.now.replace(tzinfo=None), "invalid"):
+            with self.subTest(fetched=fetched):
+                self.assert_closed(self.classify(fetched_at=fetched), "metadata_invalid")
+
+    def test_event_cannot_postdate_actual_fetch_even_before_evaluation(self):
+        self.assert_closed(self.classify(fetched_at=self.now - timedelta(seconds=1)),
+                           "future_metadata")
+
+    def test_long_running_workflow_freshly_observed_remains_pending(self):
+        self.check.update(status="in_progress", conclusion=None, completed_at=None,
+                          started_at=(self.now - timedelta(hours=2)).isoformat())
+        self.run.update(status="in_progress", conclusion=None,
+                        updated_at=(self.now - timedelta(hours=2)).isoformat())
+        self.assert_closed(self.classify(), "in_progress", "wait")
 
     def test_naive_or_missing_source_time_fails_closed(self):
         for value in (None, "2026-01-02T12:00:00"):

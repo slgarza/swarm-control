@@ -12,6 +12,7 @@ accounts or knowledge of the development conversation.
 | First-time user | [Quickstart: a local two-task example](QUICKSTART.md) | [Architecture](ARCHITECTURE.md) |
 | Operator preparing deployment | [Deployment preflight](DEPLOYMENT_PREFLIGHT.md) | [Project settings](PROJECTS.md), [spend reporting](BILLING.md), [operations](OPERATIONS.md) |
 | Operator viewing a run | [Local evidence dashboard](DASHBOARD.md) | [Spend reporting](BILLING.md), [evidence requirements](contest/EVIDENCE.md) |
+| Operator configuring runs | [Repositories and runs](RUNS.md) | [Next-pilot protocol](NEXT_PILOT.md), [deployment preflight](DEPLOYMENT_PREFLIGHT.md) |
 | Operator investigating failures | [Operational feedback](OPERATIONS_SAFETY.md) | [Operations](OPERATIONS.md), [troubleshooting](TROUBLESHOOTING.md) |
 | Operator launching real agents | [Two-agent walkthrough](TWO_AGENT_WALKTHROUGH.md) | [Deployment preflight](DEPLOYMENT_PREFLIGHT.md), [operations](OPERATIONS.md), [troubleshooting](TROUBLESHOOTING.md) |
 | Competition reviewer | [Presentation and current evidence](contest/PRESENTATION.md) | [Target assessment](contest/TARGET-ASSESSMENT.md), [benchmark protocol](contest/BENCHMARK.md), [evidence requirements](contest/EVIDENCE.md) |
@@ -26,8 +27,9 @@ and disabled execution. Shared ownership is opt-in; clean three-way integration
 reruns combined checks, while actual conflicts require a separate repair attempt.
 The target is a public GitHub repository with prepared tasks and validation commands.
 Review and integration still require an operator. The local dashboard presents
-curated evidence and links, with explicit project and run selection; backlog
-generation is not automated. The [dashboard gallery](DASHBOARD.md#screenshots)
+curated evidence and links, with explicit project and run selection. Workspace
+mode adds configurable concurrent agents, local drafts and sealed history;
+backlog generation is not automated. The [dashboard gallery](DASHBOARD.md#screenshots)
 contains actual English desktop, mobile, task, budget and empty-state captures.
 
 The original Afterimage pilot ran ten real workers and merged ten green PRs.

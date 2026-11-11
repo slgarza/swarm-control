@@ -15,8 +15,10 @@ from pathlib import Path
 from threading import Barrier
 from urllib.parse import urlparse
 
+from .context_packet import task_packet
 from .modal_worker import benchmark_bundle_summary, valid_path
 from .pilot_state import batch_summary, common_state, verify_github_tasks
+from .progress import WorkerProgress
 from .project import load_project
 
 ROOT = Path.cwd()
@@ -52,6 +54,7 @@ def now():
 def write_json(path, data):
     temporary = path.with_suffix(".tmp")
     temporary.write_text(json.dumps(data, indent=2) + "\n")
+    temporary.chmod(0o600)
     temporary.replace(path)
 
 
@@ -277,7 +280,7 @@ def record_task_result(ledger, batch, task, report=None):
         report = json.loads(path.read_text()) if path.exists() else {
             "task_id": task["id"], "status": "launch_failed", "finished_at": now(),
         }
-    if report["status"] in {"starting", "preparing", "ready", "working", "checking"}:
+    if report["status"] in {"starting", "preparing", "ready", "working", "checking", "recovering"}:
         report["status"] = "interrupted"
     write_json(path, report)
     ledger.finish(
@@ -293,8 +296,8 @@ def redact(text):
 
 def eligible_result(agent_exit, check_exit, changes):
     return (
-        agent_exit == 0
-        and check_exit == 0
+        type(agent_exit) is int and agent_exit == 0
+        and type(check_exit) is int and check_exit == 0
         and changes.get("patch_bytes", 0) > 0
         and changes.get("head_unchanged") is True
         and changes.get("ownership_violations") == []
@@ -302,18 +305,69 @@ def eligible_result(agent_exit, check_exit, changes):
     )
 
 
-def prompt_for(task):
+def prompt_for(task, *, context_mode="full", context_excerpts=(), timeout=None):
+    if context_mode not in {"full", "task"}:
+        raise ValueError("context mode must be full or task")
+    context = "Read the relevant architecture/product docs. You own ONE ticket.\n"
+    if context_mode == "task":
+        context = (
+            "Use the frozen task contract excerpts below for this ticket. "
+            "Required project instructions above still apply in full. "
+            "Consult their full source documents when a rule or dependency is unclear. "
+            "Do not reread unrelated product material without a task-specific need. "
+            "You own ONE ticket.\n"
+        )
+    closure = ""
+    if timeout is not None:
+        margin = max(10, min(120, timeout // 5))
+        closure = (
+            f"The coding limit is {timeout} seconds. Finish edits with about {margin} seconds "
+            "remaining for targeted checks and a concise handoff. This planning hint does "
+            "not extend the hard deadline. Preserve unfinished changes and report limitations.\n"
+        )
     return (
         ("Read " + ", ".join(PROJECT.instructions if PROJECT else ("README.md", "AGENTS.md")) + " before editing.\n")
-        +
-        "Read the relevant architecture/product docs. You own ONE ticket.\n"
+        + context + closure +
         "Implement the acceptance criteria and run relevant checks.\n"
         "Do not commit, push, open PRs, change branches, read credentials, or spawn other agents.\n"
         "Do not edit outside the listed ownership. If a dependency or specification is missing, "
         "report it rather than inventing requirements. Preserve original IP.\n"
         "Return a concise handoff: changes, validation, unresolved limitations.\n\n"
         + json.dumps(task, indent=2)
+        + ("\n\nFrozen contract excerpts:\n" + json.dumps(list(context_excerpts), indent=2)
+           if context_excerpts else "")
     )
+
+
+def build_context_packets(tasks, base_sha, context_mode="full", *, timeout=None):
+    result = {}
+    for task in tasks:
+        excerpts, metadata = task_packet(task, PROJECT, base_sha, context_mode)
+        prompt = prompt_for(task, context_mode=context_mode, context_excerpts=excerpts, timeout=timeout)
+        result[task["id"]] = {
+            "prompt": prompt,
+            "metadata": {**metadata, "prompt_sha256": hashlib.sha256(prompt.encode()).hexdigest(),
+                         "prompt_bytes": len(prompt.encode())},
+        }
+    return result
+
+
+def validated_run_id(value):
+    if value is None:
+        return None
+    if (not isinstance(value, str) or re.fullmatch(r"[A-Za-z0-9_-]{1,64}", value) is None
+            or re.match(r"(?:sk-|gh[pousr]_|github_pat_)", value, re.IGNORECASE)):
+        raise ValueError("run ID must be a bounded non-secret identity")
+    return value
+
+
+def bind_report_identity(report, task, run_id, base_sha):
+    """Bind all trusted dispatcher outcomes, including work never dispatched."""
+    for field, expected in (("task_id", task["id"]), ("run_id", run_id), ("base_sha", base_sha)):
+        if field in report and report[field] is not None and report[field] != expected:
+            raise ValueError("worker report identity differs from its admitted task")
+        report[field] = expected
+    return report
 
 
 def codex_command(model, gateway_url=None):
@@ -379,7 +433,7 @@ def controller_lock(state):
             fcntl.flock(handle, fcntl.LOCK_UN)
 
 
-def consume(process, directory, name):
+def consume(process, directory, name, *, progress=None):
     """Drain both streams to avoid pipe stalls. Persist events without printing agent text."""
 
     def drain(stream, path):
@@ -392,6 +446,8 @@ def consume(process, directory, name):
                         event = json.loads(sanitized)
                         if isinstance(event, dict):
                             event["swarm_received_at"] = now()
+                            if progress is not None:
+                                progress.event(event, event["swarm_received_at"])
                             sanitized = json.dumps(event) + "\n"
                     except json.JSONDecodeError:
                         pass
@@ -422,11 +478,19 @@ def execute_task(task, args, base_sha, batch, image, app, secret, barrier=None):
     import modal
 
     started = time.monotonic()
+    run_id = validated_run_id(getattr(args, "run_id", None))
+    context_mode = getattr(args, "context_mode", "full")
+    packet = getattr(args, "context_packets", {}).get(task["id"])
+    if packet is None:
+        packet = build_context_packets([task], base_sha, context_mode, timeout=args.timeout)[task["id"]]
     directory = batch / task["id"]
     directory.mkdir()
     manifest = {
         "repository": REPOSITORY,
         "base_sha": base_sha,
+        "run_id": run_id,
+        "context_mode": context_mode,
+        "context_packet": packet["metadata"],
         "task": task,
         "branch": f"swarm/{task['id'].lower()}-{batch.name[-12:]}",
         "allow_overlap": bool(getattr(args, "allow_overlap", False)),
@@ -437,6 +501,8 @@ def execute_task(task, args, base_sha, batch, image, app, secret, barrier=None):
     }
     report = {
         "task_id": task["id"],
+        "run_id": run_id,
+        "context_mode": context_mode,
         "base_sha": base_sha,
         "branch": manifest["branch"],
         "model": args.model if args.command == "run" else None,
@@ -451,9 +517,31 @@ def execute_task(task, args, base_sha, batch, image, app, secret, barrier=None):
     }
     write_json(directory / "manifest.json", manifest)
     write_json(directory / "report.json", report)
+
+    def checkpoint_progress(value):
+        report["progress"] = value
+        saved = dict(report)
+        if saved["status"] in {"validated", "smoke_passed"} and not saved.get("finished_at"):
+            saved["status"] = "recovering"
+        write_json(directory / "report.json", saved)
+
+    progress = WorkerProgress(checkpoint_progress, utc_now=now, monotonic=time.monotonic)
+
+    def measured(phase, operation, *arguments, **keywords):
+        with progress.phase(phase):
+            return operation(*arguments, **keywords)
+
+    def helper_step(action, phase, timeout):
+        with progress.phase(phase) as measurement:
+            process = sandbox.exec("python3", "/opt/swarm/modal_worker.py", action,
+                                   "/tmp/task.json", timeout=timeout)
+            code = consume(process, directory, action)
+            measurement["process_exit"] = code if type(code) is int else None
+            return code
+
     sandbox = None
     try:
-        sandbox = modal.Sandbox.create(
+        sandbox = measured("provision", modal.Sandbox.create,
             app=app,
             image=image,
             timeout=args.timeout + 900,
@@ -473,29 +561,29 @@ def execute_task(task, args, base_sha, batch, image, app, secret, barrier=None):
         report.update(sandbox_id=sandbox.object_id, status="preparing")
         write_json(directory / "report.json", report)
         sandbox.filesystem.write_text(json.dumps(manifest), "/tmp/task.json")
-        helper = ["python3", "/opt/swarm/modal_worker.py"]
-        process = sandbox.exec(*helper, "prepare", "/tmp/task.json", timeout=240)
-        if consume(process, directory, "prepare") != 0:
+        if helper_step("prepare", "prepare", 240) != 0:
             raise RuntimeError("repository setup failed; see install/prepare logs")
         if args.command == "run":
             if barrier is not None:
                 report.update(status="ready", ready_at=now())
                 write_json(directory / "report.json", report)
-                barrier.wait(timeout=300)
+                measured("barrier", barrier.wait, timeout=300)
             report.update(status="working", agent_started_at=now())
             write_json(directory / "report.json", report)
-            process = sandbox.exec(
-                *codex_command(args.model, args.gateway_url),
-                secrets=[secret],
-                timeout=args.timeout,
-            )
-            process.stdin.write(prompt_for(task) + "\n")
-            process.stdin.write_eof()
-            process.stdin.drain()
-            report["agent_exit"] = consume(process, directory, "agent")
+            with progress.phase("agent") as measurement:
+                process = sandbox.exec(
+                    *codex_command(args.model, args.gateway_url),
+                    secrets=[secret],
+                    timeout=args.timeout,
+                )
+                process.stdin.write(packet["prompt"] + "\n")
+                process.stdin.write_eof()
+                process.stdin.drain()
+                report["agent_exit"] = consume(process, directory, "agent", progress=progress)
+                measurement["process_exit"] = report["agent_exit"] if type(report["agent_exit"]) is int else None
+                progress.agent_exit(report["agent_exit"])
             report["agent_finished_at"] = now()
-        process = sandbox.exec(*helper, "collect", "/tmp/task.json", timeout=30)
-        if consume(process, directory, "collect") != 0:
+        if helper_step("collect", "collect", 30) != 0:
             raise RuntimeError("could not capture changes")
         changes = json.loads(sandbox.filesystem.read_text("/artifacts/changes.json"))
         report["changes"] = changes
@@ -508,11 +596,12 @@ def execute_task(task, args, base_sha, batch, image, app, secret, barrier=None):
             or not changes["head_unchanged"]
         ):
             report["status"] = "rejected"
+        elif args.command == "run" and changes.get("patch_bytes") == 0:
+            report.update(status="needs_repair", validation_skipped="empty_patch")
         else:
             report["status"] = "checking"
             write_json(directory / "report.json", report)
-            process = sandbox.exec(*helper, "check", "/tmp/task.json", timeout=240)
-            report["check_exit"] = consume(process, directory, "check")
+            report["check_exit"] = helper_step("check", "check", 240)
             if args.command == "smoke":
                 report["status"] = (
                     "smoke_passed" if report["check_exit"] == 0 else "failed"
@@ -536,42 +625,43 @@ def execute_task(task, args, base_sha, batch, image, app, secret, barrier=None):
             # Also recover partially completed work after errors/timeouts, before termination.
             recovery_errors = []
             try:
-                process = sandbox.exec(
-                    "python3",
-                    "/opt/swarm/modal_worker.py",
-                    "collect",
-                    "/tmp/task.json",
-                    timeout=30,
-                )
-                if consume(process, directory, "recovery") != 0:
+                with progress.phase("recover") as measurement:
+                    process = sandbox.exec(
+                        "python3", "/opt/swarm/modal_worker.py", "collect",
+                        "/tmp/task.json", timeout=30,
+                    )
+                    recovery_exit = consume(process, directory, "recovery")
+                    measurement["process_exit"] = recovery_exit if type(recovery_exit) is int else None
+                if recovery_exit != 0:
                     recovery_errors.append("collection_failed")
             except Exception as error:  # noqa: BLE001 - best-effort recovery before termination
                 recovery_errors.append(type(error).__name__)
-            for name in ARTIFACTS:
-                try:
-                    content = sandbox.filesystem.read_bytes(f"/artifacts/{name}")
-                    sanitized = redact(content.decode("utf-8", errors="replace"))
-                    (directory / name).write_text(sanitized)
-                    if name == "changes.patch" and sanitized.encode() != content:
-                        report["status"] = "rejected"
-                        report["patch_redacted"] = True
-                    if name == "benchmarks.json":
-                        report["benchmark_receipts"] = {
-                            **benchmark_bundle_summary(json.loads(sanitized)),
-                            "bundle_sha256": hashlib.sha256(sanitized.encode()).hexdigest(),
-                        }
-                        if "changes" in report:
-                            report["changes"]["benchmark_receipts"] = {
-                                key: value for key, value in report["benchmark_receipts"].items()
-                                if key != "bundle_sha256"
+            with progress.phase("artifacts"):
+                for name in ARTIFACTS:
+                    try:
+                        content = sandbox.filesystem.read_bytes(f"/artifacts/{name}")
+                        sanitized = redact(content.decode("utf-8", errors="replace"))
+                        (directory / name).write_text(sanitized)
+                        if name == "changes.patch" and sanitized.encode() != content:
+                            report["status"] = "rejected"
+                            report["patch_redacted"] = True
+                        if name == "benchmarks.json":
+                            report["benchmark_receipts"] = {
+                                **benchmark_bundle_summary(json.loads(sanitized)),
+                                "bundle_sha256": hashlib.sha256(sanitized.encode()).hexdigest(),
                             }
-                except (
-                    FileNotFoundError,
-                    modal.exception.SandboxFilesystemNotFoundError,
-                ):
-                    continue
-                except Exception as error:  # noqa: BLE001 - record provider retrieval failures
-                    recovery_errors.append(f"{name}: {type(error).__name__}")
+                            if "changes" in report:
+                                report["changes"]["benchmark_receipts"] = {
+                                    key: value for key, value in report["benchmark_receipts"].items()
+                                    if key != "bundle_sha256"
+                                }
+                    except (
+                        FileNotFoundError,
+                        modal.exception.SandboxFilesystemNotFoundError,
+                    ):
+                        continue
+                    except Exception as error:  # noqa: BLE001 - record provider retrieval failures
+                        recovery_errors.append(f"{name}: {type(error).__name__}")
             patch = directory / "changes.patch"
             if patch.exists():
                 report["patch_sha256"] = hashlib.sha256(patch.read_bytes()).hexdigest()
@@ -599,14 +689,19 @@ def execute_task(task, args, base_sha, batch, image, app, secret, barrier=None):
             if recovery_errors and report["status"] in {"validated", "smoke_passed"}:
                 report["status"] = "needs_recovery"
             try:
-                sandbox.terminate()
+                measured("terminate", sandbox.terminate)
                 report["sandbox_terminated"] = True
             except Exception as error:  # noqa: BLE001 - preserve evidence of failed cleanup
                 report["sandbox_terminated"] = False
                 report["termination_error"] = type(error).__name__
         report.update(
-            finished_at=now(), wall_seconds=round(time.monotonic() - started, 3)
+            finished_at=now(), wall_seconds=round(time.monotonic() - started, 3),
+            progress=progress.snapshot(),
         )
+        if report["progress"]["checkpoint_failures"]:
+            report.setdefault("recovery_errors", []).append("progress_checkpoint_failed")
+            if report["status"] in {"validated", "smoke_passed"}:
+                report["status"] = "needs_recovery"
         usage = []
         events = directory / "agent.jsonl"
         if events.exists():
@@ -637,7 +732,10 @@ def main():
     parser.add_argument("command", choices=["plan", "smoke", "run"])
     parser.add_argument("tasks", nargs="+")
     parser.add_argument("--project", type=Path, required=True)
-    parser.add_argument("--workers", type=int, default=1)
+    parser.add_argument("--workers", "--agents", dest="workers", type=int, default=1)
+    parser.add_argument("--run-id", help="optional local workspace run identity; not an authorization")
+    parser.add_argument("--context-mode", choices=("full", "task"), default="full",
+                        help="task mode uses explicit frozen context_files contract excerpts; global rules remain required")
     parser.add_argument(
         "--timeout", type=int, default=300, help="agent time limit in seconds, 30–1800; default 300"
     )
@@ -665,6 +763,7 @@ def main():
         help="explicitly retry a reviewed failed attempt",
     )
     args = parser.parse_args()
+    args.run_id = validated_run_id(args.run_id)
     project = load_project(args.project)
     configure(project)
     args.environment = args.environment or project.environment
@@ -714,9 +813,13 @@ def main():
     base_sha = subprocess.check_output(
         ["git", "rev-parse", "--verify", f"{args.base}^{{commit}}"], cwd=ROOT, text=True
     ).strip()
+    args.context_packets = build_context_packets(tasks, base_sha, args.context_mode, timeout=args.timeout)
     plan = {
         "repository": project.repository,
         "base_sha": base_sha,
+        "run_id": args.run_id,
+        "context_mode": args.context_mode,
+        "context_packets": {task_id: packet["metadata"] for task_id, packet in args.context_packets.items()},
         "tasks": [task["id"] for task in tasks],
         "task_states": {task["id"]: task.get("status", "ready") for task in tasks},
         "live_execution_enabled": project.live_enabled,
@@ -847,6 +950,7 @@ def main():
                     raise
 
             def checkpoint(task, report):
+                bind_report_identity(report, task, args.run_id, base_sha)
                 if args.command == "run":
                     record_task_result(ledger, batch, task, report)
                     recorded.add(task["id"])

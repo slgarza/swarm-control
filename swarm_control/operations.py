@@ -171,7 +171,7 @@ class OperationsJournal:
 
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("command", choices=["status", "clear-hold", "inspect-ci", "advise-scale"])
+    parser.add_argument("command", choices=["status", "clear-hold", "inspect-ci", "advise-scale", "queue-plan"])
     parser.add_argument("input", nargs="?", type=Path)
     parser.add_argument("--project", type=Path, required=True)
     parser.add_argument("--reason")
@@ -195,7 +195,10 @@ def main():
         source = json.loads(raw)
         if not isinstance(source, dict):
             raise ValueError("observation must be an object")
-        if args.command == "advise-scale":
+        if args.command == "queue-plan":
+            from .integration_queue import plan_queue
+            result = plan_queue(source)
+        elif args.command == "advise-scale":
             result = scaling_advice(source, maximum_workers=project.max_live_agents)
         else:
             from .ci_health import classify_ci
@@ -203,7 +206,8 @@ def main():
                 raise ValueError("CI observation belongs to another repository")
             result = classify_ci(source.get("head_sha"), project.required_checks,
                                  source.get("check_payload"), source.get("workflow_runs"),
-                                 observed_at=datetime.now(UTC))
+                                 observed_at=datetime.now(UTC),
+                                 fetched_at=source.get("fetched_at_utc"))
             result["authorizes_spend"] = False
         result["remote_actions_performed"] = 0
     print(json.dumps(result, indent=2, allow_nan=False))

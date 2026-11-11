@@ -60,6 +60,11 @@ This command reads local metadata only. The input identifies `repository`,
 `workflow_runs`, optionally including complete job inventories. Source timestamps
 must be aware and valid; incomplete, duplicate, mismatched, stale or future
 metadata is not accepted as green. No source object or raw log is printed.
+The input must include `fetched_at_utc`, binding when its API metadata was read.
+This is separate from each event's creation/update/completion time: an older
+green check freshly observed on the same exact head is not stale merely because
+the check completed earlier. Missing, future or stale fetch observations remain
+unverified. The local classifier does not authenticate a claimed fetch timestamp.
 
 | Observation | Recommendation |
 | --- | --- |
@@ -100,6 +105,15 @@ data holds growth. A healthy, comparable window can advise at most one additiona
 worker within the configured capacity. A VM/heartbeat count does not establish
 useful concurrent work. Advice never changes fleet size, allowances or provider
 resources, and is not an AFK efficiency result.
+
+## Integration scheduling
+
+`swarm-control ops queue-plan queue.json --project /path/to/target/swarm.toml`
+plans independent preparation lanes while other items wait for CI. It holds
+unqualified dependencies and overlapping in-flight ownership, and recommends
+quarantine after an explicitly observed wait limit. It does not rerun workflows,
+repair code or mutate GitHub. Every changed base still needs validation before
+integration. See [the next-pilot protocol](NEXT_PILOT.md) for the input schema.
 
 ## Offline verification
 

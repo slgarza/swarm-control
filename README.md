@@ -6,14 +6,16 @@ enforces budgets and ownership, and integrates reviewed changes through passing
 GitHub Actions. OpenAI supplies the model; Modal supplies temporary machines.
 The coordinator currently runs on one host.
 
-The local dashboard supports project and run selection from an explicit local
-catalog. Operational feedback adds persistent failure brakes, CI classification
-and restart-safe merge-action receipts. See [operations safety](docs/OPERATIONS_SAFETY.md)
-and the [dashboard guide and screenshots](docs/DASHBOARD.md).
+The local dashboard supports repository selection, configurable parallel agents,
+saved run drafts and past evidence. Open it with `swarm-control dashboard --workspace`.
+The GUI prepares local runs; explicit CLI execution uses the ordinary budget and
+source gates. Start with [repositories and runs](docs/RUNS.md), then the
+[next-pilot protocol](docs/NEXT_PILOT.md) and [dashboard guide](docs/DASHBOARD.md).
 
-![Project and run selection in the English dashboard](docs/images/dashboard-workspace-overview-2026-11-11.png)
+![Repository selection and recorded run history](docs/images/dashboard-run-history-2026-11-11.png)
 
-Historical capture on November 11, 2026, at 16:11 Mexico City time (22:11 UTC):
+Workspace captured on November 11, 2026, at 17:24 Mexico City time (23:24 UTC),
+showing sealed historical evidence from 16:23 Mexico City time (22:23 UTC):
 100 original failed workers, 56 provisional product recoveries and two separate
 support recoveries. Final quality, billed cost and AFK comparison remain unknown.
 
@@ -43,6 +45,8 @@ unknowns. The loopback viewer makes no provider calls or execution/accounting wr
 | [Two-agent walkthrough](docs/TWO_AGENT_WALKTHROUGH.md) | Own-account setup, real issues, budget, execution, review, PRs, merge and cleanup |
 | [Project reference](docs/PROJECTS.md) | Every configuration field and the task format |
 | [Operations](docs/OPERATIONS.md) | Commands, side effects, flags and integration gates |
+| [Repositories and runs](docs/RUNS.md) | Register targets, choose concurrent agents, save drafts, inspect history and explicitly launch through the CLI |
+| [Next pilot](docs/NEXT_PILOT.md) | Small completion experiment, scoped context, CI scheduling and matched AFK gates |
 | [Operational feedback](docs/OPERATIONS_SAFETY.md) | Failure brakes, durable action reservations, CI diagnosis and conservative scaling advice |
 | [Deployment preflight](docs/DEPLOYMENT_PREFLIGHT.md) | Read-only source, ledger, GitHub and resource checks before a separately authorized deployment |
 | [Spend reporting](docs/BILLING.md) | Provider cost evidence, source freshness and local reservations without invented account balances |
@@ -101,8 +105,8 @@ false and budget/provider/authorization blockers remain explicit. See the
 
 Connect another repository using [project configuration](docs/PROJECTS.md).
 Read [operations](docs/OPERATIONS.md) before any paid run. Semantic review remains
-explicit. The local dashboard views an explicitly selected curated snapshot;
-backlog generation and execution controls still require the controller workflow.
+explicit. The local dashboard can prepare run drafts and inspect historical
+evidence; backlog generation and live execution still use the controller workflow.
 
 ## Capacity and remaining proof
 

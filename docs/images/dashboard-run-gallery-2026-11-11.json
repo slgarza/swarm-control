@@ -1,0 +1,253 @@
+{
+  "schema_version": 1,
+  "kind": "Actual local repository selection, run planning and history screenshot gallery",
+  "status": "passed",
+  "interface_language": "English",
+  "started_at_utc": "2026-11-11T23:24:34.233Z",
+  "ended_at_utc": "2026-11-11T23:24:37.040Z",
+  "wall_seconds": 2.807517869,
+  "browser_checks_passed": 30,
+  "tests": [
+    {
+      "name": "actual_historical_pilot_counts_unchanged",
+      "passed": true,
+      "at_utc": "2026-11-11T23:24:35.158Z"
+    },
+    {
+      "name": "actual_product_support_split_unchanged",
+      "passed": true,
+      "at_utc": "2026-11-11T23:24:35.161Z"
+    },
+    {
+      "name": "closed_window_retains_unknown_T1",
+      "passed": true,
+      "at_utc": "2026-11-11T23:24:35.163Z"
+    },
+    {
+      "name": "historic_repository_has_configured_100_cap",
+      "passed": true,
+      "at_utc": "2026-11-11T23:24:35.165Z"
+    },
+    {
+      "name": "repo_switch_clears_all_original_metrics",
+      "passed": true,
+      "at_utc": "2026-11-11T23:24:35.488Z"
+    },
+    {
+      "name": "actual_local_demo_tasks_and_no_default_selection",
+      "passed": true,
+      "at_utc": "2026-11-11T23:24:35.490Z"
+    },
+    {
+      "name": "repository_policy_disables_larger_agent_presets",
+      "passed": true,
+      "at_utc": "2026-11-11T23:24:35.492Z"
+    },
+    {
+      "name": "cannot_request_more_agents_than_tasks",
+      "passed": true,
+      "at_utc": "2026-11-11T23:24:35.503Z"
+    },
+    {
+      "name": "cannot_exceed_project_agent_cap",
+      "passed": true,
+      "at_utc": "2026-11-11T23:24:35.510Z"
+    },
+    {
+      "name": "fractional_cent_model_reservation_rejected",
+      "passed": true,
+      "at_utc": "2026-11-11T23:24:35.519Z"
+    },
+    {
+      "name": "out_of_range_coding_limit_rejected",
+      "passed": true,
+      "at_utc": "2026-11-11T23:24:35.525Z"
+    },
+    {
+      "name": "missing_task_packets_fail_closed_in_UI",
+      "passed": true,
+      "at_utc": "2026-11-11T23:24:35.528Z"
+    },
+    {
+      "name": "two_tasks_can_queue_behind_one_agent",
+      "passed": true,
+      "at_utc": "2026-11-11T23:24:35.536Z"
+    },
+    {
+      "name": "actual_plan_keeps_launch_and_cost_unknowns_explicit",
+      "passed": true,
+      "at_utc": "2026-11-11T23:24:35.771Z"
+    },
+    {
+      "name": "editing_invalidates_previous_plan",
+      "passed": true,
+      "at_utc": "2026-11-11T23:24:35.779Z"
+    },
+    {
+      "name": "actual_mobile_390_fits_and_tap_targets",
+      "passed": true,
+      "at_utc": "2026-11-11T23:24:36.119Z"
+    },
+    {
+      "name": "actual_mobile_320_fits_and_tap_targets",
+      "passed": true,
+      "at_utc": "2026-11-11T23:24:36.223Z"
+    },
+    {
+      "name": "actual_saved_draft_not_execution_or_deliveries",
+      "passed": true,
+      "at_utc": "2026-11-11T23:24:36.402Z"
+    },
+    {
+      "name": "draft_record_does_not_fabricate_start_or_finish",
+      "passed": true,
+      "at_utc": "2026-11-11T23:24:36.405Z"
+    },
+    {
+      "name": "previously_saved_history_retained_without_new_drafts",
+      "passed": true,
+      "at_utc": "2026-11-11T23:24:36.407Z"
+    },
+    {
+      "name": "copyable_command_is_inspection_not_execute",
+      "passed": true,
+      "at_utc": "2026-11-11T23:24:36.409Z"
+    },
+    {
+      "name": "explicit_execute_requirement_is_visible",
+      "passed": true,
+      "at_utc": "2026-11-11T23:24:36.411Z"
+    },
+    {
+      "name": "actual_saved_draft_bookmark_reload_preserved",
+      "passed": true,
+      "at_utc": "2026-11-11T23:24:36.680Z"
+    },
+    {
+      "name": "history_refresh_preserves_selected_run",
+      "passed": true,
+      "at_utc": "2026-11-11T23:24:36.740Z"
+    },
+    {
+      "name": "return_to_historical_evidence_restores_real_counts",
+      "passed": true,
+      "at_utc": "2026-11-11T23:24:36.815Z"
+    },
+    {
+      "name": "rapid_repo_switches_cannot_restore_foreign_evidence_or_form",
+      "passed": true,
+      "at_utc": "2026-11-11T23:24:37.039Z"
+    },
+    {
+      "name": "all_page_requests_stay_local",
+      "passed": true,
+      "at_utc": "2026-11-11T23:24:37.039Z"
+    },
+    {
+      "name": "only_local_planning_mutations_requested",
+      "passed": true,
+      "at_utc": "2026-11-11T23:24:37.040Z"
+    },
+    {
+      "name": "browser_console_zero_errors",
+      "passed": true,
+      "at_utc": "2026-11-11T23:24:37.040Z"
+    },
+    {
+      "name": "static_source_unchanged",
+      "passed": true,
+      "at_utc": "2026-11-11T23:24:37.040Z"
+    }
+  ],
+  "console_errors": 0,
+  "page_network_requests_local_only": true,
+  "static_source_sha256": {
+    "index.html": "40e50e454656b04d6be8ac31cb77f47186ba4e48501c791144b813846ffc9e6b",
+    "app.js": "da4a8a9bc54a5c9e294c41683591045aeb48fd9639fb3eb6c67bb7c67fb1bae0",
+    "styles.css": "802cf0fc3b908abd88de7038cfd5ebe8d307d2dc51556273d2bb564e8129ad5a"
+  },
+  "static_source_unchanged_during_checks": true,
+  "historical_source_as_of_utc": "2026-11-11T22:23:30.083699+00:00",
+  "historical_pilot": {
+    "original_failed": 100,
+    "original_validated": 0,
+    "provisional_product": 56,
+    "provisional_support": 2,
+    "T1": null
+  },
+  "local_demo_is_offline_example": true,
+  "local_demo_remote_repository_verified": false,
+  "local_draft_records_created_during_earlier_workflow_checks": 3,
+  "final_verification_created_new_drafts": 0,
+  "paid_worker_runs_started": 0,
+  "source_or_budget_mutations": 0,
+  "worker_or_pilot_product_credit": 0,
+  "private_paths_credentials_or_raw_requests_published": false,
+  "images": [
+    {
+      "filename": "docs/images/dashboard-run-history-2026-11-11.png",
+      "width": 1600,
+      "height": 1220,
+      "bytes": 158311,
+      "sha256": "6211a6cd38ef7a5128b72f3bc38633091990b26e99b2a3297018452522b06064",
+      "captured_file_written_at_utc": "2026-11-11T23:24:35.339617+00:00",
+      "timestamp_source": "local file mtime after browser CDP capture completed",
+      "caption": "Actual historical Afterimage observation selected from the workspace: 100 original failures, zero validated originals, 56 provisional product recoveries and two support recoveries. T1 and actual billing remain unknown."
+    },
+    {
+      "filename": "docs/images/dashboard-run-planner-2026-11-11.png",
+      "width": 1600,
+      "height": 1220,
+      "bytes": 136711,
+      "sha256": "b4d948ac4cc507afad209cdb06c505de36662129349046c275a745e621a7a296",
+      "captured_file_written_at_utc": "2026-11-11T23:24:36.047625+00:00",
+      "timestamp_source": "local file mtime after browser CDP capture completed",
+      "caption": "Actual local offline example: two selected tasks, two concurrent agents, a checked plan and seven remaining launch requirements. No agents have been deployed; the displayed infrastructure amount is an admission reserve, not an invoice."
+    },
+    {
+      "filename": "docs/images/dashboard-run-saved-2026-11-11.png",
+      "width": 1600,
+      "height": 1220,
+      "bytes": 133228,
+      "sha256": "a17bad368793c847f5e7d5b09bfe6b80c66877595d71df46faded3cbb4b4292e",
+      "captured_file_written_at_utc": "2026-11-11T23:24:36.566631+00:00",
+      "timestamp_source": "local file mtime after browser CDP capture completed",
+      "caption": "Actual saved two-agent synchronized draft and history containing a separate one-agent queued draft. The CLI command inspects the launch; execution requires an explicit --execute option and all existing gates. No worker start or completion is fabricated."
+    },
+    {
+      "filename": "docs/images/dashboard-run-mobile390-2026-11-11.png",
+      "width": 390,
+      "height": 844,
+      "bytes": 55397,
+      "sha256": "075329bad8cbc776b4c53bb4eb20f7fe907874988c83cbc8bfce421f9324c0d4",
+      "captured_file_written_at_utc": "2026-11-11T23:24:36.204627+00:00",
+      "timestamp_source": "local file mtime after browser CDP capture completed",
+      "caption": "Actual local draft preparation at 390 pixels, with repository-limited agent presets and explicit task selection. No paid worker run."
+    },
+    {
+      "filename": "docs/images/dashboard-run-mobile320-2026-11-11.png",
+      "width": 320,
+      "height": 844,
+      "bytes": 50351,
+      "sha256": "502df88a718061a07eca0a4cefb2505f5107060b017bf497f37b99982f09f701",
+      "captured_file_written_at_utc": "2026-11-11T23:24:36.300628+00:00",
+      "timestamp_source": "local file mtime after browser CDP capture completed",
+      "caption": "Actual local draft preparation at 320 pixels, with no horizontal overflow and touch controls at least 44 pixels high. No paid worker run."
+    }
+  ],
+  "known_failed_or_superseded_qa_attempts": [
+    "An initial synthetic browser harness did not wait for a new document after reload; navigation synchronization was corrected.",
+    "A synthetic fixture retained a duplicate fixed draft ID across reruns; catalog validation correctly rejected it, and later fixture runs reset their private state.",
+    "Mobile review found history-table screen-reader text overflowing the viewport and a new-run target below44pixels; the actual frontend was corrected and final390/320checks passed.",
+    "The first actual browser script had a selector quoting syntax error before page work; the script was corrected and syntax-checked.",
+    "A saved-draft assertion matched an older visible draft while the new save was still loading; later checks wait for the exact new run identity.",
+    "An otherwise passing actual workflow captured two installed-browser-extension script requests. A clean isolated browser with extensions disabled passed all30 final checks with only local page requests.",
+    "An owned-browser cleanup guard rejected Chrome process-title formatting; executable and exact private profile checks were used before restarting only the task-owned browser processes."
+  ],
+  "limitations": [
+    "Draft creation and browser verification do not establish a paid run, useful agent concurrency, merged delivery, accepted quality or an AFK advantage.",
+    "Historical screenshot data describe their original capture time rather than current provider activity.",
+    "The screenshot timestamps are local file-write observations following browser capture, not provider execution timestamps.",
+    "Earlier syntax-error console output is retained in the tool transcript; it has no separate original private raw-output file."
+  ]
+}

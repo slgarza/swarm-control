@@ -1,9 +1,9 @@
-/* Local, read-only evidence dashboard. All displayed run data comes from the API. */
+/* Local workspace and evidence dashboard. Draft preparation never launches agents. */
 'use strict';
 
 (() => {
   const byId = (id) => document.getElementById(id);
-  const state = {snapshot: null, autoRefresh: true, fetching: false, selected: null, fetchFailed: false, catalog: null, catalogLoading: false, projectId: null, runId: null, requestVersion: 0, controller: null};
+  const state = {snapshot: null, autoRefresh: true, fetching: false, selected: null, fetchFailed: false, catalog: null, catalogLoading: false, projectId: null, runId: null, requestVersion: 0, controller: null, workspace: false, context: null, contextVersion: 0, contextController: null, csrf: null, selectedTasks: new Set(), preview: null, previewFingerprint: null, planning: false, planVersion: 0};
   const countFormat = new Intl.NumberFormat("en-US");
   const moneyFormat = new Intl.NumberFormat("en-US", {style: 'currency', currency: 'USD', maximumFractionDigits: 2});
   const dateFormat = new Intl.DateTimeFormat("en-US", {dateStyle: 'medium', timeStyle: 'medium', timeZone: 'UTC'});
@@ -34,6 +34,7 @@
   const recoveredLabel = (task) => task.provisional ? (repaired(task) ? "Coordinator repair" : "Unchanged recovery") : task.empty_patch ? "Empty patch" : "Not qualified";
   const originalType = (task) => task.original_status === 'validated' ? 'mint-pill' : ['needs_repair', 'failed', 'rejected', 'needs_recovery'].includes(task.original_status) ? 'coral-pill' : 'neutral';
   const secondsLabel = (value) => {if (!finite(value)) return "No data"; if (value < 60) return value.toFixed(1) + ' s'; const hours = Math.floor(value / 3600); const minutes = Math.floor(value % 3600 / 60); return hours ? hours + ' h ' + minutes + ' min' : minutes + ' min';};
+  const runStatus = (status) => ({preview: 'Plan preview', draft: 'Draft · not launched', launching: 'Launch requested', interrupted: 'Runner interrupted', runner_finished: 'Runner finished · review outcomes', historical: 'Recorded evidence'}[status] || 'Status unavailable');
 
   function announce(message) {setText('screen-reader-status', message);}
 
@@ -55,6 +56,7 @@
     clear(byId('connection-status')); byId('connection-status').append(node('span', 'status-dot amber'), document.createTextNode(state.runId ? 'Loading source' : 'No run evidence'));
     setText('snapshot-time', 'Source pending'); setText('nav-worker-count', '—');
     setText('last-fetch', 'Not read yet'); runContent(false);
+    byId('run-configuration').hidden = true; clear(byId('run-configuration-content'));
   }
 
   function persistSelection() {
@@ -81,13 +83,14 @@
     selectOptions(byId('run-select'), project.runs, 'No runs yet');
     if (state.runId) byId('run-select').value = state.runId;
     setText('repo-name', project.repository || project.label || project.id);
-    setText('workspace-summary', number(state.catalog.projects.length) + ' configured project(s) · ' + number(project.runs.length) + ' recorded run(s) in this project. This viewer is read only.');
+    setText('workspace-summary', workspaceSummary(project));
     persistSelection();
     resetSelection(state.runId ? 'Loading selected run…' : 'No run evidence yet', state.runId ? 'Reading the reviewed evidence for this selection.' : 'This project has no recorded runs in the local catalog. Run agents through the controller, then load their reviewed evidence here.');
+    if (state.workspace) {resetBuilder(); renderHistory(project.runs); loadProjectContext(project.id);}
     if (state.runId) refresh();
   }
 
-  async function loadCatalog() {
+  async function loadCatalog(preserveForm = false) {
     if (state.catalogLoading) return;
     state.catalogLoading = true;
     const controller = new AbortController(), timeout = window.setTimeout(() => controller.abort(), 15000);
@@ -97,14 +100,269 @@
       const data = await response.json(), validId = (id) => typeof id === 'string' && id.length > 0;
       if (!Array.isArray(data?.projects) || data.projects.some((project) => !validId(project.id) || !Array.isArray(project.runs) || project.runs.some((run) => !validId(run.id)) || new Set(project.runs.map((run) => run.id)).size !== project.runs.length) || new Set(data.projects.map((project) => project.id)).size !== data.projects.length) throw new Error('CATALOG');
       state.catalog = data;
+      configureWorkspace(data.mode === 'workspace');
       selectOptions(byId('project-select'), data.projects, 'No configured projects');
       const query = new URL(window.location.href).searchParams;
       const wanted = state.projectId || query.get('project') || data.default_project_id;
       const project = data.projects.find((item) => item.id === wanted) || data.projects.find((item) => item.id === data.default_project_id) || data.projects[0];
-      if (project) chooseProject(project.id, state.runId || query.get('run') || data.default_run_id);
+      if (project && preserveForm && state.workspace && state.projectId === project.id) {
+        byId('project-select').value = project.id;
+        selectOptions(byId('run-select'), project.runs, 'No runs yet');
+        if (!project.runs.some((run) => run.id === state.runId)) state.runId = null;
+        if (state.runId) byId('run-select').value = state.runId;
+        else addRunPlaceholder();
+        setText('workspace-summary', workspaceSummary(project)); renderHistory(project.runs);
+        if (state.runId) refresh();
+      }
+      else if (project) chooseProject(project.id, state.runId || query.get('run') || data.default_run_id);
       else {state.projectId = null; state.runId = null; persistSelection(); selectOptions(byId('run-select'), [], 'No runs yet'); resetSelection('No configured projects', 'Add your projects to the local server catalog to inspect their reviewed run evidence. No example projects or results are displayed.'); setText('workspace-summary', 'No projects are configured on this local server.');}
     } catch {resetSelection('Workspace unavailable', 'The local server did not provide a valid project catalog. Refresh to try reading it again. No example projects or results are displayed.'); showError('Could not read the local project catalog.');}
     finally {clearTimeout(timeout); state.catalogLoading = false;}
+  }
+
+  function workspaceSummary(project) {
+    return number(state.catalog.projects.length) + ' configured repositor' + (state.catalog.projects.length === 1 ? 'y' : 'ies') + ' · ' + number(project.runs.length) + ' saved run(s).' + (state.workspace ? ' Prepare a draft or inspect earlier evidence.' : ' This viewer is read only.');
+  }
+
+  function addRunPlaceholder() {
+    if (!byId('run-select').options.length || byId('run-select').disabled) return;
+    const option = node('option', '', 'Select a saved run'); option.value = ''; option.disabled = true; option.selected = true; byId('run-select').prepend(option);
+  }
+
+  function configureWorkspace(enabled) {
+    const changed = state.workspace !== enabled; state.workspace = enabled;
+    for (const element of document.querySelectorAll('[data-workspace-only]')) element.hidden = !enabled;
+    setText('local-mode-label', enabled ? 'LOCAL · RUN PLANNING' : 'LOCAL · READ ONLY');
+    setText('workspace-intro-copy', enabled ? 'Choose a repository. Prepare a new run or open an earlier run. Saving a draft does not deploy agents.' : 'Choose a repository, then a run to inspect its reviewed results. Only repositories configured on this local server are listed.');
+    if (!enabled) {byId('run-builder').hidden = true; byId('run-configuration').hidden = true;}
+    if (enabled && (changed || !state.csrf)) loadSession();
+  }
+
+  async function loadSession() {
+    const controller = new AbortController(), timeout = window.setTimeout(() => controller.abort(), 15000);
+    try {
+      const response = await fetch('/api/session', {cache: 'no-store', credentials: 'same-origin', signal: controller.signal, headers: {'Accept': 'application/json'}});
+      if (!response.ok) throw new Error('SESSION');
+      const data = await response.json();
+      if (data.mode !== 'workspace' || typeof data.csrf_token !== 'string' || !data.csrf_token) throw new Error('SESSION');
+      state.csrf = data.csrf_token; updateBuilder();
+    } catch {state.csrf = null; builderError('Could not prepare a local planning session. Refresh the workspace before saving a draft.');}
+    finally {clearTimeout(timeout);}
+  }
+
+  function builderError(message) {
+    const box = byId('run-form-error'); box.hidden = !message; box.textContent = message || '';
+  }
+
+  function resetBuilder() {
+    state.contextController?.abort(); state.contextVersion += 1; state.planVersion += 1;
+    state.context = null; state.selectedTasks.clear(); state.preview = null; state.previewFingerprint = null; state.planning = false;
+    byId('run-form').reset(); byId('run-options').disabled = true;
+    byId('new-run-button').disabled = true; byId('new-run-button').setAttribute('aria-expanded', 'false');
+    byId('run-builder').hidden = true; byId('run-preview').hidden = true; clear(byId('run-preview')); builderError('');
+    clear(byId('run-task-options')); clear(byId('worker-presets')); byId('builder-unavailable').hidden = true;
+    byId('preview-run-button').disabled = true; byId('save-run-button').disabled = true;
+  }
+
+  async function loadProjectContext(projectId) {
+    const version = ++state.contextVersion, controller = new AbortController(); state.contextController = controller;
+    const timeout = window.setTimeout(() => controller.abort(), 15000);
+    try {
+      const response = await fetch('/api/project?' + new URLSearchParams({project: projectId}), {cache: 'no-store', credentials: 'same-origin', signal: controller.signal, headers: {'Accept': 'application/json'}});
+      if (!response.ok) throw new Error('PROJECT');
+      const data = await response.json();
+      if (version !== state.contextVersion || projectId !== state.projectId) return;
+      if (data.project_id !== projectId || !Array.isArray(data.tasks)) throw new Error('PROJECT');
+      state.context = data;
+      if (!data.configurable) {
+        setText('history-note', 'This repository has historical evidence only. Register its project configuration with the CLI to prepare new runs.');
+        byId('new-run-button').disabled = true; return;
+      }
+      const cap = data.limits?.max_workers;
+      if (!Number.isInteger(cap) || cap < 1 || cap > 100) throw new Error('CAPACITY');
+      byId('new-run-button').disabled = false; byId('run-options').disabled = false;
+      byId('run-workers').max = String(cap); byId('run-workers').value = String(data.defaults?.workers || 1);
+      byId('run-timeout').value = String(data.defaults?.timeout || 300); byId('run-base').value = data.defaults?.base || 'HEAD';
+      byId('run-synchronized').checked = data.defaults?.synchronized === true; byId('run-overlap').checked = data.defaults?.allow_overlap === true;
+      byId('run-context').value = data.defaults?.context_mode || 'full';
+      setText('worker-limit', 'Repository policy: up to ' + cap + ' agents');
+      for (const count of [1, 2, 5, 10, 25, 50, 100]) {
+        const button = node('button', '', String(count)); button.type = 'button'; button.disabled = count > cap; button.dataset.workers = String(count); button.setAttribute('aria-label', count + ' concurrent agent' + (count === 1 ? '' : 's')); button.setAttribute('aria-pressed', String(count === Number(byId('run-workers').value)));
+        if (count > cap) button.title = 'Above this repository’s configured limit';
+        button.addEventListener('click', () => {byId('run-workers').value = String(count); invalidatePreview(); updateBuilder();}); byId('worker-presets').append(button);
+      }
+      renderTaskChoices(); updateBuilder();
+      if (!state.runId) toggleBuilder(true, false);
+    } catch (error) {
+      if (version !== state.contextVersion || projectId !== state.projectId) return;
+      byId('new-run-button').disabled = true;
+      setText('history-note', 'Repository settings could not be read. Refresh the workspace or check the registered project configuration with the CLI.');
+    }
+    finally {clearTimeout(timeout);}
+  }
+
+  function toggleBuilder(open, focus = true) {
+    if (open && !state.context?.configurable) return;
+    byId('run-builder').hidden = !open; byId('new-run-button').setAttribute('aria-expanded', String(open));
+    if (open && focus) {byId('run-builder').scrollIntoView({behavior: 'smooth', block: 'start'}); byId('run-workers').focus({preventScroll: true});}
+  }
+
+  function renderTaskChoices() {
+    const target = byId('run-task-options'); clear(target);
+    const query = byId('run-task-search').value.trim().toLocaleLowerCase('en-US');
+    const available = (state.context?.tasks || []).filter((task) => [task.id, task.title].join(' ').toLocaleLowerCase('en-US').includes(query));
+    if (!available.length) {target.append(node('p', 'task-picker-empty', query ? 'No tasks match this search.' : 'No tasks are registered in this repository. Prepare its backlog before creating a run.')); return;}
+    for (const task of available) {
+      const label = node('label', 'run-task-option'), checkbox = node('input'); checkbox.type = 'checkbox'; checkbox.value = task.id; checkbox.checked = state.selectedTasks.has(task.id); checkbox.setAttribute('aria-label', 'Select ' + task.id + ': ' + task.title);
+      checkbox.addEventListener('change', () => {if (checkbox.checked) state.selectedTasks.add(task.id); else state.selectedTasks.delete(task.id); invalidatePreview(); updateBuilder();});
+      const copy = node('span', 'run-task-copy'), heading = node('span', 'run-task-heading'); heading.append(node('strong', 'mono', task.id), node('span', '', task.title));
+      const metadata = []; if (task.dependencies?.length) metadata.push('Depends on: ' + task.dependencies.join(', ')); if (task.has_task_context) metadata.push('Task packet available');
+      copy.append(heading); if (metadata.length) copy.append(node('span', 'run-task-metadata', metadata.join(' · ')));
+      label.append(checkbox, copy, pill(task.status || 'Status unknown', task.status === 'ready' ? 'mint-pill' : 'neutral')); target.append(label);
+    }
+  }
+
+  function readOptions() {
+    const budget = byId('run-budget').value;
+    return {task_ids: [...state.selectedTasks].sort(), workers: Number(byId('run-workers').value), timeout: Number(byId('run-timeout').value), base: byId('run-base').value.trim(), model_budget: budget === '' ? null : Number(budget), synchronized: byId('run-synchronized').checked, allow_overlap: byId('run-overlap').checked, context_mode: byId('run-context').value, ...(byId('run-label').value.trim() ? {label: byId('run-label').value.trim()} : {})};
+  }
+
+  function validateOptions(options) {
+    if (!state.context?.configurable) return 'Register a project configuration to prepare a run.';
+    if (!options.task_ids.length) return 'Select at least one task.';
+    if (!Number.isInteger(options.workers) || options.workers < 1 || options.workers > state.context.limits.max_workers) return 'Choose an agent count within this repository’s limit.';
+    if (options.workers > options.task_ids.length) return 'Select at least ' + options.workers + ' tasks for ' + options.workers + ' concurrent agents.';
+    if (options.task_ids.length > state.context.limits.max_workers) return 'This repository permits at most ' + state.context.limits.max_workers + ' tasks in one run.';
+    if (options.synchronized && options.workers !== options.task_ids.length) return 'A synchronized run needs exactly one selected task per agent.';
+    if (!Number.isInteger(options.timeout) || options.timeout < 30 || options.timeout > 1800) return 'Choose a coding time limit from 30 to 1800 seconds.';
+    if (!options.base || options.base.startsWith('-')) return 'Choose a valid source reference.';
+    if (options.model_budget !== null && (!finite(options.model_budget) || options.model_budget <= 0 || options.model_budget > 180 || Math.abs(options.model_budget * 100 - Math.round(options.model_budget * 100)) > 0.000001)) return 'Use a total model reservation between USD0.01 and USD180.00, in whole cents.';
+    if (options.context_mode === 'task' && state.context.tasks.some((task) => options.task_ids.includes(task.id) && !task.has_task_context)) return 'Every selected task needs a repository-provided packet to use task context.';
+    return null;
+  }
+
+  function invalidatePreview() {
+    state.preview = null; state.previewFingerprint = null; state.planVersion += 1;
+    byId('run-preview').hidden = true; clear(byId('run-preview')); byId('save-run-button').disabled = true; builderError('');
+  }
+
+  function updateBuilder() {
+    const options = readOptions(), problem = validateOptions(options);
+    setText('run-task-count', number(options.task_ids.length) + ' selected · ' + number(state.context?.tasks?.length || 0) + ' available' + (options.task_ids.length ? ' · up to ' + number(Math.min(options.workers || 0, options.task_ids.length)) + ' working at once' : ''));
+    for (const button of byId('worker-presets').querySelectorAll('button')) button.setAttribute('aria-pressed', String(Number(button.dataset.workers) === options.workers));
+    byId('preview-run-button').disabled = state.planning || Boolean(problem) || !state.csrf;
+    byId('save-run-button').disabled = state.planning || !state.preview || state.previewFingerprint !== JSON.stringify(options) || Boolean(problem) || !state.csrf;
+    byId('preview-run-button').textContent = state.planning ? 'Checking…' : 'Check plan';
+    if (problem && options.task_ids.length) builderError(problem);
+  }
+
+  const blockerCopy = {
+    target_origin_mismatch_or_unavailable: 'The registered repository origin needs verification.', checkout_head_differs_from_selected_base: 'The checkout differs from the selected source reference.', target_checkout_has_uncommitted_changes: 'The repository has uncommitted changes.', task_metadata_not_ready: 'Some selected tasks are not ready.', configured_worker_capacity_insufficient: 'The requested agent count exceeds the repository policy.', configured_gateway_capacity_insufficient: 'The configured gateway capacity is below this run’s concurrency.', selected_tasks_already_have_durable_claims: 'Some tasks already belong to an earlier run.', budget_profile_policy_mismatch: 'The project budget policy differs from the retained accounting policy.', existing_active_or_awaiting_tasks: 'Earlier tasks are still active or waiting for integration.', durable_unreserved_allowance_not_observed: 'Remaining local admission allowance has not been observed.', local_infrastructure_reserve_insufficient: 'Remaining infrastructure admission allowance is insufficient.', local_model_reserve_insufficient: 'Remaining model admission allowance is insufficient.', cohort_model_reserve_not_selected: 'Select a total model reservation before a live launch.', github_readiness_not_checked: 'Current GitHub source readiness has not been checked.', provider_quota_not_verified: 'Current provider quota needs verification.', deployed_gateway_capacity_not_verified: 'The deployed gateway capacity needs verification.', owner_launch_authorization_not_verified: 'The live launch still needs explicit owner authorization.', live_execution_disabled: 'Live execution is disabled in the repository policy.'
+  };
+
+  function renderPlan(container, plan) {
+    const preflight = plan.preflight || {}, heading = node('div', 'plan-heading-row');
+    heading.append(node('h3', '', plan.id ? 'Saved plan' : 'Plan review'), pill(preflight.preparation_checks_passed === true ? 'Source checks passed' : 'Preparation needs attention', preflight.preparation_checks_passed === true ? 'mint-pill' : 'amber-pill')); container.append(heading);
+    const factList = node('div', 'plan-facts');
+    for (const [label, value] of [['Concurrent agents', number(plan.workers)], ['Selected tasks', number(plan.task_ids?.length)], ['Coding limit', secondsLabel(plan.timeout)], ['Model reservation', money(plan.model_budget)], ['Infrastructure admission', money(finite(preflight.minimum_infrastructure_reserve_cents) ? preflight.minimum_infrastructure_reserve_cents / 100 : null)]]) {const fact = node('div', 'plan-fact'); fact.append(node('span', '', label), node('strong', '', value)); factList.append(fact);}
+    container.append(factList, node('p', '', ['preview', 'draft'].includes(plan.status) ? 'This is a local plan. Agent execution has not started, and no additional spending has been authorized. Reservations are limits, not invoices.' : 'These are the saved planning observations, not a new readiness check. Execution outcomes, delivery acceptance and invoices remain separate evidence.'));
+    const blockers = [...new Set([...(preflight.local_workload_blockers || []), ...(preflight.local_admission_blockers || []), ...(preflight.launch_blockers || [])])];
+    if (blockers.length) {const details = node('details', 'plan-checks'), summary = node('summary', '', blockers.length + ' item(s) to resolve before a live launch'); details.open = preflight.preparation_checks_passed !== true; const list = node('ul', 'plan-blockers'); for (const blocker of blockers) list.append(node('li', '', blockerCopy[blocker] || String(blocker).replaceAll('_', ' '))); details.append(summary, list); container.append(details);}
+  }
+
+  async function prepareRun(save) {
+    const options = readOptions(), problem = validateOptions(options); if (problem || !state.csrf || state.planning) {builderError(problem || 'A local planning session is required. Refresh the workspace.'); return;}
+    if (save && (!state.preview || state.previewFingerprint !== JSON.stringify(options))) {builderError('Check the current plan before saving its draft.'); return;}
+    const projectId = state.projectId, version = ++state.planVersion, fingerprint = JSON.stringify(options); state.planning = true; byId('run-options').disabled = true; builderError(''); updateBuilder();
+    const controller = new AbortController(), timeout = window.setTimeout(() => controller.abort(), 30000);
+    try {
+      const response = await fetch(save ? '/api/runs' : '/api/runs/preview', {method: 'POST', cache: 'no-store', credentials: 'same-origin', signal: controller.signal, headers: {'Accept': 'application/json', 'Content-Type': 'application/json', 'X-Swarm-CSRF': state.csrf}, body: JSON.stringify({project_id: projectId, options})});
+      const result = await response.json();
+      if (version !== state.planVersion || projectId !== state.projectId) return;
+      if (!response.ok) throw new Error(typeof result.error === 'string' ? result.error : 'The local server rejected this plan.');
+      if (result.project_id !== projectId || !result.preflight || result.authorizes_spend !== false || !['preview', 'draft'].includes(result.status)) throw new Error('The server did not return a valid local plan.');
+      state.preview = result; state.previewFingerprint = fingerprint;
+      const panel = byId('run-preview'); clear(panel); panel.hidden = false; renderPlan(panel, result);
+      if (save) {
+        if (!result.id || result.status !== 'draft') throw new Error('The saved draft could not be confirmed. Refresh run history before retrying.');
+        state.runId = result.id; persistSelection(); announce('Draft saved. No agents were launched.');
+        await loadCatalog(); toggleBuilder(false, false);
+      } else announce('Plan checked. Review the remaining launch requirements before saving a draft.');
+    } catch (error) {
+      if (version !== state.planVersion || projectId !== state.projectId) return;
+      state.preview = null; state.previewFingerprint = null;
+      builderError(save ? 'Could not confirm the saved draft. Refresh run history before trying again. No agents are launched by this action.' : error.name === 'AbortError' ? 'The local plan check took too long. Refresh the workspace before retrying.' : error.message);
+    } finally {clearTimeout(timeout); if (version === state.planVersion && projectId === state.projectId) {state.planning = false; byId('run-options').disabled = !state.context?.configurable; updateBuilder();}}
+  }
+
+  function renderHistory(runs) {
+    const body = byId('history-rows'); clear(body);
+    if (!runs.length) {const row = node('tr', 'empty-table'), cell = node('td', '', 'No saved runs for this repository. Prepare a new run to create a draft.'); cell.colSpan = 5; row.append(cell); body.append(row);}
+    for (const run of runs) {
+      const row = node('tr'), name = node('td'); name.append(node('span', 'history-label', run.label || run.id), node('span', 'history-id mono', run.id));
+      const status = node('td'); status.append(pill(runStatus(run.status), run.status === 'draft' ? 'amber-pill' : 'neutral'));
+      const openCell = node('td'), open = node('button', 'button button-quiet', 'View'); open.type = 'button'; open.setAttribute('aria-label', 'View run ' + (run.label || run.id)); open.addEventListener('click', () => selectRun(run.id)); openCell.append(open);
+      row.append(name, status, node('td', '', finite(run.workers) ? number(run.workers) : 'Not recorded'), node('td', '', dateLabel(run.created_at_utc)), openCell); body.append(row);
+    }
+    setText('history-note', number(runs.length) + ' saved run(s). A draft has not started; recorded evidence does not by itself establish successful delivery.');
+  }
+
+  async function refreshHistory() {
+    if (!state.workspace || !state.projectId) return;
+    const projectId = state.projectId; byId('refresh-history-button').disabled = true;
+    try {
+      const response = await fetch('/api/runs?' + new URLSearchParams({project: projectId}), {cache: 'no-store', credentials: 'same-origin', headers: {'Accept': 'application/json'}});
+      if (!response.ok) throw new Error('RUNS'); const data = await response.json();
+      if (projectId !== state.projectId) return;
+      if (!Array.isArray(data.runs)) throw new Error('RUNS');
+      const project = state.catalog.projects.find((item) => item.id === projectId); project.runs = data.runs;
+      selectOptions(byId('run-select'), project.runs, 'No runs yet'); if (state.runId && project.runs.some((run) => run.id === state.runId)) byId('run-select').value = state.runId;
+      else if (!state.runId) addRunPlaceholder();
+      renderHistory(data.runs); setText('workspace-summary', workspaceSummary(project));
+    } catch {if (projectId === state.projectId) setText('history-note', 'Could not refresh saved runs. Previously displayed records are retained.');}
+    finally {byId('refresh-history-button').disabled = false;}
+  }
+
+  function selectRun(id) {
+    const project = state.catalog?.projects.find((item) => item.id === state.projectId); if (!project?.runs.some((run) => run.id === id)) return;
+    state.runId = id; byId('run-select').value = id; persistSelection(); toggleBuilder(false, false);
+    resetSelection('Loading selected run…', 'Reading the recorded configuration and reviewed evidence for this selection.'); refresh();
+  }
+
+  function renderRunConfiguration(run) {
+    const target = byId('run-configuration-content'); clear(target); byId('run-configuration').hidden = false;
+    setText('configuration-status', runStatus(run.status));
+    setText('run-configuration-title', run.label || run.id || 'Run configuration'); setText('run-name', run.label || run.id); setText('run-phase', runStatus(run.status));
+    const draft = run.status === 'draft';
+    target.append(node('p', '', draft ? 'This saved draft has not launched any agents. Its configuration is preserved; another run creates a separate record.' : run.has_snapshot ? 'Recorded evidence is shown below when its curated source is available. Missing configuration fields stay unknown.' : 'This run has no imported delivery snapshot. Its execution status does not establish merged or accepted work.'));
+    if (run.status === 'historical' && run.has_snapshot) {setText('run-configuration-title', 'Historical evidence'); return;}
+    if (run.preflight) renderPlan(target, run);
+    facts(target, 'Frozen run settings', [['Agents', run.workers], ['Selected task IDs', run.task_ids?.join(', ')], ['Source commit', run.base_sha, true], ['Coding time limit', finite(run.timeout) ? secondsLabel(run.timeout) : null], ['Instruction context', run.context_mode === 'task' ? 'Repository-provided task packet' : run.context_mode === 'full' ? 'Full project instructions' : null], ['Created', run.created_at_utc ? dateLabel(run.created_at_utc) : null]]);
+    const execution = node('details', 'run-execution'); execution.open = !draft; execution.append(node('summary', '', 'Execution observations' + (draft ? ' · not launched' : '')));
+    const reported = run.execution?.source === 'local_worker_reports' ? run.execution : null;
+    const firstStart = run.started_at_utc || reported?.first_agent_started_at_utc;
+    facts(execution, 'Recorded execution', [['Launch requested', run.launch_requested_at_utc ? dateLabel(run.launch_requested_at_utc) : null], ['First observed agent start', firstStart ? dateLabel(firstStart) : null], ['Runner finished', run.finished_at_utc ? dateLabel(run.finished_at_utc) : null], ['Runner exit code', Number.isInteger(run.runner_exit_code) ? run.runner_exit_code : null]]);
+    const outcomeLabels = {validated: 'Validated patch', needs_repair: 'Needs repair', rejected: 'Rejected', failed: 'Failed', interrupted: 'Interrupted', not_dispatched: 'Not dispatched', launch_failed: 'Launch failed', working: 'Working', preparing: 'Preparing', checking: 'Checking', ready: 'Prepared', unknown: 'Unknown'};
+    const outcomeRows = Object.entries(reported?.worker_outcomes || run.worker_outcomes || {}).filter(([key, count]) => Object.hasOwn(outcomeLabels, key) && Number.isInteger(count) && count >= 0).map(([key, count]) => [outcomeLabels[key], number(count)]);
+    if (outcomeRows.length) facts(execution, 'Recorded worker outcomes', outcomeRows);
+    execution.append(node('p', 'field-help', outcomeRows.length ? 'Worker outcomes and a runner exit code do not establish accepted or merged deliveries.' : 'No per-worker outcomes have been recorded. Missing counts remain unknown.'));
+    target.append(execution);
+    if (reported) {
+      const progress = node('section', 'reported-progress');
+      facts(progress, 'Reported worker progress', [['Observed task reports', finite(reported.observed_tasks) ? number(reported.observed_tasks) : null], ['Expected tasks', finite(reported.expected_tasks) ? number(reported.expected_tasks) : null], ['Missing task reports', finite(reported.missing_tasks) ? number(reported.missing_tasks) : null], ['Observed at', reported.observed_at_utc ? dateLabel(reported.observed_at_utc) : null]]);
+      const phaseLabels = {provision: 'Provision', prepare: 'Prepare', barrier: 'Start barrier', agent: 'Agent session', collect: 'Collect patch', check: 'Validation', recover: 'Recover artifacts', artifacts: 'Read artifacts', terminate: 'Terminate sandbox'};
+      const phaseRows = Object.entries(reported.phase_counts || {}).filter(([key, count]) => Object.hasOwn(phaseLabels, key) && Number.isInteger(count) && count >= 0).map(([key, count]) => [phaseLabels[key], number(count)]);
+      if (phaseRows.length) facts(progress, 'Last reported phase', phaseRows);
+      progress.append(node('p', 'field-help', 'These are the last local worker reports. Phase counts are not active machines, continuous useful activity or accepted deliveries. Unobserved work remains unknown.')); target.append(progress);
+    }
+    if (draft && run.launch_command) {
+      const guide = node('section', 'launch-guide'); guide.append(node('h3', '', 'Continue from the CLI'), node('p', '', 'If shown, replace placeholders with your local workspace file and gateway. This command inspects the launch. Actual execution requires the explicit --execute option, a gateway and an authorized remaining allowance.'), node('code', '', run.launch_command));
+      target.append(guide);
+    }
+    if (!run.has_snapshot) {
+      runContent(false); byId('workspace-empty').hidden = true; setText('snapshot-time', 'No delivery snapshot'); setText('last-fetch', 'Read: ' + timeLabel(new Date().toISOString()));
+      clear(byId('connection-status')); byId('connection-status').append(node('span', 'status-dot amber'), document.createTextNode(draft ? 'Draft · no agents launched' : 'Run record available'));
+    }
   }
 
   function renderOverview(data) {
@@ -304,13 +562,21 @@
   }
 
   async function refresh() {
-    if (!state.projectId || !state.runId) {loadCatalog(); return;}
+    if (!state.projectId || !state.runId) {if (!state.workspace) loadCatalog(); return;}
     if (state.fetching) return;
     state.fetching = true; byId('refresh-button').disabled = true;
     const controller = new AbortController(), timeout = window.setTimeout(() => controller.abort(), 15000), version = ++state.requestVersion;
     state.controller = controller;
     const query = new URLSearchParams({project: state.projectId, run: state.runId});
     try {
+      if (state.workspace) {
+        const response = await fetch('/api/run?' + query, {cache: 'no-store', credentials: 'same-origin', signal: controller.signal, headers: {'Accept': 'application/json'}});
+        if (!response.ok) throw new Error('RUN');
+        const run = await response.json(); if (version !== state.requestVersion) return;
+        if (run.project_id !== state.projectId || run.id !== state.runId) throw new Error('RUN');
+        renderRunConfiguration(run);
+        if (run.has_snapshot !== true) {announce('Saved run configuration loaded. No delivery snapshot is available.'); return;}
+      }
       const response = await fetch('/api/snapshot?' + query, {cache: 'no-store', credentials: 'same-origin', signal: controller.signal, headers: {'Accept': 'application/json'}});
       if (!response.ok) throw new Error('HTTP');
       const data = await response.json();
@@ -325,12 +591,21 @@
 
   byId('project-select').addEventListener('change', () => chooseProject(byId('project-select').value, null));
   byId('run-select').addEventListener('change', () => {
+    if (state.workspace) {selectRun(byId('run-select').value); return;}
     const project = state.catalog?.projects.find((item) => item.id === state.projectId);
     if (!project?.runs.some((run) => run.id === byId('run-select').value)) return;
     state.runId = byId('run-select').value; persistSelection();
     resetSelection('Loading selected run…', 'Reading the reviewed evidence for this selection.'); refresh();
   });
-  byId('refresh-button').addEventListener('click', refresh);
+  byId('refresh-button').addEventListener('click', () => state.workspace ? loadCatalog(true) : refresh());
+  byId('new-run-button').addEventListener('click', () => toggleBuilder(byId('run-builder').hidden));
+  byId('close-builder').addEventListener('click', () => toggleBuilder(false, false));
+  byId('refresh-history-button').addEventListener('click', refreshHistory);
+  byId('run-form').addEventListener('submit', (event) => {event.preventDefault(); if (byId('run-form').reportValidity()) prepareRun(false);});
+  byId('save-run-button').addEventListener('click', () => prepareRun(true));
+  byId('run-task-search').addEventListener('input', renderTaskChoices);
+  byId('clear-run-tasks').addEventListener('click', () => {state.selectedTasks.clear(); invalidatePreview(); renderTaskChoices(); updateBuilder();});
+  for (const id of ['run-workers', 'run-label', 'run-budget', 'run-base', 'run-timeout', 'run-context', 'run-synchronized', 'run-overlap']) byId(id).addEventListener('input', () => {invalidatePreview(); updateBuilder();});
   byId('task-filter').addEventListener('change', renderTable);
   byId('task-search').addEventListener('input', renderTable);
   byId('close-detail').addEventListener('click', () => byId('task-dialog').close());
