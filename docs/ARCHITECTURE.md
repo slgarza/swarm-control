@@ -64,8 +64,10 @@ failure breaks the barrier rather than pretending the full cohort started. The
 dispatcher submits at most the requested worker count and checkpoints completed
 reports and ledger states before admitting more tasks. Checkpoint failure stops
 new submissions; submitted workers still finish through their recovery paths.
-The VM caps remain 2 CPU/2 GiB, with up to 300 seconds of agent time and 1200 seconds
-for the full lifecycle. A profile may opt into up to 100 workers; its default is ten.
+The VM caps remain 2 CPU/2 GiB. Agent time defaults to 300 seconds with a
+1200-second full lifecycle; explicit `--timeout 1800` opts into 1800 seconds of
+coding and a 2700-second lifecycle. Longer sessions do not increase any allowance
+or authorize new spending. A profile may opt into up to 100 workers; its default is ten.
 
 ## Model credentials and budget
 

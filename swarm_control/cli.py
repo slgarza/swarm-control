@@ -5,7 +5,10 @@ import sys
 
 def main():
     try:
-        if len(sys.argv) > 1 and sys.argv[1] == "evidence":
+        if len(sys.argv) > 1 and sys.argv[1] == "preflight":
+            from .preflight import main as run
+            del sys.argv[1]
+        elif len(sys.argv) > 1 and sys.argv[1] == "evidence":
             from .evidence import main as run
             del sys.argv[1]
         elif len(sys.argv) > 1 and sys.argv[1] == "budget":

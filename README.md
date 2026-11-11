@@ -27,6 +27,7 @@ delivered ten reviewed, merged PRs, including one coordinator code repair.
 | [Two-agent walkthrough](docs/TWO_AGENT_WALKTHROUGH.md) | Own-account setup, real issues, budget, execution, review, PRs, merge and cleanup |
 | [Project reference](docs/PROJECTS.md) | Every configuration field and the task format |
 | [Operations](docs/OPERATIONS.md) | Commands, side effects, flags and integration gates |
+| [Deployment preflight](docs/DEPLOYMENT_PREFLIGHT.md) | Read-only source, ledger, GitHub and resource checks before a separately authorized deployment |
 | [Spend reporting](docs/BILLING.md) | Provider cost evidence, source freshness and local reservations without invented account balances |
 | [Budget migration](docs/BUDGET_MIGRATION.md) | Read-only proposals and separately authorized cumulative increases preserving every allocation |
 | [Troubleshooting](docs/TROUBLESHOOTING.md) | Setup, budget, worker and integration failures |
@@ -74,6 +75,13 @@ The helper creates a separate local Git repository and refuses an existing folde
 `plan` reads local metadata and creates no cloud resources. It reports potential
 concurrency, not live readiness. See [Quickstart](docs/QUICKSTART.md) for details.
 
+Use `swarm-control preflight D01 D02 --project swarm.toml --workers 2 --synchronized --base HEAD`
+for a read-only preparation report that also inspects existing local claims,
+admission allowance and cached spend. Add `--online` only to permit GitHub GETs.
+Exit zero covers the checked source-preparation scope; `launch_ready` remains
+false and budget/provider/authorization blockers remain explicit. See the
+[deployment preflight guide](docs/DEPLOYMENT_PREFLIGHT.md).
+
 Connect another repository using [project configuration](docs/PROJECTS.md).
 Read [operations](docs/OPERATIONS.md) before any paid run. Semantic review remains
 explicit; no autonomous backlog generator or dashboard is implemented yet.
@@ -87,6 +95,13 @@ disabled live execution. Dispatch is bounded and checkpoints each completed task
 integrator applies patches on the current base, uses three-way application when
 needed, and validates the combined tree. Actual conflicts produce a durable repair
 receipt; they still need an assigned repair and review.
+
+Targets can optionally configure paired token/request pacing in the trusted
+gateway. It uses verified input counts plus maximum output and a shared bounded
+queue; it does not verify provider quota or refund retained money. Coding sessions
+default to 300 seconds; `--timeout 1800` is an explicit opt-in with longer bounded
+gateway expiry. These settings require reviewed deployment and allowance, and
+cannot establish useful live overlap by themselves.
 
 Scheduling uses local SQLite. Separate dispatcher and integration locks cover Git
 worktrees sharing one checkout, not other clones or hosts. Private target cloning

@@ -14,6 +14,12 @@ from .pilot_budget import (
     SSEUsage,
     prepare_request,
 )
+from .provider_rate import (
+    ProviderRateError,
+    ProviderRateLimiter,
+    ProviderRatePolicy,
+    admission_rate_settings,
+)
 
 
 def configured_gateway_concurrency():
@@ -23,9 +29,23 @@ def configured_gateway_concurrency():
     return int(value)
 
 
+def configured_provider_rate():
+    values = [os.environ.get(name) for name in ("SWARM_GATEWAY_TPM", "SWARM_GATEWAY_RPM")]
+    if values == [None, None]:
+        return None
+    if any(
+        value is None or len(value) > 18 or not value.isascii()
+        or not value.isdecimal() or int(value) <= 0
+        for value in values
+    ):
+        raise ValueError("SWARM_GATEWAY_TPM and SWARM_GATEWAY_RPM require paired positive integers")
+    return ProviderRatePolicy(*(int(value) for value in values))
+
+
 # Validate deployment settings before constructing Modal resources. The same
 # value is embedded into the image so container imports retain the policy.
 MAX_UPSTREAM_REQUESTS = configured_gateway_concurrency()
+PROVIDER_RATE = configured_provider_rate()
 APP_NAME = os.environ.get("SWARM_GATEWAY_APP", "swarm-control-gateway")
 DICT_NAME = os.environ.get("SWARM_GATEWAY_LEDGER", "swarm-control-budget-v1")
 SECRET_NAME = os.environ.get("SWARM_OPENAI_SECRET", "swarm-control-openai")
@@ -37,7 +57,10 @@ image = (
     modal.Image.debian_slim(python_version="3.12")
     .env({"SWARM_GATEWAY_APP": APP_NAME, "SWARM_GATEWAY_LEDGER": DICT_NAME,
           "SWARM_GATEWAY_CONCURRENCY": str(MAX_UPSTREAM_REQUESTS),
-          "SWARM_OPENAI_SECRET": SECRET_NAME})
+          "SWARM_OPENAI_SECRET": SECRET_NAME,
+          **({"SWARM_GATEWAY_TPM": str(PROVIDER_RATE.tokens_per_minute),
+              "SWARM_GATEWAY_RPM": str(PROVIDER_RATE.requests_per_minute)}
+             if PROVIDER_RATE else {})})
     .pip_install("fastapi==0.115.12", "httpx==0.28.1")
     .add_local_python_source("swarm_control")
 )
@@ -66,7 +89,8 @@ async def create_run(
     issued = await BudgetService(ModalStore()).create(
         run_id, task_ids, model_budget_usd, ttl_seconds, time.time()
     )
-    return {**issued, "gateway_concurrency": MAX_UPSTREAM_REQUESTS}
+    return {**issued, "gateway_concurrency": MAX_UPSTREAM_REQUESTS,
+            **admission_rate_settings(PROVIDER_RATE)}
 
 
 @app.function(image=image, timeout=60, cpu=0.125, memory=256)
@@ -83,6 +107,8 @@ def build_web_app(
     service, api_key, *, transport=None,
     max_upstream_requests=MAX_UPSTREAM_REQUESTS,
     capacity_wait_seconds=CAPACITY_WAIT_SECONDS,
+    provider_rate=PROVIDER_RATE,
+    rate_limiter=None,
 ):
     """Injectable HTTP app; tests may use an in-memory store/mock transport."""
     import httpx
@@ -96,6 +122,8 @@ def build_web_app(
     if type(capacity_wait_seconds) not in (int, float) or not 0 < capacity_wait_seconds <= 15:
         raise ValueError("capacity_wait_seconds must be positive and at most 15")
     capacity = asyncio.BoundedSemaphore(max_upstream_requests)
+    if rate_limiter is None and provider_rate is not None:
+        rate_limiter = ProviderRateLimiter(provider_rate)
     web = FastAPI(docs_url=None, redoc_url=None, openapi_url=None)
 
     def error_response(code, status, *, headers=None):
@@ -167,6 +195,7 @@ def build_web_app(
         outcome = "unknown_usage"
         closed = False
         count_recorded = False
+        rate_deadline = rate_limiter.deadline() if rate_limiter is not None else None
 
         async def cleanup():
             nonlocal closed
@@ -199,6 +228,10 @@ def build_web_app(
             count_body = {
                 key: value for key, value in body.items() if key in COUNT_FIELDS
             }
+            if rate_limiter is not None:
+                # Count preflights also consume RPM. A permit remains consumed
+                # after cancellation/failure; it is independent of money.
+                await rate_limiter.acquire(tokens=0, deadline=rate_deadline)
             count_response = await client.post(
                 UPSTREAM + "/input_tokens", headers=headers, json=count_body
             )
@@ -226,6 +259,12 @@ def build_web_app(
                 raise
             finally:
                 count_recorded = True
+            if rate_limiter is not None:
+                # Only the provider-verified count may authorize token pacing.
+                # Reserve maximum output as well; no cache discount or refund.
+                await rate_limiter.acquire(
+                    tokens=count + body["max_output_tokens"], deadline=rate_deadline,
+                )
             # Recheck the independent cancellation key immediately before send.
             await service.authenticate(authorization[7:], time.time())
             upstream = await client.send(
@@ -244,6 +283,12 @@ def build_web_app(
                 outcome = "upstream_stream_required"
                 await cleanup()
                 return error_response(outcome, 502)
+        except ProviderRateError as exc:
+            # The earlier durable money reservation stays conservatively
+            # retained even when no inference was sent. Never claim a refund.
+            outcome = exc.code
+            await cleanup()
+            return error_response(outcome, 429, headers={"Retry-After": "60"})
         except PolicyError:
             outcome = "preflight_rejected"
             await cleanup()
@@ -309,8 +354,10 @@ def build_web_app(
     secrets=[modal.Secret.from_name(SECRET_NAME)],
     max_containers=1,
     min_containers=0,
-    scaledown_window=30,
-    timeout=180,
+    # Keep a paced gateway warm beyond its 60s history during normal idleness.
+    # Crashes/redeployments can still reset this process-local limiter.
+    scaledown_window=90 if PROVIDER_RATE else 30,
+    timeout=900,
     cpu=0.25,
     memory=256,
 )

@@ -187,6 +187,26 @@ class WorkerTests(unittest.TestCase):
 
 
 class PlanningTests(unittest.TestCase):
+    def test_pacing_admission_must_match_profile_even_when_worker_capacity_matches(self):
+        project = SimpleNamespace(gateway_tokens_per_minute=800000, gateway_requests_per_minute=4000)
+        expected = {"gateway_concurrency": 100, "provider_rate_tpm": 800000,
+                    "provider_rate_rpm": 4000, "provider_rate_queue_seconds": 300}
+        runner.verify_gateway_capacity(expected, 100, project)
+        for change in ({"provider_rate_tpm": None}, {"provider_rate_tpm": 1000000},
+                       {"provider_rate_rpm": 5000}, {"provider_rate_queue_seconds": 0},
+                       {"provider_rate_rpm": True}):
+            with self.subTest(change=change), self.assertRaisesRegex(ValueError, "provider pacing"):
+                runner.verify_gateway_capacity({**expected, **change}, 100, project)
+        with self.assertRaisesRegex(ValueError, "provider pacing"):
+            runner.verify_gateway_capacity({"gateway_concurrency": 100}, 100, project)
+
+    def test_long_agent_ttl_is_opt_in_and_covers_lifecycle_with_bounded_expiry(self):
+        self.assertEqual(runner.run_ttl_seconds(300), 1800)
+        self.assertEqual(runner.run_ttl_seconds(1800), 2700)
+        for value in (True, 29, 1801, 300.0):
+            with self.subTest(value=value), self.assertRaises(ValueError):
+                runner.run_ttl_seconds(value)
+
     def test_actual_gateway_capacity_must_attest_larger_cohorts(self):
         runner.verify_gateway_capacity({}, 20)
         runner.verify_gateway_capacity({"gateway_concurrency": 100}, 100)
@@ -404,6 +424,13 @@ class PlanningTests(unittest.TestCase):
         fake_key = "sk-" + "x" * 30
         self.assertNotIn(fake_key, runner.redact("example=" + fake_key))
 
+    def test_gateway_codex_stream_wait_covers_rate_queue_without_raising_retry_limits(self):
+        command = runner.codex_command("gpt-6.1-sol", "https://fake.modal.run")
+        self.assertIn("model_providers.swarm.stream_idle_timeout_ms=900000", command)
+        self.assertIn("model_providers.swarm.request_max_retries=2", command)
+        self.assertIn("model_providers.swarm.stream_max_retries=1", command)
+        self.assertNotIn("model_providers.swarm.stream_idle_timeout_ms=900000", runner.codex_command("gpt-6.1-sol"))
+
 
 class LifecycleTests(unittest.TestCase):
     def test_final_check_benchmarks_are_recovered_before_termination_and_validated(self):
@@ -498,7 +525,17 @@ class LifecycleTests(unittest.TestCase):
     def test_missing_deployed_capacity_stops_100_agent_run_without_spawning_or_refunding(self):
         self.run_mocked_100_agent_cohort(None)
 
-    def run_mocked_100_agent_cohort(self, actual_capacity):
+    def test_stale_unpaced_gateway_stops_before_100_workers_without_refund(self):
+        self.run_mocked_100_agent_cohort(100, configured_pacing=True)
+
+    def test_opt_in_long_100_worker_run_uses_full_ttl_in_admission_and_failed_cleanup(self):
+        self.run_mocked_100_agent_cohort(100, agent_timeout=1800, stop_error=True,
+                                       configured_pacing=True, advertised_pacing={
+                                           "provider_rate_tpm": 800000, "provider_rate_rpm": 4000,
+                                           "provider_rate_queue_seconds": 300})
+
+    def run_mocked_100_agent_cohort(self, actual_capacity, *, agent_timeout=300,
+                                   stop_error=False, configured_pacing=False, advertised_pacing=None):
         class Image:
             @classmethod
             def from_registry(cls, *_args, **_kwargs):
@@ -521,7 +558,9 @@ class LifecycleTests(unittest.TestCase):
                 return {"tokens": {task: "fake-task-token" for task in args[1]},
                         "budget_usd": args[2], **(
                             {"gateway_concurrency": actual_capacity} if actual_capacity is not None else {}
-                        )}
+                        ), **(advertised_pacing or {})}
+            if stop_error and name == "stop_run":
+                raise RuntimeError("synthetic stop unavailable")
             return {"state": "stopped"}
 
         fake_modal = SimpleNamespace(
@@ -543,6 +582,9 @@ class LifecycleTests(unittest.TestCase):
             ).replace("model_limit_cents = 1800", "model_limit_cents = 18000").replace(
                 "infra_limit_cents = 700", "infra_limit_cents = 4000"
             ).replace("[budget]", "[runtime]\ngateway_concurrency = 100\n[budget]"))
+            if configured_pacing:
+                project.path.write_text(project.path.read_text().replace(
+                    "[runtime]", "[runtime]\ngateway_tokens_per_minute = 800000\ngateway_requests_per_minute = 4000"))
             template = json.loads((project.tasks_dir / "A1.json").read_text())
             task_ids = [f"T{index:03}" for index in range(100)]
             for index, task_id in enumerate(task_ids):
@@ -558,26 +600,33 @@ class LifecycleTests(unittest.TestCase):
                                    "--project", str(project.path), "--workers", "100",
                                    "--synchronized", "--allow-overlap", "--base", "HEAD",
                                    "--model", "gpt-6.1-sol", "--model-budget", "180",
+                                   "--timeout", str(agent_timeout),
                                    "--gateway-url", "https://fake.modal.run"]),
                 redirect_stdout(io.StringIO()),
             ):
-                if actual_capacity == 100:
+                admitted = actual_capacity == 100 and (not configured_pacing or advertised_pacing is not None)
+                if admitted:
                     self.assertEqual(runner.main(), 0)
                     self.assertEqual(execute_worker.call_count, 100)
                 else:
-                    with self.assertRaisesRegex(ValueError, "deployed gateway capacity"):
+                    with self.assertRaisesRegex(ValueError, "deployed gateway"):
                         runner.main()
                     execute_worker.assert_not_called()
             ledger = Ledger(project.root / ".swarm/control.sqlite3", model_limit_cents=18000, infra_limit_cents=4000)
             self.assertEqual(len(ledger.rows()), 100)
-            expected_state = "awaiting_integration" if actual_capacity == 100 else "launch_failed"
+            expected_state = "awaiting_integration" if admitted else "launch_failed"
             self.assertTrue(all(row["state"] == expected_state for row in ledger.rows()))
             with ledger.connect() as db:
                 self.assertEqual(db.execute("SELECT cents FROM pilot_allocations").fetchone()[0], 18000)
                 self.assertEqual(db.execute("SELECT cents FROM pilot_infra_allocations").fetchone()[0], 3100)
             for path in (project.root / ".swarm").rglob("*.json"):
                 self.assertNotIn("fake-task-token", path.read_text())
+            if stop_error:
+                receipt = next((project.root / ".swarm").rglob("budget-stop-error.json"))
+                self.assertEqual(json.loads(receipt.read_text())["expires_in_at_most_seconds"],
+                                 runner.run_ttl_seconds(agent_timeout))
         self.assertEqual([name for name, _ in gateway_calls], ["create_run", "stop_run"])
+        self.assertEqual(gateway_calls[0][1][3], runner.run_ttl_seconds(agent_timeout))
 
     def test_dispatch_checkpoints_fast_task_before_slow_one_and_bounds_submissions(self):
         slow_released = Event()
