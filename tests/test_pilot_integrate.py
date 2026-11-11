@@ -205,7 +205,7 @@ class MergeGateTests(unittest.TestCase):
                 if "check-runs" in path:
                     return self.checks
                 return {"object": {"sha": self.base}}
-            with patch.object(integration, "candidate"), patch.object(integration, "github", side_effect=github), patch.object(integration, "common_state", return_value=Path(temporary)), patch.object(integration, "PROJECT", SimpleNamespace(ledger=Ledger, required_checks=("checks",))):
+            with patch.object(integration, "candidate"), patch.object(integration, "github", side_effect=github), patch.object(integration, "common_state", return_value=Path(temporary)), patch.object(integration, "PROJECT", SimpleNamespace(ledger=Ledger, required_checks=("checks",), model_limit_cents=1800, infra_limit_cents=700)):
                 result = integration.merge(directory, {"id": "T01", "title": "Useful work"}, self.state)
                 self.assertEqual(result["status"], "merged")
                 self.assertEqual(ledger.rows()[0]["state"], "merged")

@@ -115,6 +115,17 @@ across all bounded pages. GitHub atomically checks the head, not the base; other
 clones and clients still need coordination. Changed bases need a new validated
 attempt with old artifacts preserved.
 
+Publish and merge also read an existing ledger's stored budget policy before
+starting and immediately before branch push, PR creation or remote merge. The
+selected profile must match both cumulative limits. This prevents an old profile
+from causing a local accounting failure after a successful remote merge. The
+check opens SQLite read-only and never initializes a ledger, changes allowance or
+refunds allocations. A missing ledger preserves integration without local
+accounting; an existing ledger with an unreadable or unrecorded policy fails
+closed for reconciliation. Select the matching profile instead of resetting the
+ledger. These checks do not authorize paid work or replace coordination with
+other writers and budget migrations.
+
 After a cohort, verify sandbox termination, stop gateway runs and stop its deployed
 app when no other authorized work needs it. Reconcile billing, recorded repairs,
 reverts and full delivery time. A validated patch is not a merged green PR.
