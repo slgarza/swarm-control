@@ -176,9 +176,20 @@ class BudgetTests(unittest.TestCase):
         for tasks in (["A", "A"], [], [None], ["../x"], [str(i) for i in range(101)]):
             with self.assertRaises(PolicyError):
                 new_run("pilot", tasks, now=100)
-        for ttl in (True, 59, 1801, -1):
+        for ttl in (True, 59, 3601, -1):
             with self.assertRaises(PolicyError):
                 new_run("pilot", ["A"], ttl_seconds=ttl, now=100)
+
+    def test_opt_in_long_ttl_preserves_budget_and_expires_at_actual_deadline(self):
+        default, _ = new_run("default-window", ["A"], now=100)
+        self.assertEqual(default["expires_at"], 1900)
+        extended, _ = new_run("extended-window", ["A"], model_budget_usd=18,
+                              ttl_seconds=2700, now=100)
+        self.assertEqual(extended["expires_at"], 2800)
+        self.assertEqual(run_report(extended, now=101)["budget_usd"], 18)
+        reserve(extended, "A", 100, 100, now=2799)
+        with self.assertRaisesRegex(PolicyError, "run_expired"):
+            reserve(extended, "A", 100, 100, now=2800)
 
     def test_reserve_before_work_and_per_task_quota(self):
         pending = reserve(self.run, "A", 1000, 100, now=101)
@@ -640,16 +651,187 @@ class HTTPTests(unittest.IsolatedAsyncioTestCase):
 
     async def test_authenticated_admission_reports_actual_gateway_capacity(self):
         from swarm_control import pilot_gateway
+        from swarm_control.provider_rate import ProviderRatePolicy
 
         with (
             patch.object(pilot_gateway, "BudgetService", return_value=self.service),
             patch.object(pilot_gateway, "ModalStore", return_value=object()),
             patch.object(pilot_gateway, "MAX_UPSTREAM_REQUESTS", 100),
+            patch.object(pilot_gateway, "PROVIDER_RATE", ProviderRatePolicy(800_000, 4000)),
         ):
             issued = await pilot_gateway.create_run.local("reported-capacity", ["A"], 18, 1800)
         self.assertEqual(issued["gateway_concurrency"], 100)
+        self.assertEqual(issued["provider_rate_tpm"], 800_000)
+        self.assertEqual(issued["provider_rate_rpm"], 4000)
+        self.assertEqual(issued["provider_rate_queue_seconds"], 300)
         self.assertEqual(issued["budget_usd"], 18)
         self.assertEqual(set(issued["tokens"]), {"A"})
+
+    async def test_pacing_configuration_requires_paired_explicit_positive_limits(self):
+        from swarm_control.pilot_gateway import configured_provider_rate
+
+        with patch.dict(os.environ, {}, clear=True):
+            self.assertIsNone(configured_provider_rate())
+        for settings in (
+            {"SWARM_GATEWAY_TPM": "100"}, {"SWARM_GATEWAY_RPM": "100"},
+            {"SWARM_GATEWAY_TPM": "0", "SWARM_GATEWAY_RPM": "100"},
+            {"SWARM_GATEWAY_TPM": "100", "SWARM_GATEWAY_RPM": "-1"},
+            {"SWARM_GATEWAY_TPM": "1.5", "SWARM_GATEWAY_RPM": "100"},
+            {"SWARM_GATEWAY_TPM": "100", "SWARM_GATEWAY_RPM": ""},
+            {"SWARM_GATEWAY_TPM": "9" * 1000, "SWARM_GATEWAY_RPM": "100"},
+        ):
+            with patch.dict(os.environ, settings, clear=True), self.assertRaisesRegex(ValueError, "paired positive"):
+                configured_provider_rate()
+        with patch.dict(os.environ, {"SWARM_GATEWAY_TPM": "800000", "SWARM_GATEWAY_RPM": "4000"}, clear=True):
+            configured = configured_provider_rate()
+        self.assertEqual(configured.tokens_per_minute, 800_000)
+        self.assertEqual(configured.requests_per_minute, 4000)
+
+    async def test_pacing_uses_exact_counts_and_holds_two_sessions_before_inference(self):
+        import httpx
+
+        from swarm_control.pilot_gateway import build_web_app
+
+        class HoldingRate:
+            def __init__(self):
+                self.weights = []
+                self.counted = asyncio.Event()
+                self.release = asyncio.Event()
+
+            def deadline(self):
+                return time.monotonic() + 300
+
+            async def acquire(self, *, tokens, deadline):
+                self.weights.append((tokens, deadline))
+                if tokens:
+                    if sum(bool(weight) for weight, _ in self.weights) == 2:
+                        self.counted.set()
+                    await self.release.wait()
+
+        rate = HoldingRate()
+        service = BudgetService(MemoryStore())
+        issued = await service.create("http-paced", ["A", "B"], 18, 1800, time.time())
+        calls = []
+
+        async def upstream(request):
+            calls.append(request.url.path)
+            if request.url.path.endswith("/input_tokens"):
+                return httpx.Response(200, json={"object": "response.input_tokens", "input_tokens": 100})
+            return httpx.Response(200, headers={"content-type": "text/event-stream"},
+                                  content=b"data: " + json.dumps(completed()).encode() + b"\n\n")
+
+        web = build_web_app(service, "fake", transport=httpx.MockTransport(upstream),
+                            rate_limiter=rate)
+        async with httpx.AsyncClient(transport=httpx.ASGITransport(app=web), base_url="http://pacing.test") as client:
+            requests = [asyncio.create_task(client.post("/v1/responses", headers={
+                "Authorization": "Bearer " + issued["tokens"][task], "Content-Type": "application/json",
+            }, content=payload(max_output_tokens=32))) for task in ("A", "B")]
+            try:
+                await asyncio.wait_for(rate.counted.wait(), 2)
+                self.assertEqual(calls, ["/v1/responses/input_tokens"] * 2)
+                self.assertEqual(sorted(weight for weight, _ in rate.weights), [0, 0, 132, 132])
+                # Each count/inference pair shares its original request deadline.
+                deadlines = [deadline for _, deadline in rate.weights]
+                self.assertEqual(len(set(deadlines)), 2)
+                self.assertTrue(all(deadlines.count(value) == 2 for value in deadlines))
+                report = await service.status("http-paced", time.time())
+                self.assertTrue(all(task["count_requests"] == 1 for task in report["tasks"].values()))
+                self.assertTrue(all(task["inflight"] for task in report["tasks"].values()))
+                self.assertTrue(all(task["completed"] == 0 for task in report["tasks"].values()))
+            finally:
+                rate.release.set()
+                responses = await asyncio.gather(*requests)
+        self.assertTrue(all(response.status_code == 200 for response in responses))
+        report = await service.status("http-paced", time.time())
+        self.assertEqual(report["reserved_usd"], 0)
+        self.assertEqual(report["retained_usd"], 0)
+        self.assertTrue(all(task["completed"] == 1 for task in report["tasks"].values()))
+
+    async def test_pacing_timeout_retains_money_and_releases_slot_without_inference(self):
+        import httpx
+
+        from swarm_control.pilot_gateway import build_web_app
+        from swarm_control.provider_rate import ProviderRateLimiter, ProviderRatePolicy
+        from tests.test_provider_rate import FakeClock, settle
+
+        clock = FakeClock()
+        rate = ProviderRateLimiter(ProviderRatePolicy(4200, 100, max_wait_seconds=5),
+                                   clock=clock, sleep=clock.sleep)
+        await rate.acquire(tokens=4200)
+        calls = []
+
+        async def upstream(request):
+            calls.append(request.url.path)
+            return httpx.Response(200, json={"object": "response.input_tokens", "input_tokens": 100})
+
+        web = build_web_app(self.service, "fake", max_upstream_requests=1,
+                            transport=httpx.MockTransport(upstream), rate_limiter=rate)
+        async with httpx.AsyncClient(transport=httpx.ASGITransport(app=web), base_url="http://pacing.test") as client:
+            for _ in range(2):
+                request = asyncio.create_task(client.post("/v1/responses", headers=self.headers, content=payload()))
+                await settle()
+                self.assertFalse(request.done())
+                clock.advance(5)
+                await settle()
+                response = await request
+                self.assertEqual(response.status_code, 429)
+                self.assertEqual(response.json()["error"]["code"], "gateway_rate_wait_expired")
+                self.assertEqual(response.headers["retry-after"], "60")
+        self.assertEqual(calls, ["/v1/responses/input_tokens"] * 2)
+        report = await self.service.status("http", time.time())
+        prepared, upper = prepare_request(payload())
+        expected = 2 * cost_micro(upper, prepared["max_output_tokens"]) / 1_000_000
+        self.assertEqual(report["retained_usd"], expected)
+        self.assertEqual(report["maximum_charged_usd"], expected)
+        self.assertEqual(report["committed_usd"], 0)
+        self.assertEqual(report["reserved_usd"], 0)
+        self.assertEqual(report["tasks"]["A"]["count_requests"], 2)
+        self.assertEqual(report["tasks"]["A"]["errors"], 2)
+        self.assertEqual(report["tasks"]["A"]["completed"], 0)
+        self.assertFalse(report["tasks"]["A"]["inflight"])
+
+    async def test_cancelling_pacing_waiter_retains_reservation_and_allows_recovery(self):
+        import httpx
+
+        from swarm_control.pilot_gateway import build_web_app
+        from swarm_control.provider_rate import ProviderRateLimiter, ProviderRatePolicy
+        from tests.test_provider_rate import FakeClock, settle
+
+        clock = FakeClock()
+        rate = ProviderRateLimiter(ProviderRatePolicy(4200, 100), clock=clock, sleep=clock.sleep)
+        await rate.acquire(tokens=4200)
+        calls = []
+
+        async def upstream(request):
+            calls.append(request.url.path)
+            if request.url.path.endswith("/input_tokens"):
+                return httpx.Response(200, json={"object": "response.input_tokens", "input_tokens": 100})
+            return httpx.Response(200, headers={"content-type": "text/event-stream"},
+                                  content=b"data: " + json.dumps(completed()).encode() + b"\n\n")
+
+        web = build_web_app(self.service, "fake", max_upstream_requests=1,
+                            transport=httpx.MockTransport(upstream), rate_limiter=rate)
+        async with httpx.AsyncClient(transport=httpx.ASGITransport(app=web), base_url="http://pacing.test") as client:
+            request = asyncio.create_task(client.post("/v1/responses", headers=self.headers, content=payload()))
+            await settle()
+            self.assertEqual(calls, ["/v1/responses/input_tokens"])
+            request.cancel()
+            with self.assertRaises(asyncio.CancelledError):
+                await request
+            await settle()
+            report = await self.service.status("http", time.time())
+            self.assertGreater(report["retained_usd"], 0)
+            self.assertEqual(report["committed_usd"], 0)
+            self.assertFalse(report["tasks"]["A"]["inflight"])
+            clock.advance(60)
+            response = await client.post("/v1/responses", headers=self.headers, content=payload(max_output_tokens=32))
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(calls, ["/v1/responses/input_tokens", "/v1/responses/input_tokens", "/v1/responses"])
+        report = await self.service.status("http", time.time())
+        self.assertEqual(report["tasks"]["A"]["completed"], 1)
+        self.assertEqual(report["tasks"]["A"]["errors"], 1)
+        self.assertGreater(report["retained_usd"], 0)
+        self.assertGreater(report["committed_usd"], 0)
 
     async def test_round_trip_credentials_usage_and_immediate_followup(self):
         for _ in range(2):

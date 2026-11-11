@@ -1,6 +1,7 @@
 import hashlib
 import io
 import json
+import os
 import sqlite3
 import subprocess
 import tempfile
@@ -91,6 +92,59 @@ class ProjectTests(unittest.TestCase):
         self.assertEqual(configured.gateway_concurrency, 100)
         self.assertFalse(configured.live_enabled)
         self.assertEqual(configured.model_limit_cents, 1800)
+
+    def test_gateway_provider_pacing_is_paired_bounded_and_disabled_by_default(self):
+        project = make_project(self.root)
+        self.assertIsNone(project.gateway_tokens_per_minute)
+        self.assertIsNone(project.gateway_requests_per_minute)
+        original = project.path.read_text()
+        invalid = (
+            "gateway_tokens_per_minute = 800000", "gateway_requests_per_minute = 4000",
+            "gateway_tokens_per_minute = true\ngateway_requests_per_minute = 4000",
+            "gateway_tokens_per_minute = 0\ngateway_requests_per_minute = 4000",
+            "gateway_tokens_per_minute = 1000000001\ngateway_requests_per_minute = 4000",
+            "gateway_tokens_per_minute = 800000\ngateway_requests_per_minute = 1000001",
+            "gateway_tokens_per_minute = 800000\ngateway_requests_per_minute = -1",
+        )
+        for values in invalid:
+            project.path.write_text(original.replace("[budget]", f"[runtime]\n{values}\n[budget]"))
+            with self.subTest(values=values), self.assertRaisesRegex(ValueError, "gateway_"):
+                load_project(project.path)
+        project.path.write_text(original.replace("[budget]", "[runtime]\ngateway_tokens_per_minute = 800000\ngateway_requests_per_minute = 4000\n[budget]"))
+        configured = load_project(project.path)
+        self.assertEqual(configured.gateway_tokens_per_minute, 800000)
+        self.assertEqual(configured.gateway_requests_per_minute, 4000)
+        self.assertFalse(configured.live_enabled)
+        self.assertEqual(configured.model_limit_cents, 1800)
+        self.assertEqual(configured.infra_limit_cents, 700)
+
+    def test_deployment_pacing_comes_only_from_the_reviewed_profile(self):
+        from swarm_control import deployment
+
+        project = make_project(self.root)
+        original = project.path.read_text().replace("live_enabled = false", "live_enabled = true")
+        for configured in (False, True):
+            text = original
+            if configured:
+                text = text.replace("[budget]", "[runtime]\ngateway_tokens_per_minute = 800000\ngateway_requests_per_minute = 4000\n[budget]")
+            project.path.write_text(text)
+            configured_project = load_project(project.path)
+            with (
+                self.subTest(configured=configured),
+                patch.dict(os.environ, {"SWARM_GATEWAY_TPM": "999", "SWARM_GATEWAY_RPM": "999"}),
+                patch("sys.argv", ["deploy-gateway", "--project", str(project.path)]),
+                patch.object(deployment, "load_project", return_value=configured_project),
+                patch.object(type(project), "verify_origin"),
+                patch.object(deployment.subprocess, "run") as run,
+            ):
+                deployment.main()
+            environment = run.call_args.kwargs["env"]
+            if configured:
+                self.assertEqual(environment["SWARM_GATEWAY_TPM"], "800000")
+                self.assertEqual(environment["SWARM_GATEWAY_RPM"], "4000")
+            else:
+                self.assertNotIn("SWARM_GATEWAY_TPM", environment)
+                self.assertNotIn("SWARM_GATEWAY_RPM", environment)
 
     def test_deployment_preserves_configured_app_ledger_and_secret_names(self):
         project = make_project(self.root)

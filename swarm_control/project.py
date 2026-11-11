@@ -50,6 +50,8 @@ class Project:
     model_limit_cents: int
     infra_limit_cents: int
     gateway_concurrency: int = 20
+    gateway_tokens_per_minute: int | None = None
+    gateway_requests_per_minute: int | None = None
 
     @property
     def clone_url(self):
@@ -102,7 +104,8 @@ def load_project(path):
         (project, {"repository", "base_branch", "tasks_dir", "instructions"}),
         (validation, {"install", "checks", "required_checks"}),
         (runtime, {"network_domains", "worker_app", "gateway_app", "gateway_ledger",
-                   "gateway_concurrency", "openai_secret", "environment", "image", "setup_commands"}),
+                   "gateway_concurrency", "gateway_tokens_per_minute", "gateway_requests_per_minute",
+                   "openai_secret", "environment", "image", "setup_commands"}),
         (budget, {"live_enabled", "max_live_agents", "model_limit_cents", "infra_limit_cents"}),
     ):
         require(not set(section) - keys, "unknown project setting; check the configuration schema")
@@ -150,6 +153,14 @@ def load_project(path):
     gateway_concurrency = runtime.get("gateway_concurrency", 20)
     require(type(gateway_concurrency) is int and 1 <= gateway_concurrency <= 100,
             "runtime.gateway_concurrency must be an integer between 1 and 100")
+    rates = {field: runtime.get(field) for field in
+             ("gateway_tokens_per_minute", "gateway_requests_per_minute")}
+    require(all(value is None for value in rates.values()) or all(value is not None for value in rates.values()),
+            "runtime.gateway_tokens_per_minute and gateway_requests_per_minute must be configured together")
+    for field, maximum in (("gateway_tokens_per_minute", 10**9),
+                           ("gateway_requests_per_minute", 10**6)):
+        require(rates[field] is None or type(rates[field]) is int and 1 <= rates[field] <= maximum,
+                f"runtime.{field} must be a positive bounded integer")
     live = budget.get("live_enabled", False)
     maximum = budget.get("max_live_agents", 10)
     require(type(live) is bool, "live_enabled must be boolean")
@@ -167,4 +178,5 @@ def load_project(path):
                    string_list(validation.get("required_checks", ["checks"]), "required_checks"),
                    domains, names["worker_app"], names["gateway_app"], names["gateway_ledger"],
                    names["openai_secret"], names["environment"],
-                   image, setup, live, maximum, **limits, gateway_concurrency=gateway_concurrency)
+                   image, setup, live, maximum, **limits, gateway_concurrency=gateway_concurrency,
+                   **rates)

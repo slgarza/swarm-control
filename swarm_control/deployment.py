@@ -20,6 +20,12 @@ def main():
                SWARM_GATEWAY_LEDGER=project.gateway_ledger,
                SWARM_GATEWAY_CONCURRENCY=str(project.gateway_concurrency),
                SWARM_OPENAI_SECRET=project.openai_secret)
+    # Pacing comes from the reviewed target profile, never inherited shell values.
+    for name in ("SWARM_GATEWAY_TPM", "SWARM_GATEWAY_RPM"):
+        env.pop(name, None)
+    if project.gateway_tokens_per_minute is not None:
+        env.update(SWARM_GATEWAY_TPM=str(project.gateway_tokens_per_minute),
+                   SWARM_GATEWAY_RPM=str(project.gateway_requests_per_minute))
     subprocess.run([sys.executable, "-m", "modal", "deploy", "--env", project.environment,
                     "-m", "swarm_control.pilot_gateway"], env=env, check=True)
     return 0

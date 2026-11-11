@@ -189,7 +189,7 @@ def local_admission_summary(tasks, workers, project):
     }
 
 
-def verify_gateway_capacity(admission, workers):
+def verify_gateway_capacity(admission, workers, project=None):
     # Older gateways had twenty upstream slots. Their missing field supports
     # small cohorts only; a larger cohort must attest its deployed capacity.
     capacity = admission.get("gateway_concurrency", 20)
@@ -198,6 +198,23 @@ def verify_gateway_capacity(admission, workers):
             "deployed gateway capacity is missing or insufficient for this synchronized cohort; "
             "redeploy the configured gateway before another explicitly budgeted attempt"
         )
+    if project is not None and project.gateway_tokens_per_minute is not None:
+        expected = {"provider_rate_tpm": project.gateway_tokens_per_minute,
+                    "provider_rate_rpm": project.gateway_requests_per_minute,
+                    "provider_rate_queue_seconds": 300}
+        if any(type(admission.get(key)) is not int or admission[key] != value
+               for key, value in expected.items()):
+            raise ValueError(
+                "deployed gateway provider pacing is missing or differs from the reviewed profile; "
+                "redeploy before another explicitly budgeted attempt"
+            )
+
+
+def run_ttl_seconds(agent_timeout):
+    """Keep default expiry while covering opt-in longer coding and recovery."""
+    if type(agent_timeout) is not int or not 30 <= agent_timeout <= 1800:
+        raise ValueError("agent timeout must be between 30 and 1800 seconds")
+    return max(1800, agent_timeout + 900)
 
 
 def dispatch_tasks(tasks, workers, execute, on_complete):
@@ -322,6 +339,7 @@ def codex_command(model, gateway_url=None):
             "model_providers.swarm.capabilities.remote_compaction": "unsupported",
             "model_providers.swarm.request_max_retries": 2,
             "model_providers.swarm.stream_max_retries": 1,
+            "model_providers.swarm.stream_idle_timeout_ms": 900000,
             "model_context_window": 32768,
             "features.enable_request_compression": False,
             "web_search": "disabled",
@@ -608,7 +626,7 @@ def main():
     parser.add_argument("--project", type=Path, required=True)
     parser.add_argument("--workers", type=int, default=1)
     parser.add_argument(
-        "--timeout", type=int, default=300, help="agent time limit in seconds"
+        "--timeout", type=int, default=300, help="agent time limit in seconds, 30–1800; default 300"
     )
     parser.add_argument("--model", help="explicit OpenAI model ID for a real agent run")
     parser.add_argument("--environment")
@@ -641,8 +659,8 @@ def main():
     if args.command != "plan":
         project.require_live()
         project.verify_origin()
-    if not 30 <= args.timeout <= 300:
-        parser.error("pilot timeout must be between 30 and 300 seconds")
+    if not 30 <= args.timeout <= 1800:
+        parser.error("pilot timeout must be between 30 and 1800 seconds")
     if args.command == "run" and not args.model:
         parser.error("run requires --model")
     tasks = [load_task(task) for task in args.tasks]
@@ -697,6 +715,13 @@ def main():
         "maximum_active_agents": min(args.workers, len(tasks)),
         "enough_tasks_for_100": len(tasks) >= 100 and args.workers >= 100,
         "agent_timeout_seconds": args.timeout,
+        "sandbox_lifecycle_timeout_seconds": args.timeout + 900,
+        "gateway_run_ttl_seconds": run_ttl_seconds(args.timeout),
+        "configured_provider_pacing": {
+            "tokens_per_minute": project.gateway_tokens_per_minute,
+            "requests_per_minute": project.gateway_requests_per_minute,
+            "provider_quota_verified": False,
+        },
         "mode": args.command,
     }
     if args.command == "plan":
@@ -767,12 +792,13 @@ def main():
         try:
             if gateway:
                 admission = gateway["create_run"].remote(
-                    batch.name, [task["id"] for task in tasks], args.model_budget, 1800
+                    batch.name, [task["id"] for task in tasks], args.model_budget,
+                    run_ttl_seconds(args.timeout)
                 )
                 tokens = admission.pop("tokens")
                 write_json(batch / "budget-start.json", admission)
-                if args.synchronized:
-                    verify_gateway_capacity(admission, args.workers)
+                if args.synchronized or project.gateway_tokens_per_minute is not None:
+                    verify_gateway_capacity(admission, min(args.workers, len(tasks)), project)
             barrier = (
                 Barrier(len(tasks))
                 if args.synchronized and args.command == "run"
@@ -820,7 +846,7 @@ def main():
                         batch / "budget-stop-error.json",
                         {
                             "error_type": type(error).__name__,
-                            "expires_in_at_most_seconds": 1800,
+                            "expires_in_at_most_seconds": run_ttl_seconds(args.timeout),
                         },
                     )
                 for task in tasks:

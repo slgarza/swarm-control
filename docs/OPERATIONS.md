@@ -8,6 +8,23 @@ Live commands require an explicitly enabled, funded policy and existing provider
 authentication. Project secret names reference Modal secrets containing CODEX_API_KEY;
 real model/GitHub credentials never reach the coding workers.
 
+Inspect preparation before paid operations:
+
+```sh
+swarm-control preflight A1 A2 --project /path/to/target/swarm.toml --workers 2 --synchronized --base HEAD
+# Optional read-only GitHub issue/dependency/base/CI checks:
+swarm-control preflight A1 A2 --project /path/to/target/swarm.toml --workers 2 --synchronized --base HEAD --online
+```
+
+`preflight` reads existing claims/ledger and cached spend without initializing
+state, reserving allowance or contacting a provider. Only `--online` permits
+GitHub GETs. Exit zero means the checked source-preparation scope passed; it can
+coexist with insufficient local allowance, disabled execution and unverified
+provider capacity/authorization. `launch_ready` always remains false. Keep the
+raw financial report private. See [deployment preflight](DEPLOYMENT_PREFLIGHT.md).
+
+The following commands are distinct paid stages requiring actual authorization:
+
 ```sh
 swarm-control deploy-gateway --project /path/to/target/swarm.toml
 swarm-control probe --project /path/to/target/swarm.toml --gateway-url https://YOUR-GATEWAY.modal.run
@@ -17,8 +34,8 @@ swarm-control run A1 A2 --project /path/to/target/swarm.toml --workers 2 --synch
 Obtain the gateway origin from Modal's deployed application or
 `modal.Function.from_name(GATEWAY_APP, "gateway").get_web_url()`.
 Deploy uses the configured app, durable gateway ledger, secret name and environment;
-keep all three identifiers unchanged when migrating an existing deployment.
-Afterimage's profile retains its original identifiers. Extraction deploys nothing.
+keep the app, ledger, secret and environment identifiers unchanged when migrating
+an existing deployment. Extraction deploys nothing.
 
 The probe reserves USD0.50 model and USD1.35 infrastructure allowance. Worker
 admission reserves USD0.30 per VM plus USD1 overhead, before provisioning. Models
@@ -29,7 +46,11 @@ See [gateway details](GATEWAY.md).
 
 Each worker gets one task, an exact base, isolated checkout and bounded gateway
 token. Synchronized batches wait for all preparations before starting. VM limits
-remain 2 CPU/2 GiB maximum, 300 seconds agent time and 1200 seconds total lifecycle.
+remain 2 CPU/2 GiB maximum, requested at 0.5 CPU/512 MiB. Coding time defaults to
+300 seconds; explicit `--timeout` accepts 30–1800 seconds. Lifecycle is coding
+timeout plus 900 seconds, at most 2700. Gateway TTL is `max(1800, timeout + 900)`,
+within its independent 3600-second ceiling. Thus opting into 1800-second sessions
+uses TTL 2700; the default keeps TTL 1800. Longer sessions do not grant allowance.
 Patches, hashes, events and final checks are recovered before termination; inspect
 any recovery or cleanup failure. Original private artifacts remain under the
 target's ignored `.swarm/`, shared with its Git worktrees.
@@ -51,6 +72,19 @@ The operator must still match the supplied HTTP URL to that gateway app. The sin
 gateway accepts 120 HTTP inputs; capacity waiting stops after 15 seconds with
 `429 gateway_busy`, no provider call and no budget reservation. This bounds local
 pressure; it does not prove provider capacity or useful live overlap.
+
+Optional paired token/request pacing is configured in the target profile and
+requires redeployment. It counts token preflights toward RPM, then reserves
+verified input plus maximum output token permits for inference. Count and
+inference share a 300-second deadline **after** money reservation, whereas the
+15-second capacity wait above precedes reservation. Pacing failure/cancellation
+retains money and consumed permits; no optimistic refund or refill occurs.
+The runner checks exact authenticated deployed TPM/RPM/queue settings against
+the profile. Pacing keeps the idle gateway warm for 90 seconds (otherwise 30),
+but its history is process-local and resets on crash/redeployment/container restart;
+verify actual provider quota and other traffic independently. The HTTP handler
+and worker stream idle timeout are 900 seconds (`900000` ms for Codex). Include
+all waits/throttles in elapsed time and compute cost. See [gateway policy](GATEWAY.md).
 
 Review each full patch and acceptance tests, then use one integrator:
 
@@ -93,6 +127,7 @@ These commands do not automatically move through every stage for you.
 | Command | What it does | External effects |
 | --- | --- | --- |
 | `plan TASK...` | Validate local task structure/ownership, resolve a local base ref and print potential concurrency | No cloud calls, budget reservation or GitHub writes |
+| `preflight TASK...` | Inspect prepared source, existing claims/allowance, cached spend and configured resource/runtime requirements | Offline by default; `--online` adds GitHub GETs only; no admission/deployment or launch approval |
 | `smoke TASK...` | Create worker environments, clone/install/check the unchanged target and recover artifacts | Paid Modal resources and infrastructure allocation; no coding model calls or delivered feature |
 | `deploy-gateway` | Deploy the configured trusted model service | Modal deployment/build costs possible; no coding cohort |
 | `probe` | Exercise the real gateway/model/tool round trip in one bounded sandbox | Paid model/Modal usage and durable allowance allocation |
@@ -114,7 +149,8 @@ dependency metadata permit work. Dependencies need local `merged` status and a
 positive `pullRequest` number; the paid admission still verifies their real GitHub
 merge and inclusion in the selected base. The summary also checks the configured
 worker cap and minimum infrastructure admission reserve. A 100-task cohort needs
-a USD31 infrastructure reserve, exceeding the original USD7 pilot policy.
+a USD31 infrastructure admission reserve before earlier allocations/setup; that
+is a local control amount, not actual provider cost.
 
 This summary does not open the budget ledger or contact GitHub/providers. Remaining
 allowances stay unknown, and `launch_readiness_verified` stays false even when all
@@ -143,9 +179,9 @@ These flags apply to `plan`, `smoke` and `run` unless stated otherwise:
 | `--project PATH` | Required root target configuration |
 | `--workers N` | Maximum submitted workers, default 1; accepts 1–100, live is capped by the project limit (default ten) |
 | `--base REF` | Local commit/ref, default `origin/<base_branch>`; workers need that exact commit available remotely |
-| `--timeout SECONDS` | Agent time limit from 30 to 300, default 300; does not include all setup/recovery time |
+| `--timeout SECONDS` | Agent coding time from 30 to 1800, default 300; longer sessions require explicit selection and do not include all setup/recovery time |
 | `--synchronized` | Require exactly one task per requested worker; real agents start after all worker preparations reach the barrier |
-| `--allow-overlap` | `plan`/`run` only: permit declared shared ownership in isolated checkouts and record overlap pairs; worker scope checks remain enforced |
+| `--allow-overlap` | `plan`/`preflight`/`run` only: inspect or permit declared shared ownership in isolated checkouts; worker scope checks remain enforced |
 | `--model MODEL` | Required for `run`; only `gpt-6.1-sol` is supported by the current priced gateway |
 | `--model-budget USD` | Required for `run`; total cohort model allowance, positive whole cents, at most USD180 and within remaining local allowance |
 | `--gateway-url ORIGIN` | Required for `run`; HTTPS `*.modal.run` origin with no `/v1`, credentials, query or port |

@@ -21,7 +21,7 @@ MAX_BODY_BYTES = 200_000
 MAX_INPUT_TOKENS = 240_000  # Below the 272K long-context pricing threshold.
 MAX_OUTPUT_TOKENS = 4096
 MAX_REQUESTS = 60
-MAX_TTL_SECONDS = 1800
+MAX_TTL_SECONDS = 3600
 MAX_TASKS = 100
 # USD per million tokens, with a further 10% allowance. Cached inputs are
 # deliberately charged at the highest input/cache-write rate, not discounted.

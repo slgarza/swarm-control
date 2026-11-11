@@ -10,7 +10,8 @@ accounts or knowledge of the development conversation.
 | Reader | Start here | Continue with |
 | --- | --- | --- |
 | First-time user | [Quickstart: a local two-task example](QUICKSTART.md) | [Architecture](ARCHITECTURE.md) |
-| Operator launching real agents | [Two-agent walkthrough](TWO_AGENT_WALKTHROUGH.md) | [Project settings](PROJECTS.md), [operations](OPERATIONS.md), [troubleshooting](TROUBLESHOOTING.md) |
+| Operator preparing deployment | [Deployment preflight](DEPLOYMENT_PREFLIGHT.md) | [Project settings](PROJECTS.md), [spend reporting](BILLING.md), [operations](OPERATIONS.md) |
+| Operator launching real agents | [Two-agent walkthrough](TWO_AGENT_WALKTHROUGH.md) | [Deployment preflight](DEPLOYMENT_PREFLIGHT.md), [operations](OPERATIONS.md), [troubleshooting](TROUBLESHOOTING.md) |
 | Competition reviewer | [Presentation and current evidence](contest/PRESENTATION.md) | [Target assessment](contest/TARGET-ASSESSMENT.md), [benchmark protocol](contest/BENCHMARK.md), [evidence requirements](contest/EVIDENCE.md) |
 | Contributor | [Architecture](ARCHITECTURE.md) | [Repository contract](../AGENTS.md), [scaling roadmap](SCALING.md), [gateway policy](GATEWAY.md) |
 
@@ -31,6 +32,13 @@ shared-file conflict repair, or compare against the strongest AFK pipeline.
 The larger-cohort dispatcher, gateway backpressure and collision handling have
 offline coverage. Useful 100-agent operation and AFK efficiency remain unproven;
 a real run is a separate, budgeted operation.
+
+Read-only `preflight` separates checked source preparation from local admission,
+current provider capacity and actual authorization. Its successful exit never
+grants a launch. Optional paired gateway token/request pacing and opt-in longer
+coding sessions have bounded queues/expiry; the default session remains 300
+seconds. Pacing waits and retained reservations are reported separately from
+actual provider spend and useful concurrent contribution.
 
 ## Terminology
 

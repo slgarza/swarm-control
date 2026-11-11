@@ -38,8 +38,8 @@ infra_limit_cents = 0
 
 The disabled flag and zero budgets are intentional. Specify an allowance only
 when authorized. Recorded limits are immutable without an explicit budget
-migration; never delete a ledger to obtain new allowance. The original Afterimage
-policy remains USD18 model/USD7 infrastructure with all prior allocations intact.
+migration; never delete a ledger to obtain new allowance. Preserve every prior
+allocation when reviewing a cumulative increase.
 The gateway hard ceiling is USD180 and 100 tasks per run. Its administrative
 default remains USD18, and the profile's default capacity remains ten. Larger
 capacity does not increase an existing durable allowance or authorize spending.
@@ -97,6 +97,8 @@ a nested template directory is not a separate target checkout.
 | `runtime.gateway_app` | `swarm-control-gateway` | Modal application hosting the trusted model gateway |
 | `runtime.gateway_ledger` | `swarm-control-budget-v1` | Durable Modal Dict name; preserve it across deployment/migration |
 | `runtime.gateway_concurrency` | `20` | Integer 1–100 limiting concurrent upstream requests in the single gateway container |
+| `runtime.gateway_tokens_per_minute` | Omitted: pacing disabled | Optional integer 1–1,000,000,000 for conservative rolling-minute token permits; requires the request field too |
+| `runtime.gateway_requests_per_minute` | Omitted: pacing disabled | Optional integer 1–1,000,000 for rolling-minute request permits; requires the token field too |
 | `runtime.openai_secret` | `swarm-control-openai` | Modal secret name containing `CODEX_API_KEY` |
 | `runtime.environment` | `main` | Modal environment within the authenticated workspace |
 | `runtime.image` | `node:24.6.0-bookworm-slim` | Worker container image; the current build expects apt support |
@@ -113,17 +115,51 @@ ceiling or the original user's authorization. Existing
 SQLite policy limits must match the stored policy exactly.
 
 For a synchronized 100-agent stage, the target must explicitly configure both
-`budget.max_live_agents = 100` and `runtime.gateway_concurrency = 100`, after
-verifying model/API and VM quota. Synchronized live runs exceeding the configured
+`budget.max_live_agents = 100` and `runtime.gateway_concurrency = 100`. Verify
+model/API and VM quota before live execution. Synchronized live runs exceeding the configured
 gateway capacity are rejected before allocation. Plans report that insufficiency.
 Deployment carries the
 latter through `SWARM_GATEWAY_CONCURRENCY`. The serving container admits 120 HTTP
-inputs; provider capacity waits at most 15 seconds before a no-charge 429. Keep
+inputs; waiting for a gateway slot takes at most 15 seconds before a 429 with
+no reservation or provider call. Keep
 the checked-in tutorial's disabled live policy and zero budgets. Changing gateway
 capacity requires redeployment. The runner checks authenticated gateway admission
 capacity before synchronized worker launch; cohorts above 20 reject a missing
 capacity field. Admission mismatches stop the run with its allocation retained.
 The operator must still verify the supplied HTTP URL belongs to that gateway app.
+
+Optional pacing requires **both** `runtime.gateway_tokens_per_minute` and
+`runtime.gateway_requests_per_minute`; omit both to retain disabled pacing.
+Choose them from actual current account/model limits and other traffic, leaving
+reviewed headroom. A batch-queue limit is not evidence of an interactive daily
+quota. Deployment sets `SWARM_GATEWAY_TPM` / `SWARM_GATEWAY_RPM` from those fields,
+or removes ambient values when they are omitted. Changes require redeployment.
+The runner checks exact authenticated TPM/RPM/shared-queue settings against the
+reviewed profile when pacing is configured. An admission mismatch retains the
+earlier local allocation; it does not silently deploy or refund.
+
+The gateway counts each token-count preflight and inference as an RPM permit;
+inference reserves verified input plus maximum output token permits. Their shared
+300-second deadline includes count elapsed time, after the durable money
+reservation. A pacing failure/cancellation retains money; this differs from the
+15-second pre-reservation slot wait. Pacing uses a 90-second scale-down window
+(otherwise 30 seconds) to cover normal idle periods, but history is process-local
+and still resets on crash/redeployment/container restart. It cannot attest
+provider quota or coordinate unrelated gateway/account traffic. See
+[gateway details](GATEWAY.md).
+
+Coding time is a CLI setting, not another TOML key: `--timeout` accepts 30–1800
+seconds and defaults to 300. Sandbox lifecycle is coding timeout plus 900 seconds;
+gateway run TTL is `max(1800, timeout + 900)`, so an explicit 1800-second session
+uses 2700 seconds. The gateway's independent TTL ceiling is 3600 seconds. Longer
+sessions do not raise model/infra allowances or authorize execution. Gateway HTTP
+handlers are bounded at 900 seconds and the worker model stream idle timeout is
+900000 ms. Review wait/expiry and capacity before selecting a longer session.
+
+The profile must be directly at the target checkout root. A separately approved
+private runtime profile can use an ignored root-level filename; a nested `.swarm/`
+profile is unsupported. Keep it outside Git and bind its exact bytes to the actual
+release/migration. Use [preflight](DEPLOYMENT_PREFLIGHT.md) before live operations.
 
 Runtime app/ledger/secret/environment names accept 1–100 letters, digits,
 underscores or hyphens. Network entries are hostnames, without URL schemes,
@@ -188,8 +224,8 @@ completed pilot tickets.
    dependency domains appropriate to that project.
 3. Translate a small set of actual issues into bounded tasks with ownership,
    dependencies and independent acceptance tests.
-4. Run a local plan, then an authorized compatibility probe and small cohort
-   using [the walkthrough](TWO_AGENT_WALKTHROUGH.md).
+4. Run a local plan and read-only preflight, then an authorized compatibility probe
+   and small cohort using [the walkthrough](TWO_AGENT_WALKTHROUGH.md).
 5. Measure integration and quality before expanding the workload. Use the
    [scaling roadmap](SCALING.md) for larger-cohort capacity and evidence gates.
 
