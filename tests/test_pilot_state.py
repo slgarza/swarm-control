@@ -159,9 +159,11 @@ class BudgetAdmissionTests(unittest.TestCase):
         })
         self.assertEqual(len(self.ledger.rows()), 10)
         self.ledger.finish("T01", "pilot", "failed", "failed-report")
-        with self.assertRaisesRegex(ValueError, "model allowance is exhausted"):
+        with self.assertRaisesRegex(ValueError, "model allowance is exhausted") as rejected:
             self.ledger.claim([tasks[0]], "retry", "a" * 40, retry=True,
                               budget_cents=1, infra_cents=1)
+        self.assertIn("local admission", str(rejected.exception))
+        self.assertIn("not provider spending or account credit", str(rejected.exception))
         self.assertEqual(self.ledger.rows()[0]["state"], "failed")
         self.assertNotIn("retry", self.allocations()["model"])
         self.assertEqual(sum(self.allocations()["infra"].values()), 550)

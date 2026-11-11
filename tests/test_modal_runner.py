@@ -3,7 +3,9 @@
 import hashlib
 import io
 import json
+import os
 import subprocess
+import sys
 import tempfile
 import unittest
 from contextlib import redirect_stderr, redirect_stdout
@@ -94,6 +96,24 @@ class WorkerTests(unittest.TestCase):
         self.assertFalse(runner.eligible_result(1, 0, result))
         self.assertFalse(runner.eligible_result(0, 1, result))
         self.assertFalse(runner.eligible_result(None, 0, result))
+
+    def test_target_validation_cannot_read_administrative_billing_keys(self):
+        secret_names = ("CODEX_API_KEY", "OPENAI_API_KEY", "OPENAI_ADMIN_KEY",
+                        "OPENAI_ADMIN_API_KEY", "GH_TOKEN", "GITHUB_TOKEN")
+        environment = {name: "synthetic-secret" for name in secret_names}
+        environment["SWARM_TEST_SETTING"] = "preserved"
+        probe = "import json,os; print(json.dumps(dict(os.environ)))"
+        log = self.root / "validation.log"
+        with patch.dict(os.environ, environment, clear=True):
+            exit_code = worker.run_commands([[sys.executable, "-c", probe]], self.repo, log)
+            # Filtering applies only to child commands; trusted billing code in
+            # this process retains access to the operator's explicit credential.
+            self.assertEqual(os.environ["OPENAI_ADMIN_KEY"], "synthetic-secret")
+        self.assertEqual(exit_code, 0)
+        received = json.loads(log.read_text())
+        self.assertEqual(received["SWARM_TEST_SETTING"], "preserved")
+        self.assertTrue(set(secret_names).isdisjoint(received))
+        self.assertNotIn("synthetic-secret", log.read_text())
 
     def test_benchmark_receipts_preserve_exact_utf8_without_copying_budget_or_logs(self):
         receipts = self.repo / ".swarm/benchmarks"
@@ -290,6 +310,11 @@ class PlanningTests(unittest.TestCase):
         self.assertFalse(admission["infrastructure_policy_covers_minimum_reserve"])
         self.assertIsNone(admission["remaining_infrastructure_allowance_cents"])
         self.assertFalse(admission["budget_ledger_checked"])
+        self.assertEqual(admission["budget_accounting_kind"], "local_admission_reservations_not_provider_spend")
+        self.assertFalse(admission["provider_billing_queried"])
+        self.assertIsNone(admission["provider_reported_spend_usd"])
+        self.assertIsNone(admission["provider_credit_balance_usd"])
+        self.assertIsNone(admission["provider_funds_exhausted"])
         self.assertFalse(admission["launch_readiness_verified"])
 
     def test_local_admission_does_not_count_blocked_or_duplicate_issue_work(self):
@@ -372,7 +397,8 @@ class PlanningTests(unittest.TestCase):
         command = runner.codex_command("example-model")
         self.assertIn("--ignore-user-config", command)
         self.assertIn(
-            'shell_environment_policy.exclude=["CODEX_API_KEY","OPENAI_API_KEY"]',
+            'shell_environment_policy.exclude=["CODEX_API_KEY","OPENAI_API_KEY",'
+            '"OPENAI_ADMIN_KEY","OPENAI_ADMIN_API_KEY"]',
             command,
         )
         fake_key = "sk-" + "x" * 30

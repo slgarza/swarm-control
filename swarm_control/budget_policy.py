@@ -151,6 +151,34 @@ def inspect(project):
         with connection(path, "ro") as db:
             result.update(snapshot(db))
             result["ledger_identity"] = identity(path)
+    # Retain the original JSON fields for migration clients, but identify their
+    # actual meaning. Neither an allocation nor its local remainder is a bill
+    # or the balance of the provider account.
+    limits = result.get("policy", {key: getattr(project, key) for key in LIMIT_KEYS})
+    totals = result.get("allocation_totals")
+    remaining = result.get("remaining_allowances")
+    result.update(
+        accounting_kind="local_admission_reservations",
+        remaining_allowances_meaning="unreserved_local_admission_allowance_not_provider_balance",
+        local_admission_policy={
+            "currency": "usd", "amount_unit": "whole_cents",
+            "limits_source": result.get("policy_source", "profile_without_ledger"),
+            "limits_cents": {"model": limits["model_limit_cents"],
+                             "infrastructure": limits["infra_limit_cents"]},
+            "reserved_cents": {"model": totals["model_cents"], "infrastructure": totals["infra_cents"]}
+            if totals is not None else None,
+            "unreserved_cents": {"model": remaining["model_cents"], "infrastructure": remaining["infra_cents"]}
+            if remaining is not None else None,
+            "profile_matches_recorded_policy":
+                {key: getattr(project, key) for key in LIMIT_KEYS} == limits if totals is not None else None,
+            "provider_balance": False, "measures_actual_spend": False,
+        },
+        provider_account={
+            "queried": False, "reported_spend_usd": None,
+            "credit_balance_usd": None, "monthly_spend_limit_usd": None,
+            "reason": "inspect_reads_only_local_admission_policy_use_budget_status_for_spend_evidence",
+        },
+    )
     return result
 
 
@@ -276,6 +304,9 @@ def apply(project, plan_file, authorization_file, *, explicitly_apply=False):
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     subparsers = parser.add_subparsers(dest="command", required=True)
+    from .budget_reporting import add_commands, run_command
+
+    add_commands(subparsers)
     for name in ("inspect", "plan", "apply"):
         command = subparsers.add_parser(name)
         command.add_argument("--project", type=Path, required=True)
@@ -288,6 +319,8 @@ def main():
             command.add_argument("--apply", action="store_true", required=True)
     args = parser.parse_args()
     project = load_project(args.project)
+    if args.command in {"status", "import-spend", "sync-openai"}:
+        return run_command(project, args)
     if args.command == "inspect":
         result = inspect(project)
     elif args.command == "plan":

@@ -6,6 +6,12 @@ increase is a separate, explicit offline operation requiring a reviewed plan and
 a private receipt of the owner's actual authorization. A plan is not authorization.
 This guide does not approve any increase for Afterimage or another project.
 
+Start with [spend reporting](BILLING.md) when assessing money. A local admission
+policy and its retained reservations do not describe provider spend or account
+credit. `budget status` separates those sources; `budget inspect` stays compatible
+with migration clients and now labels its old fields explicitly. Never propose
+a policy increase on the assumption that reserved amounts were actual bills.
+
 All operations select the target's root `swarm.toml`. Git worktrees use the
 original checkout's `.swarm/control.sqlite3` and the same dispatcher/integration
 locks. There are no provider calls, gateway deployments, probes, worker launches,

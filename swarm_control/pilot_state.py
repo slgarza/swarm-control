@@ -72,7 +72,11 @@ class Ledger:
                 raise ValueError(f"run {run_id} already has an allocation")
             allocated = db.execute(f"SELECT COALESCE(SUM(cents),0) FROM {table}").fetchone()[0]
             if allocated + amount > maximum:
-                raise ValueError(f"the approved pilot {name} allowance is exhausted")
+                raise ValueError(
+                    f"local admission {name} allowance is exhausted; this counts retained "
+                    "reservations, not provider spending or account credit. "
+                    "Use 'swarm-control budget status' to inspect the separate sources."
+                )
         db.execute("INSERT INTO pilot_allocations VALUES (?,?)", (run_id, cents))
         db.execute("INSERT INTO pilot_infra_allocations VALUES (?,?)", (run_id, infra_cents))
 
