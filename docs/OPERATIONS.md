@@ -131,6 +131,11 @@ provider resource.
 
 ## Runner flags
 
+For financial context, use `swarm-control budget status --project /path/to/target/swarm.toml`.
+Its local reservation amounts, cached provider spend and unknown account credit
+are separate fields. Only explicit `budget sync-openai` queries the provider;
+status and `plan` make no network calls. See [spend reporting](BILLING.md).
+
 These flags apply to `plan`, `smoke` and `run` unless stated otherwise:
 
 | Flag | Meaning |

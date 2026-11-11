@@ -80,6 +80,41 @@ class BudgetPolicyTests(unittest.TestCase):
             budget.plan(project, self.increase)
         self.assertFalse((project.root / ".swarm").exists())
 
+    def test_inspection_labels_reservations_without_claiming_exhausted_provider_funds(self):
+        before = self.rows()
+        inspected = budget.inspect(self.project)
+        local = inspected["local_admission_policy"]
+        self.assertEqual(local["reserved_cents"], {"model": 1800, "infrastructure": 670})
+        self.assertEqual(local["unreserved_cents"], {"model": 0, "infrastructure": 30})
+        self.assertEqual(local["amount_unit"], "whole_cents")
+        self.assertFalse(local["provider_balance"])
+        self.assertFalse(local["measures_actual_spend"])
+        self.assertTrue(local["profile_matches_recorded_policy"])
+        self.assertFalse(inspected["provider_account"]["queried"])
+        self.assertIsNone(inspected["provider_account"]["reported_spend_usd"])
+        self.assertIsNone(inspected["provider_account"]["credit_balance_usd"])
+        self.assertIsNone(inspected["provider_account"]["monthly_spend_limit_usd"])
+        self.assertEqual(self.rows(), before)
+        self.assertFalse(inspected["authorizes_spend"])
+
+    def test_missing_ledger_never_invents_zero_provider_spend_or_known_reservations(self):
+        project = make_project(self.root / "no-history")
+        inspected = budget.inspect(project)
+        self.assertIsNone(inspected["local_admission_policy"]["reserved_cents"])
+        self.assertIsNone(inspected["local_admission_policy"]["unreserved_cents"])
+        self.assertIsNone(inspected["provider_account"]["reported_spend_usd"])
+        self.assertIsNone(inspected["provider_account"]["credit_balance_usd"])
+        self.assertFalse((project.root / ".swarm").exists())
+
+    def test_unmigrated_profile_increase_does_not_change_reported_recorded_policy(self):
+        self.project.path.write_text(self.project.path.read_text().replace(
+            "model_limit_cents = 1800", "model_limit_cents = 20000",
+        ))
+        inspected = budget.inspect(load_project(self.project.path))
+        self.assertEqual(inspected["local_admission_policy"]["limits_cents"]["model"], 1800)
+        self.assertFalse(inspected["local_admission_policy"]["profile_matches_recorded_policy"])
+        self.assertIsNone(inspected["provider_account"]["credit_balance_usd"])
+
     def test_legacy_inspect_and_plan_are_read_only_with_explicit_original_policy(self):
         self.remove_policy()
         before = self.path.read_bytes()

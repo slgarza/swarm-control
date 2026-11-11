@@ -168,6 +168,7 @@ def local_admission_summary(tasks, workers, project):
     reserve = infrastructure_reserve_cents(len(tasks))
     return {
         "scope": "local_metadata_only",
+        "budget_accounting_kind": "local_admission_reservations_not_provider_spend",
         "ready_task_ids": ready,
         "ready_task_count": len(ready),
         "blocked_tasks": blockers,
@@ -177,6 +178,10 @@ def local_admission_summary(tasks, workers, project):
         "infrastructure_policy_covers_minimum_reserve": reserve <= project.infra_limit_cents,
         "remaining_model_allowance_cents": None,
         "remaining_infrastructure_allowance_cents": None,
+        "provider_billing_queried": False,
+        "provider_reported_spend_usd": None,
+        "provider_credit_balance_usd": None,
+        "provider_funds_exhausted": None,
         "budget_ledger_checked": False,
         "github_readiness_checked": False,
         "provider_capacity_verified": False,
@@ -297,7 +302,8 @@ def codex_command(model, gateway_url=None):
         "-c",
         "features.multi_agent=false",
         "-c",
-        'shell_environment_policy.exclude=["CODEX_API_KEY","OPENAI_API_KEY"]',
+        ('shell_environment_policy.exclude=["CODEX_API_KEY","OPENAI_API_KEY",'
+         '"OPENAI_ADMIN_KEY","OPENAI_ADMIN_API_KEY"]'),
         "--cd",
         "/workspace/repo",
         "--output-last-message",
@@ -656,7 +662,8 @@ def main():
     if args.command == "run":
         if args.model_budget is None:
             parser.error(
-                "run requires --model-budget within the remaining pilot allowance"
+                "run requires --model-budget within the local admission policy; "
+                "provider spending and account credit are separate"
             )
         if args.model != "gpt-6.1-sol":
             parser.error("the priced pilot supports only gpt-6.1-sol")

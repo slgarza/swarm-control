@@ -27,6 +27,7 @@ delivered ten reviewed, merged PRs, including one coordinator code repair.
 | [Two-agent walkthrough](docs/TWO_AGENT_WALKTHROUGH.md) | Own-account setup, real issues, budget, execution, review, PRs, merge and cleanup |
 | [Project reference](docs/PROJECTS.md) | Every configuration field and the task format |
 | [Operations](docs/OPERATIONS.md) | Commands, side effects, flags and integration gates |
+| [Spend reporting](docs/BILLING.md) | Provider cost evidence, source freshness and local reservations without invented account balances |
 | [Budget migration](docs/BUDGET_MIGRATION.md) | Read-only proposals and separately authorized cumulative increases preserving every allocation |
 | [Troubleshooting](docs/TROUBLESHOOTING.md) | Setup, budget, worker and integration failures |
 | [Presentation](docs/contest/PRESENTATION.md) | Seven-minute outline, real pilot results and remaining contest requirements |
@@ -95,6 +96,12 @@ Offline tests cover the new capacity, backpressure and collision paths. Real pro
 capacity, useful 100-agent overlap and efficiency remain unproven. The next steps
 are a second real target, measured 25 → 50 → 100 cohorts and the strong AFK comparison
 with separately authorized budgets. See [scaling](docs/SCALING.md).
+
+Before discussing budget, run `swarm-control budget status --project /path/to/target/swarm.toml`.
+It distinguishes retained local admission reservations from provider-reported
+spend and unknown account credit. Explicit billing synchronization can read the
+OpenAI Costs API; imported observations keep their source and scope. See
+[spend reporting](docs/BILLING.md). A spent local allocation is not a provider bill.
 
 ## Validation
 

@@ -69,7 +69,8 @@ def integration_lock(state):
 
 def command(argv, cwd, *, data=None, log=None):
     env = {key: value for key, value in os.environ.items()
-           if key not in {"MODAL_TOKEN_ID", "MODAL_TOKEN_SECRET"} and not key.endswith("_API_KEY")}
+           if key not in {"MODAL_TOKEN_ID", "MODAL_TOKEN_SECRET", "OPENAI_ADMIN_KEY",
+                          "OPENAI_ADMIN_API_KEY"} and not key.endswith("_API_KEY")}
     if argv[0] != "gh":
         env = {key: value for key, value in env.items()
                if key not in {"GH_TOKEN", "GITHUB_TOKEN"} and not key.endswith("_API_KEY")}

@@ -1,0 +1,110 @@
+{
+  "version": 1,
+  "kind": "controller_budget_reporting_preparation",
+  "recorded_at_utc": "2026-11-11T14:38:30.521777+00:00",
+  "source_date": "2026-11-11",
+  "instrumented_started_at_utc": "2026-11-11T14:26:57.937662+00:00",
+  "instrumented_preparation_seconds": 692.584137938,
+  "whole_preparation_seconds": null,
+  "clock_limit": "Initial inspection before instrumentation and subsequent publication/CI are outside this segment. This is not a live swarm delivery clock.",
+  "validation": {
+    "unit_tests_passed": 198,
+    "commands": [
+      {
+        "argv": [
+          ".venv/bin/python",
+          "-m",
+          "unittest",
+          "discover",
+          "-s",
+          "tests",
+          "-p",
+          "test_*.py"
+        ],
+        "exit_code": 0,
+        "duration_seconds": 22.101424770007725,
+        "stdout_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+        "stderr_sha256": "b026223a83db2d3c2725ae4541155a2be3eb1b1096260af3fe2edf9c13645917"
+      },
+      {
+        "argv": [
+          ".venv/bin/ruff",
+          "check",
+          "--isolated",
+          "swarm_control",
+          "tests",
+          "examples"
+        ],
+        "exit_code": 0,
+        "duration_seconds": 0.02569314299034886,
+        "stdout_sha256": "82b3e6a6c090a57601d22943bd23fca9218d1031dbe5a7b754092f9a156b4f18",
+        "stderr_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+      },
+      {
+        "argv": [
+          ".venv/bin/python",
+          "-m",
+          "compileall",
+          "-q",
+          "swarm_control",
+          "examples"
+        ],
+        "exit_code": 0,
+        "duration_seconds": 0.07920803100569174,
+        "stdout_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+        "stderr_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+      },
+      {
+        "argv": [
+          "git",
+          "diff",
+          "--check"
+        ],
+        "exit_code": 0,
+        "duration_seconds": 0.01476453999930527,
+        "stdout_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+        "stderr_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+      }
+    ],
+    "total_seconds": 22.22462488801102,
+    "private_receipt_sha256": "f56ea8db93db959120c6f7cee80d063569cb0cae201ab3a65382402c58ce668b"
+  },
+  "actual_target_demonstration": {
+    "performed": true,
+    "reported_source_kind": "dashboard_observation",
+    "provider_api_verified": false,
+    "observation_time_unknown_preserved": true,
+    "organization_total_attributed_to_repository": false,
+    "ledger_logical_state_unchanged": true,
+    "budget_profile_bytes_unchanged": true,
+    "duration_seconds": 1.270583727004123,
+    "real_billing_values_published": false
+  },
+  "openai_admin_credential_configured": false,
+  "live_costs_api_request_performed": false,
+  "provider_adapter_validation": "Offline MockTransport responses, pagination, decimal precision, scope, source preservation and tamper tests",
+  "known_preparation_failures": [
+    {
+      "stage": "initial local assertion placement",
+      "result": "One targeted test error from a misplaced assertion",
+      "correction": "Moved it back into the missing-ledger fixture; subsequent focused and full tests passed."
+    },
+    {
+      "stage": "initial reporting fixtures",
+      "result": "Delegated initial fixture run had mismatched metadata/source requirements",
+      "correction": "Corrected fixtures to use actual MockTransport captures and preserved original-source bytes, without relaxing source or authorization checks."
+    }
+  ],
+  "scope_limits": [
+    "Status reads cache offline; only an explicit sync command makes provider GET requests.",
+    "API source confirmation is not a reconciled invoice or account credit balance.",
+    "Operator imports cannot assert API verification. Local cache digests detect accidental corruption, not operator forgery.",
+    "No project allowance was increased and no allocation was released or deleted.",
+    "Provider/account identifiers, user billing amounts, original imports and cache remain private."
+  ],
+  "paid_worker_runs_created": 0,
+  "gateway_deployments_created": 0,
+  "budget_migrations_applied": 0,
+  "actual_billed_preparation_cost_usd": null,
+  "contest_win_proven": false
+}

@@ -136,7 +136,8 @@ def run(args, cwd, *, check=True):
     env = {
         key: value
         for key, value in os.environ.items()
-        if key not in {"CODEX_API_KEY", "OPENAI_API_KEY", "GH_TOKEN", "GITHUB_TOKEN"}
+        if key not in {"CODEX_API_KEY", "OPENAI_API_KEY", "OPENAI_ADMIN_KEY",
+                       "OPENAI_ADMIN_API_KEY", "GH_TOKEN", "GITHUB_TOKEN"}
     }
     return subprocess.run(args, cwd=cwd, env=env, check=check, capture_output=True)
 

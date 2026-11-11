@@ -214,6 +214,7 @@ class MergeGateTests(unittest.TestCase):
 
     def test_build_commands_receive_no_model_or_github_keys(self):
         environment = {"PATH": os.environ["PATH"], "OPENAI_API_KEY": "model", "CODEX_API_KEY": "model",
+                       "OPENAI_ADMIN_KEY": "billing-admin", "OPENAI_ADMIN_API_KEY": "billing-admin-alias",
                        "OTHER_API_KEY": "other", "GH_TOKEN": "github", "GITHUB_TOKEN": "github",
                        "MODAL_TOKEN_SECRET": "modal"}
         with patch.dict(os.environ, environment, clear=True), patch.object(integration.subprocess, "run", return_value=subprocess.CompletedProcess([], 0, b"{}", b"")) as run:
@@ -222,6 +223,8 @@ class MergeGateTests(unittest.TestCase):
             integration.command(["gh", "api"], Path("."))
             self.assertEqual(run.call_args.kwargs["env"]["GH_TOKEN"], "github")
             self.assertNotIn("OPENAI_API_KEY", run.call_args.kwargs["env"])
+            self.assertNotIn("OPENAI_ADMIN_KEY", run.call_args.kwargs["env"])
+            self.assertNotIn("OPENAI_ADMIN_API_KEY", run.call_args.kwargs["env"])
 
     def test_check_pagination_includes_page_two_failures_and_rejects_inconsistent_pages(self):
         first = [{**self.checks["check_runs"][0], "id": index} for index in range(100)]
