@@ -11,6 +11,7 @@ accounts or knowledge of the development conversation.
 | --- | --- | --- |
 | First-time user | [Quickstart: a local two-task example](QUICKSTART.md) | [Architecture](ARCHITECTURE.md) |
 | Operator preparing deployment | [Deployment preflight](DEPLOYMENT_PREFLIGHT.md) | [Project settings](PROJECTS.md), [spend reporting](BILLING.md), [operations](OPERATIONS.md) |
+| Operator viewing a run | [Local evidence dashboard](DASHBOARD.md) | [Spend reporting](BILLING.md), [evidence requirements](contest/EVIDENCE.md) |
 | Operator launching real agents | [Two-agent walkthrough](TWO_AGENT_WALKTHROUGH.md) | [Deployment preflight](DEPLOYMENT_PREFLIGHT.md), [operations](OPERATIONS.md), [troubleshooting](TROUBLESHOOTING.md) |
 | Competition reviewer | [Presentation and current evidence](contest/PRESENTATION.md) | [Target assessment](contest/TARGET-ASSESSMENT.md), [benchmark protocol](contest/BENCHMARK.md), [evidence requirements](contest/EVIDENCE.md) |
 | Contributor | [Architecture](ARCHITECTURE.md) | [Repository contract](../AGENTS.md), [scaling roadmap](SCALING.md), [gateway policy](GATEWAY.md) |

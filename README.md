@@ -19,6 +19,11 @@ delivered ten reviewed, merged PRs, including one coordinator code repair.
 
 ## Documentation
 
+Open a [local evidence dashboard](docs/DASHBOARD.md) with
+`swarm-control dashboard --snapshot /path/to/curated-evidence.json`.
+It shows worker outcomes, separately attributed recovery, PR/CI links and financial
+unknowns. The loopback viewer makes no provider calls or execution/accounting writes.
+
 | Guide | What it explains |
 | --- | --- |
 | [Documentation index](docs/README.md) | Reading paths, terminology and current capabilities |
