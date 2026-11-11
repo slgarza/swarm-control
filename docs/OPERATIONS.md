@@ -137,6 +137,9 @@ These commands do not automatically move through every stage for you.
 
 | Command | What it does | External effects |
 | --- | --- | --- |
+| `workspace init/add/list/import-snapshot/import-catalog` | Register target configs and preserve curated historical copies in a private local workspace | Local registry/history files only; no allowance or provider changes |
+| `runs plan/create/list/show` | Configure agents/tasks and inspect saved run settings and history | Read-only preview, or explicit local draft creation; no cloud calls |
+| `runs launch PROJECT RUN` | Inspect a saved draft; `--execute` explicitly invokes the existing runner | Inspection by default; paid resources possible only with `--execute` and ordinary gates |
 | `plan TASK...` | Validate local task structure/ownership, resolve a local base ref and print potential concurrency | No cloud calls, budget reservation or GitHub writes |
 | `preflight TASK...` | Inspect prepared source, existing claims/allowance, cached spend and configured resource/runtime requirements | Offline by default; `--online` adds GitHub GETs only; no admission/deployment or launch approval |
 | `smoke TASK...` | Create worker environments, clone/install/check the unchanged target and recover artifacts | Paid Modal resources and infrastructure allocation; no coding model calls or delivered feature |
@@ -189,6 +192,9 @@ These flags apply to `plan`, `smoke` and `run` unless stated otherwise:
 | --- | --- |
 | `--project PATH` | Required root target configuration |
 | `--workers N` | Maximum submitted workers, default 1; accepts 1–100, live is capped by the project limit (default ten) |
+| `--agents N` | Alias for `--workers`; concurrent workers are distinct from total selected tasks |
+| `--run-id ID` | Optional bounded identity binding a workspace draft to the actual batch and worker reports |
+| `--context-mode full\|task` | Preserve full instructions, or additionally provide reviewed task contract excerpts from the frozen base; global rules remain mandatory |
 | `--base REF` | Local commit/ref, default `origin/<base_branch>`; workers need that exact commit available remotely |
 | `--timeout SECONDS` | Agent coding time from 30 to 1800, default 300; longer sessions require explicit selection and do not include all setup/recovery time |
 | `--synchronized` | Require exactly one task per requested worker; real agents start after all worker preparations reach the barrier |

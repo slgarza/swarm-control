@@ -1,10 +1,14 @@
-"""Loopback-only, read-only viewer for explicitly selected curated evidence."""
+"""Loopback evidence viewer and explicit local run preparation; never deployment."""
 
 import argparse
 import hashlib
+import hmac
 import json
 import math
 import re
+import secrets
+import sqlite3
+import subprocess
 from datetime import UTC, datetime
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
@@ -404,17 +408,25 @@ def load_snapshot(path, now=None):
         return unavailable(now)
 
 
-def make_server(snapshot_path=None, host="127.0.0.1", port=0, *, catalog_path=None):
+def make_server(snapshot_path=None, host="127.0.0.1", port=0, *, catalog_path=None,
+                workspace_path=None):
     if host not in {"127.0.0.1", "localhost"}:
         raise ValueError("dashboard requires a loopback address")
-    if (snapshot_path is None) == (catalog_path is None):
-        raise ValueError("select exactly one curated snapshot or local catalog")
+    if sum(value is not None for value in (snapshot_path, catalog_path, workspace_path)) != 1:
+        raise ValueError("select exactly one curated snapshot, catalog or workspace")
+    workspace = None
+    csrf_token = secrets.token_urlsafe(32)
+    if workspace_path is not None:
+        from .workspace import Workspace
+        workspace = Workspace(workspace_path)
     catalog = None
     if catalog_path is not None:
         from .dashboard_catalog import load_catalog
         catalog = load_catalog(catalog_path)
 
     def public_catalog():
+        if workspace is not None:
+            return workspace.public_catalog()
         if catalog is not None:
             return catalog.public()
         source = load_snapshot(snapshot_path)
@@ -440,9 +452,14 @@ def make_server(snapshot_path=None, host="127.0.0.1", port=0, *, catalog_path=No
                 "Content-Security-Policy",
                 "default-src 'none'; script-src 'self'; style-src 'self'; connect-src 'self'; img-src 'self' data:; font-src 'self'; base-uri 'none'; frame-ancestors 'none'; form-action 'none'",
             )
-            self.end_headers()
-            if self.command != "HEAD":
-                self.wfile.write(body)
+            try:
+                self.end_headers()
+                if self.command != "HEAD":
+                    self.wfile.write(body)
+            except (BrokenPipeError, ConnectionResetError):
+                # Switching repositories aborts superseded fetches. A closed
+                # browser connection must not trigger a second HTTP response.
+                self.close_connection = True
 
         def do_HEAD(self):
             self.do_GET()
@@ -455,6 +472,9 @@ def make_server(snapshot_path=None, host="127.0.0.1", port=0, *, catalog_path=No
                 return
             if parsed.scheme or parsed.netloc:
                 self.respond(400, b'{"error":"Invalid request"}')
+                return
+            if len(self.path) > 8192:
+                self.respond(414, b'{"error":"Request too long"}')
                 return
             root_navigation = (
                 parsed.path == "/"
@@ -488,7 +508,9 @@ def make_server(snapshot_path=None, host="127.0.0.1", port=0, *, catalog_path=No
                     if set(query) - {"project", "run"} or any(len(v) != 1 or not v[0] for v in query.values()):
                         raise ValueError("invalid selection")
                     project_id, run_id = query.get("project", [None])[0], query.get("run", [None])[0]
-                    if catalog is None:
+                    if workspace is not None:
+                        selected, repository, project_id, run_id = workspace.historical_snapshot(project_id, run_id)
+                    elif catalog is None:
                         if project_id not in {None, "default"} or run_id not in {None, "current"}:
                             raise ValueError("unknown selection")
                         selected, repository, project_id, run_id = snapshot_path, None, "default", "current"
@@ -501,14 +523,51 @@ def make_server(snapshot_path=None, host="127.0.0.1", port=0, *, catalog_path=No
                 except ValueError:
                     self.respond(400, b'{"error":"Invalid project or run selection"}')
                     return
+                except (OSError, sqlite3.Error, subprocess.SubprocessError):
+                    self.respond(503, b'{"error":"Selected run evidence is unavailable"}')
+                    return
                 self.respond(
                     200 if data["available"] else 503,
                     json.dumps(data, allow_nan=False).encode(),
                 )
-            elif parsed.path == "/api/catalog":
-                self.respond(200, json.dumps(public_catalog(), allow_nan=False).encode())
+            elif parsed.path in {"/api/catalog", "/api/project", "/api/runs", "/api/run"}:
+                try:
+                    if parsed.path == "/api/catalog":
+                        if parsed.query:
+                            raise ValueError("unexpected catalog query")
+                        data = public_catalog()
+                    elif workspace is None:
+                        self.respond(404, b'{"error":"Workspace preparation is not enabled"}')
+                        return
+                    else:
+                        query = parse_qs(parsed.query, keep_blank_values=True, strict_parsing=True,
+                                         max_num_fields=2)
+                        expected = {"project", "run"} if parsed.path == "/api/run" else {"project"}
+                        if set(query) != expected or any(len(v) != 1 or not v[0] for v in query.values()):
+                            raise ValueError("invalid selection")
+                        project_id = query["project"][0]
+                        if parsed.path == "/api/project":
+                            data = workspace.project_context(project_id)
+                        elif parsed.path == "/api/run":
+                            data = workspace.run_detail(project_id, query["run"][0])
+                        else:
+                            project = next((p for p in public_catalog()["projects"] if p["id"] == project_id), None)
+                            if project is None:
+                                raise ValueError("unknown project")
+                            data = {"runs": project["runs"]}
+                    self.respond(200, json.dumps(data, allow_nan=False).encode())
+                except (ValueError, TypeError):
+                    self.respond(400, b'{"error":"Invalid workspace selection"}')
+                except (OSError, sqlite3.Error, subprocess.SubprocessError):
+                    self.respond(503, b'{"error":"Workspace data unavailable"}')
+            elif parsed.path == "/api/session":
+                data = {"mode": "workspace" if workspace is not None else "viewer",
+                        "csrf_token": csrf_token if workspace is not None else None,
+                        "read_only": workspace is None, "deployment_enabled": False}
+                self.respond(200, json.dumps(data).encode())
             elif parsed.path == "/api/health":
-                self.respond(200, b'{"ok":true,"read_only":true}')
+                self.respond(200, json.dumps({"ok": True, "read_only": workspace is None,
+                                             **({"deployment_enabled": False} if workspace is not None else {})}).encode())
             elif parsed.path == "/favicon.ico":
                 self.respond(204, b"", "image/x-icon")
             elif parsed.path in {"/", "/assets/app.js", "/assets/styles.css"}:
@@ -527,7 +586,59 @@ def make_server(snapshot_path=None, host="127.0.0.1", port=0, *, catalog_path=No
                 self.respond(404, b'{"error":"Not found"}')
 
         def do_POST(self):
-            self.respond(405, b'{"error":"Read only"}')
+            if workspace is None or self.command != "POST":
+                self.respond(405, b'{"error":"Read only"}')
+                return
+            hosts, origins = self.headers.get_all("Host", []), self.headers.get_all("Origin", [])
+            tokens = self.headers.get_all("X-Swarm-CSRF", [])
+            authorities = {f"127.0.0.1:{self.server.server_port}", f"localhost:{self.server.server_port}"}
+            if (len(hosts) != 1 or hosts[0] not in authorities or len(origins) != 1
+                    or origins[0] != f"http://{hosts[0]}"
+                    or self.headers.get("Sec-Fetch-Site") == "cross-site"
+                    or len(tokens) != 1 or not tokens[0].isascii()
+                    or not hmac.compare_digest(tokens[0], csrf_token)):
+                self.respond(403, b'{"error":"Forbidden"}')
+                return
+            try:
+                parsed = urlsplit(self.path)
+                if (parsed.scheme or parsed.netloc or parsed.query
+                        or parsed.path not in {"/api/runs", "/api/runs/preview"}):
+                    self.respond(404, b'{"error":"Not found"}')
+                    return
+                lengths = self.headers.get_all("Content-Length", [])
+                if (len(lengths) != 1 or not lengths[0].isdigit()
+                        or not 0 < int(lengths[0]) <= 65536
+                        or self.headers.get_all("Transfer-Encoding", [])
+                        or self.headers.get_content_type() != "application/json"):
+                    self.respond(400, b'{"error":"A bounded JSON request is required"}')
+                    return
+                self.connection.settimeout(5)
+
+                def unique(pairs):
+                    value = {}
+                    for key, item in pairs:
+                        if key in value:
+                            raise ValueError("duplicate JSON key")
+                        value[key] = item
+                    return value
+
+                def reject_constant(_value):
+                    raise ValueError("invalid JSON constant")
+
+                raw = self.rfile.read(int(lengths[0]))
+                if len(raw) != int(lengths[0]):
+                    raise ValueError("incomplete JSON body")
+                data = json.loads(raw, object_pairs_hook=unique, parse_constant=reject_constant)
+                if not isinstance(data, dict) or set(data) != {"project_id", "options"}:
+                    raise ValueError("invalid request fields")
+                result = workspace.prepare_run(data["project_id"], data["options"],
+                                               save=parsed.path == "/api/runs")
+                self.respond(201 if parsed.path == "/api/runs" else 200,
+                             json.dumps(result, allow_nan=False).encode())
+            except (ValueError, TypeError, UnicodeError, RecursionError):
+                self.respond(400, b'{"error":"Invalid run configuration. Choose registered projects, existing tasks and an allowed agent count."}')
+            except (OSError, sqlite3.Error, subprocess.SubprocessError):
+                self.respond(503, b'{"error":"Could not prepare this local run. No workers were launched."}')
 
         do_PUT = do_POST
         do_PATCH = do_POST
@@ -546,11 +657,16 @@ def main():
         help="Explicit curated JSON evidence file; never a raw worker log or ledger",
     )
     source.add_argument("--catalog", type=Path, help="Explicit local project/run catalog; source paths remain private")
+    source.add_argument("--workspace", type=Path, nargs="?",
+                        const=Path.home() / ".config/swarm-control/workspace.json",
+                        help="Local repository registry and run preparation; no worker launch")
     parser.add_argument("--port", default=8787, type=int)
     args = parser.parse_args()
-    server = make_server(args.snapshot, port=args.port, catalog_path=args.catalog)
+    server = make_server(args.snapshot, port=args.port, catalog_path=args.catalog,
+                         workspace_path=args.workspace)
     print(
-        f"Swarm Control: http://127.0.0.1:{server.server_port} (read only)", flush=True
+        f"Swarm Control: http://127.0.0.1:{server.server_port} "
+        f"({'local run preparation' if args.workspace is not None else 'read only'}; deployment disabled)", flush=True
     )
     try:
         server.serve_forever()

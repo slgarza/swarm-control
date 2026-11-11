@@ -1,6 +1,12 @@
 # Local dashboard
 
-The dashboard shows a selected, curated evidence snapshot in a browser. It reads
+For repository registration, configurable concurrent agents and saved drafts,
+start with [repositories and run history](RUNS.md). Use
+`swarm-control dashboard --workspace` for local run preparation. Its bounded
+write endpoints create drafts only; deployment remains an explicit CLI action.
+The legacy evidence-only modes below remain read-only.
+
+The evidence viewer shows a selected, curated snapshot in a browser. It reads
 local JSON and serves local assets. It does not start workers, change a budget,
 review code, merge PRs, refresh provider billing, or contact GitHub or Modal.
 The interface uses English, USD amounts and UTC timestamps.
@@ -48,6 +54,32 @@ cannot overwrite a newer choice. An expired delivery window is labeled closed
 while unfinished integration retains an unknown final T1.
 
 ## Screenshots
+
+### Run planning and history
+
+Captured on November 11, 2026, at 17:24 Mexico City time (23:24 UTC). The
+Afterimage view preserves the original censored pilot observation from 22:23 UTC.
+The planner and draft views use the actual local two-task example repository;
+three distinct planning drafts were saved and no agents were deployed. Its
+remote is an example address, not a verified live benchmark target. Missing
+cost, execution and acceptance fields remain unknown.
+
+![Repository selector and historical observation](images/dashboard-run-history-2026-11-11.png)
+
+![Configurable concurrent agents, tasks and plan](images/dashboard-run-planner-2026-11-11.png)
+
+![Saved run configuration and separate history entries](images/dashboard-run-saved-2026-11-11.png)
+
+![Run planning at 390 pixels](images/dashboard-run-mobile390-2026-11-11.png)
+
+![Run planning at 320 pixels](images/dashboard-run-mobile320-2026-11-11.png)
+
+The [capture receipt](images/dashboard-run-gallery-2026-11-11.json) includes all
+five image hashes, dimensions, source times and 30 real-browser checks. Earlier
+failed or superseded QA attempts remain accounted for in that receipt; raw
+browser activity and private runtime files remain outside the repository.
+
+### Earlier evidence-only viewer
 
 The following English captures use actual configured data from November 11,
 2026, at 16:11 Mexico City time (22:11 UTC). They are historical views of an

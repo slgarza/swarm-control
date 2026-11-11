@@ -135,12 +135,16 @@ state are not yet a globally distributed control service.
 | [pilot_gateway.py](../swarm_control/pilot_gateway.py) | Modal HTTP gateway and authenticated administration functions |
 | [pilot_integrate.py](../swarm_control/pilot_integrate.py) | Candidate validation, review acknowledgment, PRs and merge |
 | [deployment.py](../swarm_control/deployment.py) | Deploy the gateway with the target's existing identifiers |
+| [workspace.py](../swarm_control/workspace.py) | Private repository registry, frozen run drafts, sealed history and explicit CLI launch |
+| [dashboard.py](../swarm_control/dashboard.py) | Loopback evidence viewing and bounded local run preparation; no HTTP deployment |
+| [progress.py](../swarm_control/progress.py) | Safe worker phase/event observations, with unknown remote termination causes preserved |
 
 ## What remains outside this implementation
 
 Automatic backlog decomposition, peer-to-peer coordination, distributed leases,
-autonomous conflict repair, private-target clone authentication, unattended semantic
-review and a dashboard remain future work. Larger cohorts and clean shared-file
+autonomous conflict repair, private-target clone authentication and unattended semantic
+review remain future work. The local dashboard supports repository/run selection,
+draft preparation and historical evidence. Larger cohorts and clean shared-file
 integration have offline coverage; their real scale and throughput still need
 evidence. The [scaling roadmap](SCALING.md) and [benchmark protocol](contest/BENCHMARK.md)
 explain how to evaluate them.

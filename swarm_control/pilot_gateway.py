@@ -1,6 +1,7 @@
 """Modal deployment for S02. No API credential is sent to a coding worker."""
 
 import asyncio
+import json
 import os
 import time
 
@@ -20,6 +21,7 @@ from .provider_rate import (
     ProviderRatePolicy,
     admission_rate_settings,
 )
+from .request_metrics import RequestMetrics
 
 
 def configured_gateway_concurrency():
@@ -109,6 +111,7 @@ def build_web_app(
     capacity_wait_seconds=CAPACITY_WAIT_SECONDS,
     provider_rate=PROVIDER_RATE,
     rate_limiter=None,
+    request_metrics=None,
 ):
     """Injectable HTTP app; tests may use an in-memory store/mock transport."""
     import httpx
@@ -125,6 +128,8 @@ def build_web_app(
     if rate_limiter is None and provider_rate is not None:
         rate_limiter = ProviderRateLimiter(provider_rate)
     web = FastAPI(docs_url=None, redoc_url=None, openapi_url=None)
+    metrics = request_metrics if request_metrics is not None else RequestMetrics()
+    web.state.request_metrics = metrics
 
     def error_response(code, status, *, headers=None):
         return JSONResponse(
@@ -143,38 +148,48 @@ def build_web_app(
     async def policy_error(_request, exc):
         return error_response(exc.code, exc.status)
 
-    @web.post("/v1/responses")
-    async def responses(request: Request):
+    async def handle_response(request: Request, timing):
         authorization = request.headers.get("authorization", "")
-        if not authorization.startswith("Bearer ") or len(authorization) > 100:
-            raise PolicyError("invalid_token", 401)
-        run_id, task_id = await service.authenticate(authorization[7:], time.time())
-        if request.headers.get("content-encoding", "identity") != "identity":
-            raise PolicyError("compressed_requests_not_supported", 415)
-        if request.headers.get("content-type", "").split(";")[0] != "application/json":
-            raise PolicyError("json_required", 415)
-        raw = bytearray()
-        try:
-            async with asyncio.timeout(15):
-                async for chunk in request.stream():
-                    raw.extend(chunk)
-                    if len(raw) > MAX_BODY_BYTES:
-                        raise PolicyError("request_too_large", 413)
-        except (TimeoutError, ClientDisconnect) as exc:
-            raise PolicyError("request_body_interrupted", 408) from exc
-        body, upper = prepare_request(bytes(raw))
+        with timing.phase("authenticate"):
+            try:
+                if not authorization.startswith("Bearer ") or len(authorization) > 100:
+                    raise PolicyError("invalid_token", 401)
+                run_id, task_id = await service.authenticate(authorization[7:], time.time())
+            except PolicyError:
+                timing.outcome("authentication_rejected")
+                raise
+        timing.bind(run_id, task_id)
+        with timing.phase("body"):
+            if request.headers.get("content-encoding", "identity") != "identity":
+                raise PolicyError("compressed_requests_not_supported", 415)
+            if request.headers.get("content-type", "").split(";")[0] != "application/json":
+                raise PolicyError("json_required", 415)
+            raw = bytearray()
+            try:
+                async with asyncio.timeout(15):
+                    async for chunk in request.stream():
+                        raw.extend(chunk)
+                        if len(raw) > MAX_BODY_BYTES:
+                            raise PolicyError("request_too_large", 413)
+            except (TimeoutError, ClientDisconnect) as exc:
+                raise PolicyError("request_body_interrupted", 408) from exc
+            body, upper = prepare_request(bytes(raw))
         # A bounded queue absorbs synchronized cohorts. Capacity rejection makes
         # no provider call and acquires no budget reservation; a retry still
         # uses the same task/run allowance.
         try:
-            async with asyncio.timeout(capacity_wait_seconds):
-                await capacity.acquire()
+            with timing.phase("capacity"):
+                async with asyncio.timeout(capacity_wait_seconds):
+                    await capacity.acquire()
         except TimeoutError:
+            timing.outcome("capacity_rejected")
             return error_response("gateway_busy", 429, headers={"Retry-After": "1"})
         try:
-            pending = await service.reserve(
-                run_id, task_id, upper, body["max_output_tokens"], time.time()
-            )
+            with timing.phase("reserve"):
+                pending = await service.reserve(
+                    run_id, task_id, upper, body["max_output_tokens"], time.time()
+                )
+            timing.flag("reservation_admitted")
             request_id = pending["id"]
             client = httpx.AsyncClient(
                 transport=transport,
@@ -183,6 +198,7 @@ def build_web_app(
                 timeout=httpx.Timeout(30, read=REQUEST_SECONDS),
             )
         except BaseException:
+            timing.outcome("reservation_rejected")
             capacity.release()
             raise
         headers = {
@@ -202,25 +218,30 @@ def build_web_app(
             if closed:
                 return
             closed = True
-            try:
-                if upstream is not None:
-                    await upstream.aclose()
-                await client.aclose()
-            finally:
-                # Failed settlement leaves the original durable reservation in
-                # place. Do not print exception bodies or retry uncertain writes.
+            with timing.phase("cleanup"):
                 try:
-                    await service.finish(
-                        run_id,
-                        task_id,
-                        request_id,
-                        parser.event if not parser.failed else None,
-                        outcome,
-                    )
-                except Exception:  # noqa: BLE001 - uncertain writes must never be retried/refunded
-                    print("gateway_settlement_failed")
+                    if upstream is not None:
+                        await upstream.aclose()
+                    await client.aclose()
                 finally:
-                    capacity.release()
+                    # Failed settlement leaves the original durable reservation in
+                    # place. Do not print exception bodies or retry uncertain writes.
+                    try:
+                        with timing.phase("settlement"):
+                            await service.finish(
+                                run_id,
+                                task_id,
+                                request_id,
+                                parser.event if not parser.failed else None,
+                                outcome,
+                            )
+                        timing.flag("settlement_returned")
+                    except Exception:  # noqa: BLE001 - uncertain writes must never be retried/refunded
+                        print("gateway_settlement_failed")
+                    finally:
+                        capacity.release()
+                        timing.flag("cleanup_finished")
+                        timing.mark("cleanup_finished")
 
         try:
             # Exact provider token counting handles tool schemas and opaque
@@ -231,10 +252,13 @@ def build_web_app(
             if rate_limiter is not None:
                 # Count preflights also consume RPM. A permit remains consumed
                 # after cancellation/failure; it is independent of money.
-                await rate_limiter.acquire(tokens=0, deadline=rate_deadline)
-            count_response = await client.post(
-                UPSTREAM + "/input_tokens", headers=headers, json=count_body
-            )
+                with timing.phase("count_pacing"):
+                    await rate_limiter.acquire(tokens=0, deadline=rate_deadline)
+            with timing.phase("count_http"):
+                timing.flag("count_http_attempted")
+                count_response = await client.post(
+                    UPSTREAM + "/input_tokens", headers=headers, json=count_body
+                )
             await service.rate_limits(run_id, dict(count_response.headers))
             count = None
             if count_response.status_code == 200:
@@ -245,9 +269,10 @@ def build_web_app(
                 except (ValueError, AttributeError):
                     pass
             try:
-                await service.record_count(
-                    run_id, task_id, request_id, count, time.time()
-                )
+                with timing.phase("record_count"):
+                    await service.record_count(
+                        run_id, task_id, request_id, count, time.time()
+                    )
             except PolicyError as exc:
                 if count_response.status_code != 200:
                     raise PolicyError(
@@ -262,18 +287,23 @@ def build_web_app(
             if rate_limiter is not None:
                 # Only the provider-verified count may authorize token pacing.
                 # Reserve maximum output as well; no cache discount or refund.
-                await rate_limiter.acquire(
-                    tokens=count + body["max_output_tokens"], deadline=rate_deadline,
-                )
+                with timing.phase("inference_pacing"):
+                    await rate_limiter.acquire(
+                        tokens=count + body["max_output_tokens"], deadline=rate_deadline,
+                    )
             # Recheck the independent cancellation key immediately before send.
-            await service.authenticate(authorization[7:], time.time())
-            upstream = await client.send(
-                client.build_request("POST", UPSTREAM, headers=headers, json=body),
-                stream=True,
-            )
+            with timing.phase("recheck"):
+                await service.authenticate(authorization[7:], time.time())
+            with timing.phase("inference_send"):
+                timing.flag("inference_http_attempted")
+                upstream = await client.send(
+                    client.build_request("POST", UPSTREAM, headers=headers, json=body),
+                    stream=True,
+                )
             await service.rate_limits(run_id, dict(upstream.headers))
             if upstream.status_code != 200:
                 outcome = "upstream_rejected"
+                timing.outcome("upstream_rejected")
                 status = 429 if upstream.status_code == 429 else 502
                 await cleanup()
                 return error_response(
@@ -281,20 +311,24 @@ def build_web_app(
                 )
             if "text/event-stream" not in upstream.headers.get("content-type", ""):
                 outcome = "upstream_stream_required"
+                timing.outcome("stream_required")
                 await cleanup()
                 return error_response(outcome, 502)
         except ProviderRateError as exc:
             # The earlier durable money reservation stays conservatively
             # retained even when no inference was sent. Never claim a refund.
             outcome = exc.code
+            timing.outcome("pacing_rejected")
             await cleanup()
             return error_response(outcome, 429, headers={"Retry-After": "60"})
         except PolicyError:
             outcome = "preflight_rejected"
+            timing.outcome("request_rejected")
             await cleanup()
             raise
         except (httpx.HTTPError, TimeoutError):
             outcome = "upstream_connection_failed"
+            timing.outcome("connection_failed")
             if not count_recorded:
                 try:
                     await service.record_count(
@@ -312,39 +346,83 @@ def build_web_app(
         async def stream():
             nonlocal outcome
             try:
-                async with asyncio.timeout(REQUEST_SECONDS):
-                    next_check = 0
-                    async for chunk in upstream.aiter_bytes():
-                        if time.monotonic() >= next_check:
-                            await service.authenticate(authorization[7:], time.time())
-                            next_check = time.monotonic() + 1
-                        parser.feed(chunk)
-                        if parser.event is not None and not parser.failed:
-                            # Commit usage before the client sees completion and
-                            # immediately begins its next turn with the same token.
-                            outcome = "completed"
-                            await cleanup()
-                            yield chunk
-                            return
-                        yield chunk
-                    outcome = (
-                        "missing_completed_usage"
-                        if parser.event is None
-                        else "completed"
-                    )
-            except (httpx.HTTPError, TimeoutError, PolicyError):
-                outcome = "stream_interrupted"
-                # No upstream body/exception details are copied into errors.
-                yield b'event: error\ndata: {"type":"error","code":"stream_interrupted","message":"stream_interrupted"}\n\n'
+                with timing.phase("stream"):
+                    try:
+                        async with asyncio.timeout(REQUEST_SECONDS):
+                            next_check = 0
+                            first_byte = True
+                            async for chunk in upstream.aiter_bytes():
+                                if chunk and first_byte:
+                                    timing.mark("first_byte")
+                                    first_byte = False
+                                if time.monotonic() >= next_check:
+                                    with timing.phase("stream_auth"):
+                                        await service.authenticate(authorization[7:], time.time())
+                                    next_check = time.monotonic() + 1
+                                parser.feed(chunk)
+                                if parser.event is not None and not parser.failed:
+                                    timing.mark("completion_event")
+                                    timing.flag("completion_event_seen")
+                                    timing.outcome("completion_observed")
+                                    # Commit usage before the client sees completion and
+                                    # immediately begins its next turn with the same token.
+                                    outcome = "completed"
+                                    await cleanup()
+                                    yield chunk
+                                    return
+                                yield chunk
+                            outcome = (
+                                "missing_completed_usage"
+                                if parser.event is None
+                                else "completed"
+                            )
+                            timing.outcome("usage_unverified")
+                    except (httpx.HTTPError, TimeoutError, PolicyError):
+                        outcome = "stream_interrupted"
+                        timing.outcome("stream_interrupted")
+                        # No upstream body/exception details are copied into errors.
+                        yield b'event: error\ndata: {"type":"error","code":"stream_interrupted","message":"stream_interrupted"}\n\n'
+                    except asyncio.CancelledError:
+                        timing.mark("cancelled")
+                        timing.outcome("cancelled")
+                        raise
             finally:
-                await asyncio.shield(cleanup())
+                try:
+                    await asyncio.shield(cleanup())
+                finally:
+                    timing.finish()
+
+        async def background_cleanup():
+            try:
+                await cleanup()
+            finally:
+                timing.finish("response_not_consumed" if timing.current_outcome == "unknown" else None)
 
         return StreamingResponse(
             stream(),
             media_type="text/event-stream",
             headers={"Cache-Control": "no-store", "X-Accel-Buffering": "no"},
-            background=BackgroundTask(cleanup),
+            background=BackgroundTask(background_cleanup),
         )
+
+    @web.post("/v1/responses")
+    async def responses(request: Request):
+        timing = metrics.begin()
+        try:
+            response = await handle_response(request, timing)
+        except asyncio.CancelledError:
+            timing.mark("cancelled")
+            timing.finish("cancelled")
+            raise
+        except PolicyError:
+            timing.finish("request_rejected" if timing.current_outcome == "unknown" else None)
+            raise
+        except BaseException:
+            timing.finish("handler_failed")
+            raise
+        if not isinstance(response, StreamingResponse):
+            timing.finish()
+        return response
 
     return web
 
@@ -364,4 +442,7 @@ def build_web_app(
 @modal.concurrent(max_inputs=120)
 @modal.asgi_app()
 def gateway():
-    return build_web_app(BudgetService(ModalStore()), os.environ["CODEX_API_KEY"])
+    return build_web_app(
+        BudgetService(ModalStore()), os.environ["CODEX_API_KEY"],
+        request_metrics=RequestMetrics(emit=lambda record: print(json.dumps(record, separators=(",", ":")))),
+    )

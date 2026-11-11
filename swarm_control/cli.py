@@ -8,6 +8,10 @@ def main():
         if len(sys.argv) > 1 and sys.argv[1] == "dashboard":
             from .dashboard import main as run
             del sys.argv[1]
+        elif len(sys.argv) > 1 and sys.argv[1] in {"workspace", "runs"}:
+            from .workspace import runs_main, workspace_main
+            run = workspace_main if sys.argv[1] == "workspace" else runs_main
+            del sys.argv[1]
         elif len(sys.argv) > 1 and sys.argv[1] == "ops":
             from .operations import main as run
             del sys.argv[1]

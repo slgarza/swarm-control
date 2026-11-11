@@ -19,13 +19,14 @@
     <div class="workspace-label">WORKSPACE</div>
     <nav class="nav-list">
       <a class="nav-item is-active" href="#overview"><span aria-hidden="true">◫</span> Overview <span class="nav-shortcut">01</span></a>
+      <a class="nav-item" href="#run-history" data-workspace-only hidden><span aria-hidden="true">◷</span> Run history</a>
       <a class="nav-item" href="#workers"><span aria-hidden="true">▦</span> Workers <span id="nav-worker-count" class="nav-count">—</span></a>
       <a class="nav-item" href="#tasks"><span aria-hidden="true">☷</span> Tasks & PRs</a>
       <a class="nav-item" href="#budget"><span aria-hidden="true">◈</span> Budget</a>
       <a class="nav-item" href="#evidence"><span aria-hidden="true">↗</span> Evidence</a>
     </nav>
     <div class="sidebar-bottom">
-      <div class="local-badge"><span class="status-dot mint"></span> LOCAL · READ ONLY</div>
+      <div class="local-badge"><span class="status-dot mint"></span> <span id="local-mode-label">LOCAL · READ ONLY</span></div>
       <p>Reviewed data.<br>Traceable outcomes.</p>
       <span class="sidebar-version">SWARM CONTROL / LOCAL EVIDENCE</span>
     </div>
@@ -44,13 +45,31 @@
           <div class="heading-actions"><button id="refresh-button" class="button button-quiet" type="button"><span aria-hidden="true">↻</span> Refresh</button><button id="export-button" class="button button-primary" type="button" disabled><span aria-hidden="true">↓</span> Export JSON</button></div>
         </div>
         <section class="workspace-picker" aria-labelledby="workspace-title">
-          <div class="workspace-intro"><h2 id="workspace-title">Your workspace</h2><p>Choose a project, then a run to inspect its reviewed results. Only projects configured on this local server are listed.</p></div>
-          <div class="workspace-fields"><div><label for="project-select">PROJECT</label><select id="project-select" disabled><option>Loading projects…</option></select></div><div><label for="run-select">RUN</label><select id="run-select" disabled><option>Select a project first</option></select></div></div>
+          <div class="workspace-intro"><h2 id="workspace-title">Your workspace</h2><p id="workspace-intro-copy">Choose a repository, then a run to inspect its reviewed results. Only repositories configured on this local server are listed.</p></div>
+          <div class="workspace-fields"><div><label for="project-select">REPOSITORY</label><select id="project-select" disabled><option>Loading repositories…</option></select></div><div><label for="run-select">SAVED RUN</label><select id="run-select" disabled><option>Select a repository first</option></select></div></div>
           <p id="workspace-summary" class="subtle" aria-live="polite">Loading your configured workspace.</p>
+          <div data-workspace-only hidden class="workspace-actions"><button id="new-run-button" class="button button-primary" type="button" aria-expanded="false" aria-controls="run-builder" disabled><span aria-hidden="true">+</span> New run</button><details class="registration-help"><summary>Connect another repository</summary><p>Register a local repository with the CLI, using its existing project configuration, then refresh this workspace. Use the same workspace file as this dashboard.</p><code id="registration-command">swarm-control workspace add /path/to/repository/swarm.toml --id my-repo --label 'My repository' --workspace 'workspace.json'</code></details></div>
+        </section>
+        <section id="run-builder" class="panel run-builder" aria-labelledby="run-builder-title" hidden>
+          <div class="panel-heading"><div><div class="eyebrow">PREPARE · REVIEW · SAVE</div><h2 id="run-builder-title">Prepare a new run</h2><p class="builder-description">Select tasks and choose how many agents may work at once.</p></div><button id="close-builder" class="icon-button" type="button" aria-label="Close new run">×</button></div>
+          <div id="builder-unavailable" class="builder-message" role="status" hidden></div>
+          <form id="run-form">
+            <fieldset id="run-options" disabled>
+              <legend class="sr-only">Run configuration</legend>
+              <div class="run-settings"><div class="run-field agent-field"><label for="run-workers">Concurrent agents</label><div class="agent-input-line"><input id="run-workers" name="workers" type="number" min="1" max="100" value="1" required inputmode="numeric"><span id="worker-limit" class="subtle">Repository limit pending</span></div><div id="worker-presets" class="worker-presets" aria-label="Agent count presets"></div><p class="field-help">Each agent handles one task at a time. Extra tasks wait for a free agent.</p></div><div class="run-field"><label for="run-label">Run name <span class="optional">optional</span></label><input id="run-label" name="label" maxlength="160" autocomplete="off" placeholder="e.g. Completion experiment"><label for="run-budget">Total model reservation · USD <span class="optional">optional for planning</span></label><input id="run-budget" name="model_budget" type="number" min="0.01" max="180" step="0.01" inputmode="decimal" placeholder="Not selected"><p class="field-help">A proposed limit for the whole run. It is not a bill or additional spending approval.</p></div></div>
+              <div class="task-picker-heading"><div><label for="run-task-search">Tasks for this run</label><p id="run-task-count" class="subtle" aria-live="polite">No tasks selected</p></div><div class="run-task-search"><input id="run-task-search" type="search" placeholder="Search task ID or title" aria-label="Search available tasks" autocomplete="off"><button id="clear-run-tasks" class="button button-quiet" type="button">Clear</button></div></div>
+              <div id="run-task-options" class="run-task-options" role="group" aria-label="Available tasks"></div>
+              <details class="run-advanced"><summary>Advanced settings</summary><div class="advanced-grid"><div class="run-field"><label for="run-base">Source reference</label><input id="run-base" name="base" value="HEAD" required autocomplete="off"><p class="field-help">The plan freezes this reference to an exact commit.</p></div><div class="run-field"><label for="run-timeout">Coding time limit · seconds</label><input id="run-timeout" name="timeout" type="number" min="30" max="1800" value="300" required inputmode="numeric"></div><div class="run-field"><label for="run-context">Instruction context</label><select id="run-context" name="context_mode"><option value="full">Full project instructions</option><option value="task">Repository-provided task packet</option></select><p class="field-help">Task packets require explicit context files in every selected task.</p></div><div class="run-switches"><label><input id="run-synchronized" type="checkbox"> Start all selected agents together</label><p class="field-help">Requires exactly one selected task per agent.</p><label><input id="run-overlap" type="checkbox"> Allow declared shared files</label><p class="field-help">Combined review and validation still apply.</p></div></div></details>
+            </fieldset>
+            <div id="run-form-error" class="builder-message error-message" role="status" hidden></div>
+            <div class="builder-actions"><button id="preview-run-button" class="button button-primary" type="submit" disabled>Check plan</button><button id="save-run-button" class="button button-quiet" type="button" disabled>Save draft</button><span class="subtle">Planning and saving drafts start no agents.</span></div>
+          </form>
+          <div id="run-preview" class="run-preview" aria-live="polite" hidden></div>
         </section>
         <div id="workspace-empty" class="workspace-empty" role="status" hidden><h2 id="workspace-empty-title">No run evidence yet</h2><p id="workspace-empty-copy">Run agents through the controller, then load their reviewed evidence here. This viewer does not launch agents or change budgets.</p></div>
         <div class="run-strip"><div><span class="run-label">RUN</span><span id="run-name" class="mono">Waiting for snapshot…</span></div><div class="run-strip-right"><span id="run-phase" class="pill neutral">No data</span><span id="snapshot-time" class="subtle">Source pending</span></div></div>
         <div id="data-alert" class="data-alert" role="status" hidden></div>
+        <section id="run-configuration" class="panel run-configuration" aria-labelledby="run-configuration-title" hidden><div class="panel-heading"><div><div class="eyebrow">SAVED CONFIGURATION</div><h2 id="run-configuration-title">Run configuration</h2></div><span id="configuration-status" class="pill neutral">Draft</span></div><div id="run-configuration-content" class="configuration-content"></div></section>
         <div data-run-content hidden class="metrics-grid" aria-label="Key metrics">
           <article class="metric-card"><div class="metric-label">ORIGINAL WORKERS <span class="metric-symbol" aria-hidden="true">▦</span></div><div id="metric-workers" class="metric-value">—</div><div id="metric-workers-note" class="metric-note">Awaiting evidence</div></article>
           <article class="metric-card"><div class="metric-label">ORIGINAL VALIDATED <span class="metric-symbol coral-text" aria-hidden="true">⊘</span></div><div id="metric-validated" class="metric-value">—</div><div id="metric-validated-note" class="metric-note">Original worker outcome</div></article>
@@ -59,6 +78,8 @@
         </div>
         <div data-run-content hidden class="truth-note"><span aria-hidden="true">ⓘ</span><p id="truth-note">Original execution and recovery are separate. An active VM does not prove simultaneous useful work.</p></div>
       </section>
+
+      <section id="run-history" class="panel run-history section-anchor" aria-labelledby="history-title" data-workspace-only hidden><div class="panel-heading"><div><div class="eyebrow">THIS REPOSITORY</div><h2 id="history-title">Run history</h2><p class="builder-description">Drafts and recorded executions stay separate. Open a run to inspect its configuration or evidence.</p></div><button id="refresh-history-button" class="button button-quiet" type="button">Refresh runs</button></div><div class="table-scroll"><table><thead><tr><th scope="col">Run</th><th scope="col">Status</th><th scope="col">Agents</th><th scope="col">Saved · UTC</th><th scope="col"><span class="sr-only">Open run</span></th></tr></thead><tbody id="history-rows"></tbody></table></div><p id="history-note" class="history-note">No recorded runs loaded.</p></section>
 
       <section data-run-content hidden id="workers" class="panel workers-panel section-anchor" aria-labelledby="workers-title">
         <div class="panel-heading"><div><div class="eyebrow">ORIGINAL COHORT</div><h2 id="workers-title">A worker cohort. The complete picture.</h2></div><div class="panel-meta"><span class="legend-key"><i class="legend-swatch coral"></i> Original failed</span><span class="legend-key"><i class="legend-dot mint"></i> Provisional recovery</span></div></div>

@@ -3,8 +3,8 @@
 Inputs are complete GitHub check-run inventories and head-filtered workflow runs.
 Workflow ``jobs`` may be an explicit list or a complete ``{total_count, jobs}``
 inventory. Missing jobs are unknown, rather than evidence that no job started.
-Freshness uses each record's updated/completed/started/created timestamp. A caller
-must collect fresh source observations; this module neither fetches nor retries.
+Freshness uses the explicit API fetch time, separately from CI event age. A caller
+must bind a fetch observation; this module neither fetches nor retries.
 """
 
 import math
@@ -90,6 +90,7 @@ def classify_ci(
     workflow_runs: list[dict] | dict,
     *,
     observed_at: datetime | str,
+    fetched_at: datetime | str | None = None,
     stale_after_seconds: float = 600,
 ) -> dict:
     """Classify source metadata without granting integration or spend authority.
@@ -103,7 +104,7 @@ def classify_ci(
         "state": "metadata_invalid", "allowed_to_merge": False,
         "recommended_action": "inspect_metadata", "reason": "Invalid CI metadata.",
         "head_sha": head_sha if isinstance(head_sha, str) and _SHA.fullmatch(head_sha) else None,
-        "observed_at": None, "required_check_count": 0, "check_count": None,
+        "observed_at": None, "fetched_at": None, "required_check_count": 0, "check_count": None,
         "workflow_count": None, "authorizes_mutation": False,
         "authorizes_spend": False,
     }
@@ -115,6 +116,8 @@ def classify_ci(
     try:
         now = _utc(observed_at)
         result["observed_at"] = now.isoformat()
+        fetched = _utc(fetched_at)
+        result["fetched_at"] = fetched.isoformat()
         if result["head_sha"] is None:
             raise ValueError("invalid full head SHA")
         if (not isinstance(required_checks, (list, tuple)) or not required_checks
@@ -125,6 +128,11 @@ def classify_ci(
                 or not isinstance(stale_after_seconds, (int, float))
                 or not math.isfinite(stale_after_seconds) or stale_after_seconds <= 0):
             raise ValueError("invalid freshness window")
+        source_age = (now - fetched).total_seconds()
+        if source_age < 0:
+            return answer("future_metadata", "inspect_metadata", "Fetch observation is after the evaluation time.")
+        if source_age > stale_after_seconds:
+            return answer("stale_metadata", "inspect_metadata", "Fetch observation exceeds the freshness window.")
         result["required_check_count"] = len(required_checks)
         checks = _inventory(check_payload, "check_runs")
         if isinstance(workflow_runs, dict):
@@ -139,12 +147,9 @@ def classify_ci(
         for row in checks + workflows:
             if row.get("head_sha") != head_sha:
                 return answer("head_mismatch", "inspect_metadata", "Source metadata belongs to another head.")
-            age = (now - _record_time(row)).total_seconds()
-            if age < 0:
+            if _record_time(row) > fetched:
                 return answer("future_metadata", "inspect_metadata", "Source timestamp is after the observation.")
-            if age > stale_after_seconds:
-                return answer("stale_metadata", "inspect_metadata", "Source metadata exceeds the freshness window.")
-            _validate_times(row, now)
+            _validate_times(row, fetched)
             status, conclusion = row.get("status"), row.get("conclusion")
             if status not in _PENDING | {"completed"}:
                 raise ValueError("unknown status")
@@ -159,7 +164,7 @@ def classify_ci(
             if jobs is None:
                 continue
             for job in jobs:
-                _validate_times(job, now)
+                _validate_times(job, fetched)
                 if job.get("head_sha", head_sha) != head_sha:
                     raise ValueError("job head mismatch")
                 if job.get("status") not in _PENDING | {"completed"}:
