@@ -121,7 +121,7 @@ def unavailable(now):
         "available": False,
         "observed_at": now.isoformat(),
         "phase": "unavailable",
-        "error": "Snapshot no disponible",
+        "error": "Snapshot unavailable",
     }
 
 
@@ -184,7 +184,7 @@ def project_snapshot(source, source_hash, now):
                 "at": t0,
                 "kind": "release",
                 "task_id": None,
-                "label": "Backlog liberado",
+                "label": "Backlog released",
                 "status": "released",
                 "pr_url": None,
             }
@@ -274,9 +274,9 @@ def project_snapshot(source, source_hash, now):
         }
         tasks.append(task)
         for at, kind, label in (
-            (task["review"]["finished_at"], "review", "Revisión independiente"),
-            (delivery["merged_at"], "merge", "PR fusionado"),
-            (delivery["green_at"], "green", "CI de main observado en verde"),
+            (task["review"]["finished_at"], "review", "Independent review"),
+            (delivery["merged_at"], "merge", "PR merged"),
+            (delivery["green_at"], "green", "Main CI observed green"),
         ):
             if at:
                 events.append(

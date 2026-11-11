@@ -3,6 +3,7 @@
 The dashboard shows a selected, curated evidence snapshot in a browser. It reads
 local JSON and serves local assets. It does not start workers, change a budget,
 review code, merge PRs, refresh provider billing, or contact GitHub or Modal.
+The interface uses English, USD amounts and UTC timestamps.
 
 From an installed checkout:
 
@@ -18,8 +19,9 @@ credentials file.
 
 ![Local dashboard showing the recorded hundred-worker pilot](images/dashboard-pilot100-2026-11-11.png)
 
-Recorded view from November 11, 2026, around 19:00 UTC: 100 original failed
-reports, 34 provisional product recoveries and unknown actual billing. This is a
+English view from November 11, 2026, at 20:53 UTC: 100 original failed
+reports, 56 provisional product recoveries, two separate support recoveries and
+unknown actual billing. This is a
 historical capture while integration was still running, rather than a final
 result or a hosted dashboard. The panel was built separately after the worker
 cohort; it receives no feature credit in that cohort.

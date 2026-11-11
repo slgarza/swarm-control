@@ -4,16 +4,16 @@
 (() => {
   const byId = (id) => document.getElementById(id);
   const state = {snapshot: null, autoRefresh: true, fetching: false, selected: null, fetchFailed: false};
-  const countFormat = new Intl.NumberFormat('es-MX');
-  const moneyFormat = new Intl.NumberFormat('es-MX', {style: 'currency', currency: 'USD', maximumFractionDigits: 2});
-  const dateFormat = new Intl.DateTimeFormat('es-MX', {dateStyle: 'medium', timeStyle: 'medium', timeZone: 'UTC'});
-  const timeFormat = new Intl.DateTimeFormat('es-MX', {hour: '2-digit', minute: '2-digit', hour12: false, timeZone: 'UTC'});
+  const countFormat = new Intl.NumberFormat("en-US");
+  const moneyFormat = new Intl.NumberFormat("en-US", {style: 'currency', currency: 'USD', maximumFractionDigits: 2});
+  const dateFormat = new Intl.DateTimeFormat("en-US", {dateStyle: 'medium', timeStyle: 'medium', timeZone: 'UTC'});
+  const timeFormat = new Intl.DateTimeFormat("en-US", {hour: '2-digit', minute: '2-digit', hour12: false, timeZone: 'UTC'});
   const finite = (value) => typeof value === 'number' && Number.isFinite(value);
   const number = (value) => finite(value) ? countFormat.format(value) : '—';
-  const money = (value) => finite(value) ? moneyFormat.format(value) : 'Sin dato';
+  const money = (value) => finite(value) ? moneyFormat.format(value) : "No data";
   const date = (value) => {const parsed = typeof value === 'string' ? new Date(value) : null; return parsed && Number.isFinite(parsed.getTime()) ? parsed : null;};
-  const timeLabel = (value) => {const parsed = date(value); return parsed ? timeFormat.format(parsed) + ' UTC' : 'Sin hora';};
-  const dateLabel = (value) => {const parsed = date(value); return parsed ? dateFormat.format(parsed) + ' UTC' : 'Sin dato';};
+  const timeLabel = (value) => {const parsed = date(value); return parsed ? timeFormat.format(parsed) + ' UTC' : "No time";};
+  const dateLabel = (value) => {const parsed = date(value); return parsed ? dateFormat.format(parsed) + ' UTC' : "No data";};
   const setText = (id, value) => {byId(id).textContent = String(value);};
   const node = (tag, className, text) => {const result = document.createElement(tag); if (className) result.className = className; if (text !== undefined) result.textContent = String(text); return result;};
   const clear = (element) => element.replaceChildren();
@@ -23,43 +23,43 @@
   };
   const link = (label, href, className = 'table-link') => {
     const url = safeURL(href);
-    if (!url) return node('span', 'subtle', 'Sin enlace');
+    if (!url) return node('span', 'subtle', "No link");
     const anchor = node('a', className, label); anchor.href = url; anchor.target = '_blank'; anchor.rel = 'noopener noreferrer'; return anchor;
   };
   const pill = (text, type = 'neutral') => node('span', 'pill ' + type, text);
   const tasks = () => Array.isArray(state.snapshot?.tasks) ? state.snapshot.tasks : [];
-  const phaseLabels = {integration: 'Integración en curso', complete: 'Cohorte cerrada', paused: 'Integración en pausa', unavailable: 'Sin snapshot'};
-  const originalLabel = (task) => ({needs_repair: 'Necesita reparación', validated: 'Validado', working: 'En ejecución', preparing: 'Preparando', checking: 'Verificando', failed: 'Falló', rejected: 'Rechazado', needs_recovery: 'Necesita recuperación'}[task.original_status] || 'Sin estado');
+  const phaseLabels = {integration: "Integration in progress", complete: "Cohort closed", paused: "Integration paused", unavailable: "No snapshot"};
+  const originalLabel = (task) => ({needs_repair: "Needs repair", validated: "Validated", working: "Running", preparing: "Preparing", checking: "Checking", failed: "Failed", rejected: "Rejected", needs_recovery: "Needs recovery"}[task.original_status] || "No status");
   const repaired = (task) => task.attribution === 'coordinator_code_or_test_repair';
-  const recoveredLabel = (task) => task.provisional ? (repaired(task) ? 'Con reparación local' : 'Bytes originales') : task.empty_patch ? 'Parche vacío' : 'Sin calificar';
+  const recoveredLabel = (task) => task.provisional ? (repaired(task) ? "Coordinator repair" : "Unchanged recovery") : task.empty_patch ? "Empty patch" : "Not qualified";
   const originalType = (task) => task.original_status === 'validated' ? 'mint-pill' : ['needs_repair', 'failed', 'rejected', 'needs_recovery'].includes(task.original_status) ? 'coral-pill' : 'neutral';
-  const secondsLabel = (value) => {if (!finite(value)) return 'Sin dato'; if (value < 60) return value.toFixed(1) + ' s'; const hours = Math.floor(value / 3600); const minutes = Math.floor(value % 3600 / 60); return hours ? hours + ' h ' + minutes + ' min' : minutes + ' min';};
+  const secondsLabel = (value) => {if (!finite(value)) return "No data"; if (value < 60) return value.toFixed(1) + ' s'; const hours = Math.floor(value / 3600); const minutes = Math.floor(value % 3600 / 60); return hours ? hours + ' h ' + minutes + ' min' : minutes + ' min';};
 
   function announce(message) {setText('screen-reader-status', message);}
 
   function renderOverview(data) {
     const summary = data.summary || {};
-    setText('repo-name', data.repository || 'Repositorio sin identificar');
-    setText('run-name', data.run_id || 'Sin identificador de ejecución');
-    setText('run-phase', phaseLabels[data.phase] || 'Estado desconocido');
+    setText('repo-name', data.repository || "Unidentified repository");
+    setText('run-name', data.run_id || "No run identifier");
+    setText('run-phase', phaseLabels[data.phase] || "Unknown status");
     byId('run-phase').className = 'pill ' + (data.phase === 'integration' ? 'amber-pill' : data.phase === 'complete' ? 'mint-pill' : 'neutral');
-    setText('snapshot-time', 'Fuente: ' + dateLabel(data.source_as_of));
+    setText('snapshot-time', "Source: " + dateLabel(data.source_as_of));
     setText('nav-worker-count', number(summary.assigned));
     setText('metric-workers', number(summary.assigned));
-    setText('metric-workers-note', number(summary.original_needs_repair) + ' originales necesitan reparación');
+    setText('metric-workers-note', number(summary.original_needs_repair) + " originals need repair");
     setText('metric-validated', number(summary.original_validated));
-    setText('metric-validated-note', 'Validación original · sin reescribir resultados');
+    setText('metric-validated-note', "Original validation · outcomes preserved");
     setText('metric-recovered', number(summary.provisional_product));
-    setText('metric-recovered-note', number(summary.provisional_support) + ' de soporte · calidad aún provisional');
+    setText('metric-recovered-note', number(summary.provisional_support) + " supporting · quality still provisional");
     setText('metric-active', number(summary.active_workers));
-    setText('metric-active-note', summary.active_workers === null ? 'Inventario no disponible' : 'Último inventario · no observación continua');
-    setText('workers-title', (finite(summary.assigned) ? number(summary.assigned) + ' workers.' : 'Cohorte de workers.') + ' Una historia completa.');
-    setText('truth-note', 'Los resultados originales y la recuperación son etapas distintas. Las VMs y los eventos de comandos no prueban 100 agentes útiles simultáneos; tampoco una victoria frente a AFK.');
+    setText('metric-active-note', summary.active_workers === null ? "Inventory unavailable" : "Latest inventory · not continuous observation");
+    setText('workers-title', (finite(summary.assigned) ? number(summary.assigned) + ' workers.' : "A worker cohort.") + " The complete picture.");
+    setText('truth-note', "Original outcomes and recovery are separate stages. VMs and command events prove neither 100 simultaneous useful agents nor an AFK efficiency win.");
     const connection = byId('connection-status'); clear(connection);
-    connection.append(node('span', 'status-dot ' + (data.stale ? 'amber' : 'mint')), document.createTextNode(data.stale ? 'Fuente desactualizada' : 'Snapshot disponible'));
+    connection.append(node('span', 'status-dot ' + (data.stale ? 'amber' : 'mint')), document.createTextNode(data.stale ? "Source is stale" : "Snapshot available"));
     const alert = byId('data-alert');
     alert.hidden = !data.stale;
-    if (data.stale) alert.textContent = 'La fuente está marcada como desactualizada. Estos datos describen su hora de captura, no el estado actual del proveedor.';
+    if (data.stale) alert.textContent = "The source is marked stale. These data describe its capture time, not the current provider state.";
   }
 
   function renderGrid(data) {
@@ -67,24 +67,24 @@
     for (const task of tasks()) {
       const tile = node('button', 'worker-tile' + (['needs_repair', 'failed', 'rejected', 'needs_recovery'].includes(task.original_status) ? ' is-failed' : '') + (task.provisional ? ' is-recovered' : '') + (task.feature_candidate === false ? ' is-support' : ''), String(task.id || '').replace(/^B/, ''));
       tile.type = 'button';
-      tile.setAttribute('aria-label', String(task.id || 'Tarea') + ': original ' + originalLabel(task) + '; ' + recoveredLabel(task) + (task.feature_candidate === false ? '; soporte' : ''));
+      tile.setAttribute('aria-label', String(task.id || "Task") + ': original ' + originalLabel(task) + '; ' + recoveredLabel(task) + (task.feature_candidate === false ? "; support" : ''));
       tile.title = String(task.id || '') + (task.title ? ' · ' + task.title : '') + ' · ' + originalLabel(task) + ' · ' + recoveredLabel(task);
       if (task.provisional) {const marker = node('span', 'recovery-marker'); marker.setAttribute('aria-hidden', 'true'); tile.append(marker);}
       tile.addEventListener('click', () => openDetail(task.id)); grid.append(tile);
     }
     const summary = data.summary || {};
-    setText('worker-summary', number(summary.original_needs_repair) + ' originales necesitan reparación · ' + number(summary.empty_patches) + ' parches vacíos');
+    setText('worker-summary', number(summary.original_needs_repair) + " originals need repair · " + number(summary.empty_patches) + " empty patches");
   }
 
   function renderChart(data) {
     const container = byId('recovery-chart'); clear(container);
     const summary = data.summary || {};
-    setText('chart-total', number(summary.provisional_product) + ' provisionales');
+    setText('chart-total', number(summary.provisional_product) + " provisional");
     const split = byId('recovery-split'); clear(split);
     const productTasks = tasks().filter((task) => task.provisional && task.feature_candidate !== false);
     const repairedProducts = productTasks.filter(repaired).length;
     const unchangedProducts = productTasks.length - repairedProducts;
-    for (const [value, label] of [[unchangedProducts, 'producto sin cambios'], [repairedProducts, 'producto reparado'], [summary.provisional_support, 'soporte aparte']]) {
+    for (const [value, label] of [[unchangedProducts, "unchanged product"], [repairedProducts, "repaired product"], [summary.provisional_support, "support separately"]]) {
       const item = node('span'); item.append(node('strong', '', number(value)), document.createTextNode(' ' + label)); split.append(item);
     }
     const t0 = date(data.clock?.t0);
@@ -93,8 +93,8 @@
       return {at: green && merged ? new Date(Math.max(green.getTime(), merged.getTime())) : green || merged, id: task.id};
     }).filter((event) => event.at).sort((a, b) => a.at - b.at);
     if (!t0 || !events.length) {
-      container.append(node('div', 'chart-empty', 'Sin hitos de producto verificados para graficar.'));
-      container.setAttribute('aria-label', 'Sin hitos de producto verificados para graficar.'); return;
+      container.append(node('div', 'chart-empty', "No verified product milestones to chart."));
+      container.setAttribute('aria-label', "No verified product milestones to chart."); return;
     }
     const last = date(data.clock?.t1) || date(data.source_as_of) || events[events.length - 1].at;
     const start = t0.getTime(), end = Math.max(last.getTime(), events[events.length - 1].at.getTime(), start + 60000);
@@ -117,7 +117,7 @@
     svg.append(svgNode('circle', {cx: x(end), cy: y(value), r: 3, fill: '#8be1c1'}));
     for (let tick = 0; tick <= 3; tick++) {const at = start + (end - start) * tick / 3; svg.append(svgNode('text', {x: x(at), y: 169, fill: '#788c9a', 'font-size': 8, 'text-anchor': tick === 0 ? 'start' : tick === 3 ? 'end' : 'middle', 'font-family': 'sans-serif'}, timeFormat.format(new Date(at))));}
     container.append(svg);
-    container.setAttribute('aria-label', 'Recuperación provisional: ' + events.length + ' módulos con hitos de merge y CI, desde ' + timeLabel(data.clock.t0) + ' hasta ' + timeLabel(last.toISOString()) + '. No es aceptación tras la ventana de calidad.');
+    container.setAttribute('aria-label', "Provisional recovery: " + events.length + " modules with merge and CI milestones, from " + timeLabel(data.clock.t0) + " to " + timeLabel(last.toISOString()) + ". This is not acceptance after the quality window.");
   }
 
   function renderTimeline(data) {
@@ -125,91 +125,91 @@
     const source = Array.isArray(data.timeline) ? data.timeline : [];
     const sorted = [...source].filter((item) => date(item.at)).sort((a, b) => date(a.at) - date(b.at));
     const shown = sorted.length > 5 ? [sorted[0], ...sorted.slice(-4)] : sorted;
-    if (!shown.length) {const item = node('li'); item.append(node('span', 'timeline-point amber'), node('div', 'timeline-copy', 'Sin hitos disponibles')); list.append(item);}
+    if (!shown.length) {const item = node('li'); item.append(node('span', 'timeline-point amber'), node('div', 'timeline-copy', "No milestones available")); list.append(item);}
     for (const event of shown) {
       const item = node('li'), point = node('span', 'timeline-point ' + (event.status === 'failed' ? 'coral' : event.status === 'pending' ? 'amber' : ''));
       point.setAttribute('aria-hidden', 'true');
-      const copy = node('div', 'timeline-copy'); copy.append(node('strong', '', event.label || event.kind || 'Hito registrado'));
+      const copy = node('div', 'timeline-copy'); copy.append(node('strong', '', event.label || event.kind || "Recorded milestone"));
       if (event.task_id || event.kind) copy.append(node('p', '', [event.task_id, event.kind].filter(Boolean).join(' · ')));
       const timestamp = node('time', '', timeLabel(event.at)); timestamp.dateTime = date(event.at).toISOString();
       item.append(point, copy, timestamp); list.append(item);
     }
     const elapsed = secondsLabel(data.clock?.elapsed_seconds);
-    setText('clock-note', 'Desde la liberación: ' + elapsed + '. ' + (data.clock?.t1 ? 'Cierre: ' + timeLabel(data.clock.t1) + '.' : 'El reloj sigue abierto.') + ' Revisión, reparaciones y CI incluidas. ' + (sorted.length > 5 ? sorted.length + ' hitos en el JSON exportable.' : ''));
+    setText('clock-note', "Since release: " + elapsed + '. ' + (data.clock?.t1 ? "Closed: " + timeLabel(data.clock.t1) + '.' : "The clock remains open.") + " Review, repairs and CI included. " + (sorted.length > 5 ? sorted.length + " milestones in the exported JSON." : ''));
   }
 
   function renderTable() {
-    const filter = byId('task-filter').value, query = byId('task-search').value.trim().toLocaleLowerCase('es');
+    const filter = byId('task-filter').value, query = byId('task-search').value.trim().toLocaleLowerCase("en-US");
     const filtered = tasks().filter((task) => {
-      const searchable = [task.id, task.title, task.delivery?.pr_url, task.queue_status, task.review?.reviewer, task.attribution].filter(Boolean).join(' ').toLocaleLowerCase('es');
+      const searchable = [task.id, task.title, task.delivery?.pr_url, task.queue_status, task.review?.reviewer, task.attribution].filter(Boolean).join(' ').toLocaleLowerCase("en-US");
       return (!query || searchable.includes(query)) && (filter !== 'recovered' || task.provisional) && (filter !== 'pending' || !task.provisional) && (filter !== 'empty' || task.empty_patch) && (filter !== 'support' || task.feature_candidate === false);
     });
     const body = byId('task-rows'); clear(body);
-    if (!filtered.length) {const row = node('tr', 'empty-table'), cell = node('td', '', 'No hay tareas que coincidan con este filtro.'); cell.colSpan = 6; row.append(cell); body.append(row);}
+    if (!filtered.length) {const row = node('tr', 'empty-table'), cell = node('td', '', "No tasks match this filter."); cell.colSpan = 6; row.append(cell); body.append(row);}
     for (const task of filtered) {
       const row = node('tr');
       const taskCell = node('td'), taskButton = node('button', 'task-name-button'); taskButton.type = 'button';
-      taskButton.append(node('span', 'mono', task.id || 'Sin ID'));
-      const taskCopy = node('span'); taskCopy.append(node('span', 'task-title', task.title || (task.feature_candidate === false ? 'Soporte del piloto' : 'Módulo de producto')), node('span', 'task-kind', task.empty_patch ? 'Sin implementación recuperada' : 'Parche original conservado'));
+      taskButton.append(node('span', 'mono', task.id || "No ID"));
+      const taskCopy = node('span'); taskCopy.append(node('span', 'task-title', task.title || (task.feature_candidate === false ? "Pilot support" : "Product module")), node('span', 'task-kind', task.empty_patch ? "No recovered implementation" : "Original patch preserved"));
       taskButton.append(taskCopy); taskButton.addEventListener('click', () => openDetail(task.id)); taskCell.append(taskButton);
       const original = node('td'); original.append(pill(originalLabel(task), originalType(task)));
       const recovery = node('td'); recovery.append(pill(recoveredLabel(task), task.provisional ? 'mint-pill' : task.empty_patch ? 'neutral' : 'amber-pill'));
       const pr = node('td');
       if (safeURL(task.delivery?.pr_url)) {const path = new URL(task.delivery.pr_url).pathname; pr.append(link('#' + path.split('/').pop(), task.delivery.pr_url));} else pr.append(node('span', 'subtle', '—'));
       const ci = node('td');
-      if (task.provisional && date(task.delivery?.green_at)) ci.append(node('span', 'ci-good', 'Verificado'));
-      else ci.append(node('span', 'subtle', task.empty_patch ? 'Sin candidato' : 'Pendiente'));
-      const detail = node('td'), open = node('button', 'detail-open', '↗'); open.type = 'button'; open.setAttribute('aria-label', 'Ver detalle de ' + task.id); open.addEventListener('click', () => openDetail(task.id)); detail.append(open);
+      if (task.provisional && date(task.delivery?.green_at)) ci.append(node('span', 'ci-good', "Verified"));
+      else ci.append(node('span', 'subtle', task.empty_patch ? "No candidate" : "Pending"));
+      const detail = node('td'), open = node('button', 'detail-open', '↗'); open.type = 'button'; open.setAttribute('aria-label', "View details for " + task.id); open.addEventListener('click', () => openDetail(task.id)); detail.append(open);
       row.append(taskCell, original, recovery, pr, ci, detail); body.append(row);
     }
-    setText('table-count', number(filtered.length) + ' / ' + number(tasks().length) + ' tareas');
-    setText('table-summary', 'Producto: ' + number(state.snapshot?.summary?.provisional_product) + ' provisional · soporte: ' + number(state.snapshot?.summary?.provisional_support) + '.');
+    setText('table-count', number(filtered.length) + ' / ' + number(tasks().length) + " tasks");
+    setText('table-summary', "Product: " + number(state.snapshot?.summary?.provisional_product) + " provisional · support: " + number(state.snapshot?.summary?.provisional_support) + '.');
   }
 
   function renderBudget(data) {
     const budget = data.financials || {};
     setText('budget-reserved', money(budget.admitted_new_usd));
     setText('budget-authorized', money(budget.authorized_new_usd));
-    setText('budget-reserved-note', 'Reservas nuevas de setup y cohorte, si están incluidas en la fuente. No son cargos ni crédito disponible.');
+    setText('budget-reserved-note', "New setup and cohort reserves, where included in the source. These are neither charges nor available credit.");
     const fill = finite(budget.admitted_new_usd) && finite(budget.authorized_new_usd) && budget.authorized_new_usd > 0 ? Math.min(100, Math.max(0, budget.admitted_new_usd / budget.authorized_new_usd * 100)) : 0;
     byId('budget-fill').value = fill;
     setText('budget-ceiling', money(budget.model_exposure_ceiling_usd));
-    setText('budget-ceiling-note', 'Comprometido conservador: ' + money(budget.estimated_model_committed_usd) + ' · incierto retenido: ' + money(budget.model_uncertain_retained_usd) + '. No es factura.');
-    setText('budget-ceiling-source', budget.source_observed_at ? 'Captura: ' + timeLabel(budget.source_observed_at) : 'Hora de fuente sin dato');
-    setText('budget-invoice', finite(budget.actual_billed_total_usd) ? money(budget.actual_billed_total_usd) : 'Pendiente');
-    setText('budget-invoice-note', finite(budget.actual_billed_total_usd) ? 'Costo reportado en la fuente; la elegibilidad y aceptación son controles separados.' : 'Sin costo real atribuible conciliado. Incluye límites pendientes de Codex local, servicios compartidos y CI.');
-    setText('metric-per-dollar', 'Sin dato');
+    setText('budget-ceiling-note', "Conservative committed: " + money(budget.estimated_model_committed_usd) + " · uncertain retained: " + money(budget.model_uncertain_retained_usd) + ". Not an invoice.");
+    setText('budget-ceiling-source', budget.source_observed_at ? "Captured: " + timeLabel(budget.source_observed_at) : "Source time unavailable");
+    setText('budget-invoice', finite(budget.actual_billed_total_usd) ? money(budget.actual_billed_total_usd) : "Pending");
+    setText('budget-invoice-note', finite(budget.actual_billed_total_usd) ? "Source-reported cost; eligibility and acceptance are separate checks." : "No reconciled attributable cost. Local Codex, shared services and CI remain unassigned.");
+    setText('metric-per-dollar', "No data");
   }
 
   function renderEvidence(data) {
     const target = byId('evidence-links'); clear(target);
-    for (const [label, href] of [['Informe público', data.evidence?.report_url], ['Seguimiento en GitHub', data.evidence?.tracking_url]]) {
+    for (const [label, href] of [["Public report", data.evidence?.report_url], ["GitHub tracker", data.evidence?.tracking_url]]) {
       if (safeURL(href)) {const anchor = link(label, href, ''); anchor.append(node('span', '', '↗')); target.append(anchor);}
     }
-    if (!target.childElementCount) target.append(node('span', 'subtle', 'Enlaces de evidencia no disponibles.'));
+    if (!target.childElementCount) target.append(node('span', 'subtle', "Evidence links unavailable."));
   }
 
   function facts(parent, title, pairs) {
     const section = node('section', 'detail-section'); section.append(node('h3', '', title));
     const list = node('dl', 'detail-facts');
-    for (const [name, value, hash] of pairs) {const detail = node('dd', hash ? 'hash' : '', value === null || value === undefined || value === '' ? 'Sin dato' : String(value)); list.append(node('dt', '', name), detail);}
+    for (const [name, value, hash] of pairs) {const detail = node('dd', hash ? 'hash' : '', value === null || value === undefined || value === '' ? "No data" : String(value)); list.append(node('dt', '', name), detail);}
     section.append(list); parent.append(section);
   }
 
   function renderDetail(task) {
-    setText('detail-title', task.id || 'Detalle de tarea');
+    setText('detail-title', task.id || "Task details");
     const target = byId('detail-content'); clear(target);
     if (task.title) target.append(node('p', '', task.title));
-    target.append(node('p', '', task.feature_candidate === false ? 'Tarea de soporte. Se cuenta aparte de las entregas de producto.' : 'Módulo de producto. Esta clasificación describe la tarea, no demuestra que esté entregada.'));
-    facts(target, 'Resultado del worker original', [['Estado', originalLabel(task)], ['Salida del agente', task.agent_exit], ['Salida del helper', task.check_exit], ['Parche', task.empty_patch ? 'Vacío · sin implementación' : 'No vacío · requiere aceptación']]);
-    facts(target, 'Recuperación independiente', [['Calificación', recoveredLabel(task)], ['Cola', task.queue_status], ['Atribución', task.attribution === 'coordinator_code_or_test_repair' ? 'Coordinador: reparación de código o tests' : task.attribution === 'trusted_local_unchanged_failed_worker_recovery' ? 'Bytes originales recuperados sin cambios' : 'Sin atribución'], ['Revisor', task.review?.reviewer], ['Revisión iniciada', dateLabel(task.review?.started_at)], ['Revisión terminada', dateLabel(task.review?.finished_at)], ['Duración registrada', secondsLabel(task.review?.duration_seconds)]]);
-    facts(target, 'Integración y calidad', [['Merge', dateLabel(task.delivery?.merged_at)], ['CI combinado verde', dateLabel(task.delivery?.green_at)], ['Fin previsto de ventana', dateLabel(task.delivery?.quality_until)], ['Commit revisado', task.delivery?.head_sha, true], ['Commit de merge', task.delivery?.merge_sha, true]]);
-    const urls = node('section', 'detail-section'); urls.append(node('h3', '', 'Enlaces a la evidencia')); const links = node('div', 'detail-link-list');
-    for (const [label, href] of [['Issue original ↗', task.issue_url], ['Pull request ↗', task.delivery?.pr_url], ['Checks del head revisado ↗', task.delivery?.head_checks_url], ['Checks del árbol combinado ↗', task.delivery?.combined_checks_url]]) if (safeURL(href)) links.append(link(label, href, ''));
-    if (!links.childElementCount) links.append(node('p', 'subtle', 'Sin enlaces verificables disponibles.'));
+    target.append(node('p', '', task.feature_candidate === false ? "Supporting task. Counted separately from product deliveries." : "Product module. This classifies the task; it does not prove delivery."));
+    facts(target, "Original worker outcome", [["Status", originalLabel(task)], ["Agent exit", task.agent_exit], ["Helper exit", task.check_exit], ["Patch", task.empty_patch ? "Empty · no implementation" : "Nonempty · acceptance required"]]);
+    facts(target, "Independent recovery", [["Qualification", recoveredLabel(task)], ["Queue", task.queue_status], ["Attribution", task.attribution === 'coordinator_code_or_test_repair' ? "Coordinator: code or test repair" : task.attribution === 'trusted_local_unchanged_failed_worker_recovery' ? "Original worker bytes recovered unchanged" : "No attribution"], ["Reviewer", task.review?.reviewer], ["Review started", dateLabel(task.review?.started_at)], ["Review finished", dateLabel(task.review?.finished_at)], ["Recorded duration", secondsLabel(task.review?.duration_seconds)]]);
+    facts(target, "Integration and quality", [['Merge', dateLabel(task.delivery?.merged_at)], ["Combined CI green", dateLabel(task.delivery?.green_at)], ["Expected quality-window end", dateLabel(task.delivery?.quality_until)], ["Reviewed commit", task.delivery?.head_sha, true], ["Merge commit", task.delivery?.merge_sha, true]]);
+    const urls = node('section', 'detail-section'); urls.append(node('h3', '', "Evidence links")); const links = node('div', 'detail-link-list');
+    for (const [label, href] of [["Original issue ↗", task.issue_url], ['Pull request ↗', task.delivery?.pr_url], ["Reviewed-head checks ↗", task.delivery?.head_checks_url], ["Combined-tree checks ↗", task.delivery?.combined_checks_url]]) if (safeURL(href)) links.append(link(label, href, ''));
+    if (!links.childElementCount) links.append(node('p', 'subtle', "No verified links available."));
     urls.append(links); target.append(urls);
-    facts(target, 'SHA-256 de trazabilidad', [['Parche original', task.hashes?.original_patch, true], ['Parche revisado', task.hashes?.reviewed_patch, true], ['Recibo de revisión', task.hashes?.review_receipt, true], ['Delta del coordinador', task.hashes?.coordinator_delta, true]]);
-    target.append(node('p', 'detail-warning', 'Una recuperación no cambia el estado fallido del worker original. La aceptación de calidad, el costo real y la comparación AFK siguen siendo mediciones separadas. Una salida −1 o 137 no prueba por sí sola la causa de terminación.'));
+    facts(target, "Evidence SHA-256", [["Original patch", task.hashes?.original_patch, true], ["Reviewed patch", task.hashes?.reviewed_patch, true], ["Review receipt", task.hashes?.review_receipt, true], ["Coordinator delta", task.hashes?.coordinator_delta, true]]);
+    target.append(node('p', 'detail-warning', "Recovery does not change the failed original worker outcome. Quality acceptance, actual cost and AFK comparison remain separate measurements. Exit −1 or 137 alone does not establish the termination cause."));
   }
 
   function openDetail(id) {
@@ -226,10 +226,10 @@
 
   function showError(message) {
     state.fetchFailed = true;
-    const alert = byId('data-alert'); alert.hidden = false; alert.textContent = message + (state.snapshot ? ' Se conserva el último snapshot recibido; no representa un estado en vivo.' : ' No se muestran datos de ejemplo.');
-    const connection = byId('connection-status'); clear(connection); connection.append(node('span', 'status-dot amber'), document.createTextNode('Fuente no disponible'));
-    if (!state.snapshot) {setText('run-phase', 'Sin snapshot'); setText('run-name', 'Esperando una fuente válida');}
-    announce('No se pudo actualizar la fuente.');
+    const alert = byId('data-alert'); alert.hidden = false; alert.textContent = message + (state.snapshot ? " The last received snapshot is retained; it does not represent live state." : " No example data is displayed.");
+    const connection = byId('connection-status'); clear(connection); connection.append(node('span', 'status-dot amber'), document.createTextNode("Source unavailable"));
+    if (!state.snapshot) {setText('run-phase', "No snapshot"); setText('run-name', "Waiting for a valid source");}
+    announce("Could not refresh the source.");
   }
 
   async function refresh() {
@@ -242,9 +242,9 @@
       const data = await response.json();
       if (data?.schema_version !== 1 || data.available !== true || !Array.isArray(data.tasks) || !data.summary) throw new Error('SNAPSHOT');
       state.snapshot = data; state.fetchFailed = false; render(data);
-      setText('last-fetch', 'Lectura: ' + timeLabel(new Date().toISOString()));
-      announce('Snapshot actualizado: ' + number(data.summary.provisional_product) + ' módulos provisionales.');
-    } catch {showError('No se pudo leer el snapshot saneado del servidor local.');}
+      setText('last-fetch', "Read: " + timeLabel(new Date().toISOString()));
+      announce("Snapshot updated: " + number(data.summary.provisional_product) + " provisional modules.");
+    } catch {showError("Could not read the sanitized snapshot from the local server.");}
     finally {clearTimeout(timeout); state.fetching = false; byId('refresh-button').disabled = false;}
   }
 
@@ -255,12 +255,12 @@
   byId('task-dialog').addEventListener('close', () => {state.selected = null;});
   byId('task-dialog').addEventListener('click', (event) => {const dialog = byId('task-dialog'); if (event.target === dialog && event.offsetX < 0) dialog.close();});
   byId('autorefresh-button').addEventListener('click', () => {
-    state.autoRefresh = !state.autoRefresh; const button = byId('autorefresh-button'); button.setAttribute('aria-pressed', String(state.autoRefresh)); clear(button); button.append(node('span', 'status-dot ' + (state.autoRefresh ? 'mint' : 'amber')), document.createTextNode(state.autoRefresh ? 'Autorrefresco · 10 s' : 'Autorrefresco pausado')); announce(state.autoRefresh ? 'Autorrefresco activado.' : 'Autorrefresco pausado.');
+    state.autoRefresh = !state.autoRefresh; const button = byId('autorefresh-button'); button.setAttribute('aria-pressed', String(state.autoRefresh)); clear(button); button.append(node('span', 'status-dot ' + (state.autoRefresh ? 'mint' : 'amber')), document.createTextNode(state.autoRefresh ? "Auto-refresh · 10 s" : "Auto-refresh paused")); announce(state.autoRefresh ? "Auto-refresh enabled." : "Auto-refresh paused.");
   });
   byId('export-button').addEventListener('click', () => {
     if (!state.snapshot) return;
     const blob = new Blob([JSON.stringify(state.snapshot, null, 2) + '\n'], {type: 'application/json'}), url = URL.createObjectURL(blob), anchor = document.createElement('a');
-    anchor.href = url; anchor.download = 'swarm-snapshot-' + String(state.snapshot.run_id || 'local').replace(/[^A-Za-z0-9_-]/g, '').slice(0,90) + '.json'; anchor.click(); setTimeout(() => URL.revokeObjectURL(url), 1000); announce('Snapshot saneado exportado.');
+    anchor.href = url; anchor.download = 'swarm-snapshot-' + String(state.snapshot.run_id || 'local').replace(/[^A-Za-z0-9_-]/g, '').slice(0,90) + '.json'; anchor.click(); setTimeout(() => URL.revokeObjectURL(url), 1000); announce("Sanitized snapshot exported.");
   });
   for (const anchor of document.querySelectorAll('.nav-item')) anchor.addEventListener('click', () => {for (const item of document.querySelectorAll('.nav-item')) {item.classList.toggle('is-active', item === anchor); if (item === anchor) item.setAttribute('aria-current', 'location'); else item.removeAttribute('aria-current');}});
   document.querySelector('.nav-item')?.setAttribute('aria-current', 'location');
