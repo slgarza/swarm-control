@@ -108,7 +108,7 @@
 
       <div data-run-content hidden class="analysis-grid">
         <section class="panel progress-panel" aria-labelledby="progress-title">
-          <div class="panel-heading"><div><h2 id="progress-title">Assisted recovery</h2></div><span id="chart-total" class="pill mint-pill">— provisional</span></div>
+          <div class="panel-heading"><div><h2 id="progress-title">Assisted recovery</h2></div><span id="chart-total" class="pill mint-pill">Unknown provisional</span></div>
           <div class="chart-legend"><span class="legend-key"><i class="legend-dot mint"></i> Modules with verified PR and CI</span><span class="subtle">Quality window pending</span></div>
           <div id="recovery-chart" class="recovery-chart" role="img" aria-label="Provisional module progress; no data yet"></div>
           <div id="recovery-split" class="recovery-split"><span>No integration snapshot</span></div>
@@ -121,7 +121,7 @@
       </div>
 
       <section data-run-content hidden id="tasks" class="panel tasks-panel section-anchor" aria-labelledby="tasks-title">
-        <div class="panel-heading"><div><h2 id="tasks-title">Tasks and pull requests</h2></div><span id="table-count" class="subtle">— tasks</span></div>
+        <div class="panel-heading"><div><h2 id="tasks-title">Tasks and pull requests</h2></div><span id="table-count" class="subtle">Unknown tasks</span></div>
         <div class="table-toolbar"><div class="filter-group"><label class="sr-only" for="task-filter">Filter tasks</label><select id="task-filter"><option value="all">All tasks</option><option value="recovered">Provisional recoveries</option><option value="pending">Not qualified</option><option value="empty">Empty patch</option><option value="support">Supporting tasks</option></select></div><div class="search-box"><span aria-hidden="true">⌕</span><label class="sr-only" for="task-search">Search task or title</label><input id="task-search" type="search" placeholder="Search task, title or PR…" autocomplete="off"></div></div>
         <div class="table-scroll"><table><thead><tr><th scope="col">Task</th><th scope="col">Original</th><th scope="col">Recovery</th><th scope="col">Pull request</th><th scope="col">CI</th><th scope="col"><span class="sr-only">Details</span></th></tr></thead><tbody id="task-rows"></tbody></table></div>
         <div class="panel-footer"><span id="table-summary">Product and support are counted separately.</span><span>Candidates are not deliveries.</span></div>

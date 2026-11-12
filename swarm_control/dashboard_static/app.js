@@ -605,21 +605,26 @@
     const max = Math.max(5, Math.ceil(Math.max(events.length, finite(summary.provisional_product) ? summary.provisional_product : 0) / 5) * 5);
     const ns = 'http://www.w3.org/2000/svg';
     const svgNode = (tag, attributes, text) => {const element = document.createElementNS(ns, tag); for (const [key, value] of Object.entries(attributes)) element.setAttribute(key, String(value)); if (text !== undefined) element.textContent = String(text); return element;};
-    const svg = svgNode('svg', {viewBox: '0 0 600 180', preserveAspectRatio: 'none', 'aria-hidden': 'true'});
-    const x = (time) => 34 + Math.max(0, Math.min(1, (time - start) / (end - start))) * 547;
-    const y = (value) => 146 - Math.min(max, value) / max * 125;
+    const style = getComputedStyle(container);
+    const width = container.clientWidth ? Math.max(80, container.clientWidth - parseFloat(style.paddingLeft) - parseFloat(style.paddingRight)) : 600;
+    const height = container.clientHeight ? Math.max(80, container.clientHeight - parseFloat(style.paddingTop) - parseFloat(style.paddingBottom)) : 180;
+    const left = 36, right = width - 12, baseline = height - 30;
+    const svg = svgNode('svg', {viewBox: `0 0 ${width} ${height}`, preserveAspectRatio: 'none', 'aria-hidden': 'true'});
+    const x = (time) => left + Math.max(0, Math.min(1, (time - start) / (end - start))) * (right - left);
+    const y = (value) => baseline - Math.min(max, value) / max * (baseline - 16);
     for (let tick = 0; tick <= 4; tick++) {
       const value = Math.round(max * tick / 4), atY = y(value);
-      svg.append(svgNode('line', {x1: 34, x2: 581, y1: atY, y2: atY, stroke: 'var(--line)', 'stroke-width': '.6', 'stroke-dasharray': '3 4'}));
-      svg.append(svgNode('text', {x: 23, y: atY + 3, fill: 'var(--muted)', 'font-size': 12, 'text-anchor': 'end', 'font-family': 'var(--font-ui)'}, value));
+      svg.append(svgNode('line', {x1: left, x2: right, y1: atY, y2: atY, stroke: 'var(--line)', 'stroke-width': '.6', 'stroke-dasharray': '3 4'}));
+      svg.append(svgNode('text', {x: left - 8, y: atY + 3, fill: 'var(--muted)', 'font-size': 12, 'text-anchor': 'end', 'font-family': 'var(--font-ui)'}, value));
     }
-    let line = 'M 34 ' + y(0), value = 0;
+    let line = 'M ' + left + ' ' + y(0), value = 0;
     for (const event of events) {line += ' H ' + x(event.at.getTime()) + ' V ' + y(++value);}
     line += ' H ' + x(end);
-    const area = line + ' L ' + x(end) + ' ' + y(0) + ' H 34 Z';
+    const area = line + ' L ' + x(end) + ' ' + y(0) + ' H ' + left + ' Z';
     svg.append(svgNode('path', {d: area, fill: 'var(--positive-soft)'}), svgNode('path', {d: line, fill: 'none', stroke: 'var(--mint)', 'stroke-width': 1.7, 'stroke-linejoin': 'round'}));
     svg.append(svgNode('circle', {cx: x(end), cy: y(value), r: 3, fill: 'var(--mint)'}));
-    for (let tick = 0; tick <= 3; tick++) {const at = start + (end - start) * tick / 3; svg.append(svgNode('text', {x: x(at), y: 169, fill: 'var(--muted)', 'font-size': 12, 'text-anchor': tick === 0 ? 'start' : tick === 3 ? 'end' : 'middle', 'font-family': 'var(--font-ui)'}, timeFormat.format(new Date(at))));}
+    const intervals = width < 360 ? 2 : 3;
+    for (let tick = 0; tick <= intervals; tick++) {const at = start + (end - start) * tick / intervals; svg.append(svgNode('text', {x: x(at), y: height - 7, fill: 'var(--muted)', 'font-size': 12, 'text-anchor': tick === 0 ? 'start' : tick === intervals ? 'end' : 'middle', 'font-family': 'var(--font-ui)'}, timeFormat.format(new Date(at))));}
     container.append(svg);
     container.setAttribute('aria-label', "Provisional recovery: " + events.length + " modules with merge and CI milestones, from " + timeLabel(data.clock.t0) + " to " + timeLabel(last.toISOString()) + ". This is not acceptance after the quality window.");
   }
@@ -809,5 +814,12 @@
   document.addEventListener('visibilitychange', () => {if (!document.hidden && state.autoRefresh) refresh();});
   window.addEventListener('swarm:setup-changed', (event) => {if (state.workspace) loadCatalog(true, event.detail?.project_id);});
   window.addEventListener('swarm:setup-run', (event) => {if (state.workspace) {loadCatalog(true, event.detail?.project_id).then(() => toggleBuilder(true));}});
+  if (window.ResizeObserver) {
+    let chartWidth = 0;
+    new ResizeObserver(([entry]) => {
+      const nextWidth = Math.round(entry.contentRect.width);
+      if (nextWidth > 0 && nextWidth !== chartWidth) {chartWidth = nextWidth; if (state.snapshot) renderChart(state.snapshot);}
+    }).observe(byId('recovery-chart'));
+  }
   loadCatalog();
 })();
