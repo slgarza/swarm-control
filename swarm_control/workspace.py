@@ -26,11 +26,11 @@ MAX_BYTES = 8 * 1024 * 1024
 MAX_TASK_BYTES = 256 * 1024
 _RUNNER_LOCK = threading.RLock()
 _OPTIONS = {"task_ids", "workers", "timeout", "model_budget", "synchronized",
-            "allow_overlap", "base", "label", "context_mode"}
+            "allow_overlap", "base", "label", "context_mode", "require_parallel", "no_progress_timeout"}
 _STATES = {"draft", "historical", "launching", "runner_finished", "interrupted"}
 _WORKER_STATES = frozenset({"starting", "preparing", "ready", "working", "checking", "recovering",
                             "validated", "needs_repair", "rejected", "failed", "interrupted",
-                            "not_dispatched", "launch_failed"})
+                            "not_dispatched", "launch_failed", "needs_recovery"})
 
 
 class ProjectConnectionError(ValueError):
@@ -106,7 +106,8 @@ def _options(value):
     _require(isinstance(value, dict) and not set(value) - _OPTIONS, "Unknown run option")
     result = {"workers": 1, "timeout": 300, "model_budget": None,
               "synchronized": False, "allow_overlap": False, "base": "HEAD",
-              "label": "New run", "context_mode": "full", **value}
+              "label": "New run", "context_mode": "full", "require_parallel": None,
+              "no_progress_timeout": None, **value}
     tasks = result.get("task_ids")
     _require(isinstance(tasks, list) and 1 <= len(tasks) <= 100,
              "Select between 1 and 100 tasks")
@@ -116,6 +117,14 @@ def _options(value):
              "Agents must be between 1 and the number of selected tasks, at most 100")
     _require(type(result["timeout"]) is int and 30 <= result["timeout"] <= 1800,
              "Coding time must be between 30 and 1800 seconds")
+    required = result["require_parallel"]
+    if required is None and result["workers"] == 100:
+        required = result["require_parallel"] = 100
+    _require(required is None or type(required) is int and 1 <= required <= result["workers"],
+             "Required independent tasks must be within the selected agent count")
+    idle = result["no_progress_timeout"]
+    _require(idle is None or type(idle) is int and 30 <= idle <= result["timeout"],
+             "No-progress stop must be between 30 seconds and the coding time limit")
     _require(type(result["synchronized"]) is bool and type(result["allow_overlap"]) is bool,
              "Run flags must be booleans")
     _require(not result["synchronized"] or result["workers"] == len(tasks),
@@ -403,10 +412,14 @@ class Workspace:
 
     @staticmethod
     def _bindings(project, options, tasks, base_sha):
+        from .workload import load_inventory
+
         # Hash unstaged/index changes and source identities; never persist customer source.
         diff = _git(project, "diff", "--binary", "HEAD", "--")
         status = _git(project, "status", "--porcelain", "--untracked-files=normal")
+        inventory_identity = load_inventory(project)[1]
         return {"base_sha": base_sha,
+                "dependency_inventory_sha256": inventory_identity["inventory_sha256"],
                 "checkout_head": _git(project, "rev-parse", "HEAD").decode().strip(),
                 "working_tree_sha256": _digest(diff + b"\0" + status),
                 "project_sha256": _digest(project.path.read_bytes()),
@@ -415,7 +428,8 @@ class Workspace:
                 "instructions_sha256": {name: _digest((project.root / name).read_bytes())
                                         for name in project.instructions},
                 "controller_source_sha256": {name: _digest(Path(__file__).with_name(name).read_bytes())
-                    for name in ("modal_runner.py", "modal_worker.py", "context_packet.py", "progress.py")
+                    for name in ("modal_runner.py", "modal_worker.py", "context_packet.py", "progress.py",
+                                 "supervision.py", "dependencies.py", "workload.py")
                     if Path(__file__).with_name(name).is_file()},
                 "options_sha256": _digest(json.dumps(options, sort_keys=True).encode())}
 
@@ -432,7 +446,8 @@ class Workspace:
             raw = build_preflight(project, options["task_ids"], workers=options["workers"],
                 synchronized=options["synchronized"], base=options["base"], online=False,
                 model_budget=options["model_budget"], allow_overlap=options["allow_overlap"],
-                timeout=options["timeout"])
+                timeout=options["timeout"], context_mode=options["context_mode"],
+                require_parallel=options.get("require_parallel"))
             if options["context_mode"] == "task":
                 runner.build_context_packets(tasks, raw["base_sha"], options["context_mode"], timeout=options["timeout"])
             bindings = Workspace._bindings(project, options, tasks, raw["base_sha"])
@@ -444,10 +459,15 @@ class Workspace:
         remaining = raw["budget_status"]["local_admission_policy"]["unreserved_cents"]
         public["remaining_model_allowance_cents"] = remaining["model"] if remaining else None
         public["remaining_infrastructure_allowance_cents"] = remaining["infrastructure"] if remaining else None
+        from .workload import public_analysis, public_context
+        public["dependency_analysis"] = public_analysis(raw.get("dependency_analysis"))
+        public["context_readiness"] = public_context(raw.get("context_readiness"))
         return public, bindings
 
     @staticmethod
     def _public_preflight(source):
+        from .workload import public_analysis, public_context
+
         result = {}
         for key in ("preparation_checks_passed", "local_workload_ready", "local_admission_reserve_sufficient",
                     "configured_gateway_capacity_sufficient"):
@@ -462,6 +482,8 @@ class Workspace:
                     "remaining_model_allowance_cents", "remaining_infrastructure_allowance_cents"):
             value = source.get(key)
             result[key] = value if type(value) is int and 0 <= value <= 100000000 else None
+        result["dependency_analysis"] = public_analysis(source.get("dependency_analysis"))
+        result["context_readiness"] = public_context(source.get("context_readiness"))
         return result
 
     @staticmethod
@@ -476,6 +498,8 @@ class Workspace:
                   "base_sha": run["bindings"].get("base_sha") if isinstance(run["bindings"].get("base_sha"), str)
                       and re.fullmatch(r"[a-f0-9]{40}", run["bindings"]["base_sha"]) else None,
                   "timeout": options.get("timeout"),
+                  "require_parallel": options.get("require_parallel"),
+                  "no_progress_timeout": options.get("no_progress_timeout"),
                   "model_budget": options.get("model_budget"),
                   "synchronized": options.get("synchronized"), "allow_overlap": options.get("allow_overlap"),
                   "context_mode": options.get("context_mode"),
@@ -557,6 +581,7 @@ class Workspace:
 
         tasks = run["options"]["task_ids"]
         observed, outcomes, phases, starts, events = 0, {}, {}, [], []
+        task_observations = []
         for task_id in tasks:
             path = batch / task_id / "report.json"
             report = None
@@ -572,9 +597,35 @@ class Workspace:
             except (OSError, ValueError, TypeError, RecursionError):
                 status = "unknown"
             outcomes[status] = outcomes.get(status, 0) + 1
+            row = {"task_id": task_id, "status": status, "phase": None,
+                   "terminal_reason": None, "source_change_count": None,
+                   "first_source_change_seconds": None, "file_change_signals": None,
+                   "last_event_at_utc": None, "recovered_candidate_available": False,
+                   "useful_progress_verified": False}
+            task_observations.append(row)
             if report is None:
                 continue
             observed += 1
+            supervisor = report.get("supervision")
+            if isinstance(supervisor, dict) and supervisor.get("source") == "worker_supervisor_observed":
+                reason = supervisor.get("terminal_reason")
+                if isinstance(reason, str) and reason in {"child_exited", "coding_deadline_reached", "configured_no_source_progress",
+                              "supervisor_interrupted", "spawn_failed"}:
+                    row["terminal_reason"] = reason
+                count = supervisor.get("source_change_count")
+                if type(count) is int and 0 <= count <= 1000000:
+                    row["source_change_count"] = count
+                first = supervisor.get("first_source_change_seconds")
+                if type(first) in (int, float) and 0 <= first <= run["options"]["timeout"] + 60:
+                    row["first_source_change_seconds"] = first
+            recovered = report.get("recovered_candidate")
+            if (isinstance(recovered, dict) and recovered.get("status") == "candidate"
+                    and recovered.get("requires_independent_validation") is True
+                    and recovered.get("base_sha") == run["bindings"]["base_sha"]
+                    and isinstance(recovered.get("patch_sha256"), str)
+                    and re.fullmatch(r"[a-f0-9]{64}", recovered["patch_sha256"])
+                    and recovered["patch_sha256"] == report.get("patch_sha256")):
+                row["recovered_candidate_available"] = True
             started = observed_time(report.get("agent_started_at"))
             if started is not None:
                 starts.append(started)
@@ -584,19 +635,25 @@ class Workspace:
             last_event = observed_time(progress.get("last_event_received_at_utc"))
             if last_event is not None:
                 events.append(last_event)
+                row["last_event_at_utc"] = last_event.isoformat()
+            count = progress.get("file_change_signals")
+            if type(count) is int and 0 <= count <= 1000000:
+                row["file_change_signals"] = count
             rows = progress.get("phases")
             if not isinstance(rows, list) or len(rows) > 32:
                 continue
-            for row in reversed(rows):
-                if (isinstance(row, dict) and isinstance(row.get("phase"), str)
-                        and row["phase"] in PHASES and observed_time(row.get("started_at_utc")) is not None):
-                    phases[row["phase"]] = phases.get(row["phase"], 0) + 1
+            for phase in reversed(rows):
+                if (isinstance(phase, dict) and isinstance(phase.get("phase"), str)
+                        and phase["phase"] in PHASES and observed_time(phase.get("started_at_utc")) is not None):
+                    phases[phase["phase"]] = phases.get(phase["phase"], 0) + 1
+                    row["phase"] = phase["phase"]
                     break
         return {"source": "local_worker_reports", "observed_at_utc": now.isoformat(),
                 "observation_kind": "local_report_read_not_provider_inventory",
                 "expected_tasks": len(tasks), "observed_tasks": observed,
                 "missing_tasks": len(tasks) - observed, "worker_outcomes": outcomes,
                 "phase_counts": phases, "phase_counts_kind": "last_reported_phase_not_active_resources",
+                "task_observations": task_observations,
                 "first_agent_started_at_utc": min(starts).isoformat() if starts else None,
                 "last_reported_event_at_utc": max(events).isoformat() if events else None,
                 "merged_delivery_verified": False, "actual_billed_cost_usd": None}
@@ -729,6 +786,10 @@ class Workspace:
         for key, flag in (("synchronized", "--synchronized"), ("allow_overlap", "--allow-overlap")):
             if options[key]:
                 argv.append(flag)
+        for key, flag in (("require_parallel", "--require-parallel"),
+                          ("no_progress_timeout", "--no-progress-timeout")):
+            if options.get(key) is not None:
+                argv.extend([flag, str(options[key])])
         try:
             process = subprocess.run(argv, cwd=Path(__file__).resolve().parent.parent, check=False)
             attempt.update(status="runner_finished", exit_code=process.returncode)
@@ -757,7 +818,7 @@ class Workspace:
                             except ValueError:
                                 pass
                         outcome = report.get("status")
-                        if outcome not in {"validated", "needs_repair", "rejected", "failed", "interrupted",
+                        if outcome not in {"validated", "needs_repair", "needs_recovery", "rejected", "failed", "interrupted",
                                            "not_dispatched", "launch_failed", "working", "preparing", "checking", "ready"}:
                             outcome = "unknown"
                         attempt["worker_outcomes"][outcome] = attempt["worker_outcomes"].get(outcome, 0) + 1
@@ -819,6 +880,8 @@ def runs_main():
     parser.add_argument("--base", default="HEAD")
     parser.add_argument("--label", default="New run")
     parser.add_argument("--context-mode", choices=["full", "task"], default="full")
+    parser.add_argument("--require-parallel", type=int)
+    parser.add_argument("--no-progress-timeout", type=int)
     parser.add_argument("--synchronized", action="store_true")
     parser.add_argument("--allow-overlap", action="store_true")
     parser.add_argument("--gateway-url")
@@ -830,7 +893,8 @@ def runs_main():
         result = workspace.prepare_run(args.project, {"task_ids": args.items, "workers": args.workers,
             "timeout": args.timeout, "model_budget": args.model_budget, "base": args.base, "label": args.label,
             "context_mode": args.context_mode, "synchronized": args.synchronized,
-            "allow_overlap": args.allow_overlap}, save=args.command == "create")
+            "allow_overlap": args.allow_overlap, "require_parallel": args.require_parallel,
+            "no_progress_timeout": args.no_progress_timeout}, save=args.command == "create")
     elif args.command == "list":
         _require(not args.items and not args.execute, "list accepts no run ID or execution")
         project = workspace._project(workspace._read(), args.project)

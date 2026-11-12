@@ -67,6 +67,7 @@ unknowns. The loopback viewer makes no provider calls or execution/accounting wr
 | [Project reference](docs/PROJECTS.md) | Every configuration field and the task format |
 | [Operations](docs/OPERATIONS.md) | Commands, side effects, flags and integration gates |
 | [Repositories and runs](docs/RUNS.md) | Connect targets, choose concurrent agents, save drafts and explicitly launch through the browser or CLI |
+| [Dependency and parallelism analysis](docs/DEPENDENCIES.md) | Detect prerequisite chains, resource relationships and a conservative independent frontier for 100 workers |
 | [Next pilot](docs/NEXT_PILOT.md) | Small completion experiment, scoped context, CI scheduling and matched AFK gates |
 | [Operational feedback](docs/OPERATIONS_SAFETY.md) | Failure brakes, durable action reservations, CI diagnosis and conservative scaling advice |
 | [Deployment preflight](docs/DEPLOYMENT_PREFLIGHT.md) | Read-only source, ledger, GitHub and resource checks before a separately authorized deployment |
@@ -132,6 +133,22 @@ and inspect historical evidence. Backlog preparation, gateway deployment and
 reviewed integration still use the controller workflow.
 
 ## Capacity and remaining proof
+
+Validate an independent frontier before planning a 100-worker cohort:
+
+```sh
+swarm-control analyze --project /path/to/target/swarm.toml --manifest /path/to/target/swarm/cohort.json --workers 100 --require-parallel 100
+```
+
+The cohort manifest contains a `taskIds` array. Without task IDs or a manifest,
+analysis inspects the whole backlog, up to 10,000 definitions, and suggests at
+most 100 ready tasks for a separate reviewed run. A chain of 100 tasks initially
+has one ready slot; 100 independent leaves can fill 100 slots. The report explains
+cycles, prerequisites, resource/import review hints, theoretical waves and scan
+limits. Selecting 100 agents in the browser or CLI requires a frontier of 100 by
+default, and saved requirements are checked again before resource admission.
+Static preparation does not establish semantic independence, provider capacity
+or successful live work. See the [dependency guide](docs/DEPENDENCIES.md).
 
 The runner accepts cohorts of up to 100 workers when the target explicitly sets
 that capacity and has an authorized allowance. Defaults remain ten workers and

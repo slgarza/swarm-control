@@ -590,6 +590,7 @@ class LifecycleTests(unittest.TestCase):
             for index, task_id in enumerate(task_ids):
                 (project.tasks_dir / f"{task_id}.json").write_text(json.dumps({
                     **template, "id": task_id, "issue": index + 1,
+                    "ownership": [f"packages/ui/{task_id}"],
                 }))
             with (
                 patch.multiple(runner, ROOT=project.root, PROJECT=None, REPOSITORY=None, APP=None),

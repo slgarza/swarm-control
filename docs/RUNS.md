@@ -94,6 +94,22 @@ Run options include `--agents`, `--timeout` (30–1800 seconds), `--base`,
 per-agent amount, bill or account balance. Infrastructure admission is reported
 separately. Unknown remaining allowance and unknown actual billing stay unknown.
 
+Use `--require-parallel 100` with `--agents 100` to require an independent ready
+frontier of 100 tasks. The browser proposes this automatically when selecting
+100 agents; smaller runs can also set a minimum. **Check plan** shows ready and
+independent counts, the longest prerequisite chain, theoretical wave sizes and
+resource/import review hints. A sequence of 100 dependent tasks cannot satisfy
+that requirement. Future waves need merged prerequisites and a newly reviewed
+source base; they are not launched from a stale frozen checkout.
+
+`--no-progress-timeout SECONDS` explicitly opts into stopping a worker after that
+many seconds without an observed owned-source change (30 seconds up to the
+coding limit). The default records warnings and retains the hard coding limit.
+Observed source changes do not establish useful or accepted work. The run view
+separates per-task phase, original outcome, observed stop reason and reviewable
+recovery candidate. See [supervision](WORKER_SUPERVISION.md) and
+[dependency validation](DEPENDENCIES.md).
+
 After source review, actual provider/gateway verification and authorization of
 the remaining allowance, explicit execution uses:
 

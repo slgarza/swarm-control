@@ -224,8 +224,8 @@
   }
 
   function readOptions() {
-    const budget = byId('run-budget').value;
-    return {task_ids: [...state.selectedTasks].sort(), workers: Number(byId('run-workers').value), timeout: Number(byId('run-timeout').value), base: byId('run-base').value.trim(), model_budget: budget === '' ? null : Number(budget), synchronized: byId('run-synchronized').checked, allow_overlap: byId('run-overlap').checked, context_mode: byId('run-context').value, ...(byId('run-label').value.trim() ? {label: byId('run-label').value.trim()} : {})};
+    const budget = byId('run-budget').value, workers = Number(byId('run-workers').value), required = byId('run-required-parallel').value, idle = byId('run-no-progress').value;
+    return {task_ids: [...state.selectedTasks].sort(), workers, timeout: Number(byId('run-timeout').value), base: byId('run-base').value.trim(), model_budget: budget === '' ? null : Number(budget), synchronized: byId('run-synchronized').checked, allow_overlap: byId('run-overlap').checked, context_mode: byId('run-context').value, require_parallel: required === '' ? (workers === 100 ? 100 : null) : Number(required), no_progress_timeout: idle === '' ? null : Number(idle), ...(byId('run-label').value.trim() ? {label: byId('run-label').value.trim()} : {})};
   }
 
   function validateOptions(options) {
@@ -236,6 +236,8 @@
     if (options.task_ids.length > state.context.limits.max_workers) return 'This repository permits at most ' + state.context.limits.max_workers + ' tasks in one run.';
     if (options.synchronized && options.workers !== options.task_ids.length) return 'A synchronized run needs exactly one selected task per agent.';
     if (!Number.isInteger(options.timeout) || options.timeout < 30 || options.timeout > 1800) return 'Choose a coding time limit from 30 to 1800 seconds.';
+    if (options.require_parallel !== null && (!Number.isInteger(options.require_parallel) || options.require_parallel < 1 || options.require_parallel > options.workers)) return 'The required independent frontier must be between 1 and the selected agent count.';
+    if (options.no_progress_timeout !== null && (!Number.isInteger(options.no_progress_timeout) || options.no_progress_timeout < 30 || options.no_progress_timeout > options.timeout)) return 'Choose a no-progress stop from 30 seconds up to the coding time limit, or leave it empty for warnings.';
     if (!options.base || options.base.startsWith('-')) return 'Choose a valid source reference.';
     if (options.model_budget !== null && (!finite(options.model_budget) || options.model_budget <= 0 || options.model_budget > 180 || Math.abs(options.model_budget * 100 - Math.round(options.model_budget * 100)) > 0.000001)) return 'Use a total model reservation between USD0.01 and USD180.00, in whole cents.';
     if (options.context_mode === 'task' && state.context.tasks.some((task) => options.task_ids.includes(task.id) && !task.has_task_context)) return 'Every selected task needs a repository-provided packet to use task context.';
@@ -249,7 +251,8 @@
 
   function updateBuilder() {
     const options = readOptions(), problem = validateOptions(options);
-    setText('run-task-count', number(options.task_ids.length) + ' selected · ' + number(state.context?.tasks?.length || 0) + ' available' + (options.task_ids.length ? ' · up to ' + number(Math.min(options.workers || 0, options.task_ids.length)) + ' working at once' : ''));
+    const frontier = state.previewFingerprint === JSON.stringify(options) ? state.preview?.preflight?.dependency_analysis?.safe_frontier_count : null;
+    setText('run-task-count', number(options.task_ids.length) + ' selected · ' + number(state.context?.tasks?.length || 0) + ' available' + (options.task_ids.length ? ' · ' + number(options.workers || 0) + ' requested slots' + (finite(frontier) ? ' · ' + number(frontier) + ' independently ready' : ' · check plan for readiness') : ''));
     for (const button of byId('worker-presets').querySelectorAll('button')) button.setAttribute('aria-pressed', String(Number(button.dataset.workers) === options.workers));
     byId('preview-run-button').disabled = state.planning || Boolean(problem) || !state.csrf;
     byId('save-run-button').disabled = state.planning || !state.preview || state.previewFingerprint !== JSON.stringify(options) || Boolean(problem) || !state.csrf;
@@ -258,6 +261,7 @@
   }
 
   const blockerCopy = {
+    task_dependency_graph_invalid: 'The task graph has a cycle, missing prerequisite or invalid resource declaration. Resolve the graph before dispatch.', task_dependencies_not_ready: 'Selected tasks depend on unfinished work. Complete and merge their prerequisites, then check a new source base.', independent_frontier_below_required_parallelism: 'Fewer independent tasks are ready than this run requires. Inspect the parallelism review below.', dependency_source_scan_incomplete: 'The bounded source scan is incomplete. Review the remaining source before asserting the required independent capacity.',
     target_origin_mismatch_or_unavailable: 'The registered repository origin needs verification.', checkout_head_differs_from_selected_base: 'The checkout differs from the selected source reference.', target_checkout_has_uncommitted_changes: 'The repository has uncommitted changes.', task_metadata_not_ready: 'Some selected tasks are not ready.', configured_worker_capacity_insufficient: 'The requested agent count exceeds the repository policy.', configured_gateway_capacity_insufficient: 'The configured gateway capacity is below this run’s concurrency.', selected_tasks_already_have_durable_claims: 'Some tasks already belong to an earlier run.', budget_profile_policy_mismatch: 'The project budget policy differs from the retained accounting policy.', existing_active_or_awaiting_tasks: 'Earlier tasks are still active or waiting for integration.', durable_unreserved_allowance_not_observed: 'Remaining local admission allowance has not been observed.', local_infrastructure_reserve_insufficient: 'Remaining infrastructure admission allowance is insufficient.', local_model_reserve_insufficient: 'Remaining model admission allowance is insufficient.', cohort_model_reserve_not_selected: 'Select a total model reservation before a live launch.', github_readiness_not_checked: 'Current GitHub source readiness has not been checked.', provider_quota_not_verified: 'Current provider quota needs verification.', deployed_gateway_capacity_not_verified: 'The deployed gateway capacity needs verification.', owner_launch_authorization_not_verified: 'The live launch still needs explicit owner authorization.', live_execution_disabled: 'Live execution is disabled in the repository policy.'
   };
 
@@ -267,8 +271,35 @@
     const factList = node('div', 'plan-facts');
     for (const [label, value] of [['Concurrent agents', number(plan.workers)], ['Selected tasks', number(plan.task_ids?.length)], ['Coding limit', secondsLabel(plan.timeout)], ['Model reservation', money(plan.model_budget)], ['Infrastructure admission', money(finite(preflight.minimum_infrastructure_reserve_cents) ? preflight.minimum_infrastructure_reserve_cents / 100 : null)]]) {const fact = node('div', 'plan-fact'); fact.append(node('span', '', label), node('strong', '', value)); factList.append(fact);}
     container.append(factList, node('p', '', ['preview', 'draft'].includes(plan.status) ? 'This is a local plan. Agent execution has not started, and no additional spending has been authorized. Reservations are limits, not invoices.' : 'These are the saved planning observations, not a new readiness check. Execution outcomes, delivery acceptance and invoices remain separate evidence.'));
+    renderReadiness(container, preflight, plan);
     const blockers = [...new Set([...(preflight.local_workload_blockers || []), ...(preflight.local_admission_blockers || []), ...(preflight.launch_blockers || [])])];
     if (blockers.length) {const details = node('details', 'plan-checks'), summary = node('summary', '', blockers.length + ' item(s) to resolve before a live launch'); details.open = preflight.preparation_checks_passed !== true; const list = node('ul', 'plan-blockers'); for (const blocker of blockers) list.append(node('li', '', blockerCopy[blocker] || String(blocker).replaceAll('_', ' '))); details.append(summary, list); container.append(details);}
+  }
+
+  function renderReadiness(container, preflight, plan) {
+    const graph = preflight.dependency_analysis;
+    if (graph && Number.isInteger(graph.safe_frontier_count)) {
+      const section = node('section', 'dependency-review'), heading = node('div', 'plan-heading-row');
+      const enough = graph.safe_frontier_count >= plan.workers && !graph.error_count && graph.source_scan_incomplete !== true;
+      heading.append(node('h3', '', 'Parallelism review'), pill(enough ? 'Frontier available' : 'Dependencies need attention', enough ? 'mint-pill' : 'amber-pill')); section.append(heading);
+      facts(section, 'Task graph', [['Ready now', number(graph.ready_count)], ['Independent ready frontier', number(graph.safe_frontier_count)], ['Longest dependency chain', number(graph.critical_path_length)], ['Largest theoretical wave', number(graph.max_wave_width)]]);
+      const missing = Math.max(0, plan.workers - graph.safe_frontier_count);
+      section.append(node('p', 'field-help', missing ? 'Requested ' + number(plan.workers) + ' agents; ' + number(graph.safe_frontier_count) + ' tasks form a conservative independent ready frontier. ' + number(missing) + ' more independent tasks are needed for this stage.' : 'The declared graph has enough independent ready tasks for the requested slots. This is static preparation evidence; semantic independence and provider capacity still need verification.'));
+      if (graph.critical_path?.length > 1) section.append(node('p', 'dependency-chain mono', 'Dependency chain: ' + graph.critical_path.slice(0, 12).join(' → ') + (graph.critical_path.length > 12 ? ' …' : '')));
+      if (graph.wave_sizes?.length) section.append(node('p', 'field-help', 'Theoretical wave sizes: ' + graph.wave_sizes.slice(0, 12).join(' → ') + (graph.wave_sizes.length > 12 ? ' …' : '') + '. Later waves require merged prerequisites and a new reviewed source base.'));
+      const explanations = {new_owned_paths_not_in_base: 'New output paths are absent from the base, as expected for new work', shared_ownership: 'Tasks write overlapping paths', read_write_dependency_review: 'A task reads paths another task will change', static_import_dependency_review: 'A source import may couple these tasks', missing_import_with_provider: 'An import may need another task to produce its module', missing_input_with_provider: 'A missing input has a possible producer', missing_input_at_base: 'A declared input is absent from the selected base', static_source_unavailable: 'Frozen source could not be scanned completely', source_parse_unavailable: 'A source file needs manual import review'};
+      const rows = [...(graph.errors || []), ...(graph.review_hints || [])];
+      if (rows.length) {const details = node('details', 'dependency-details'); details.append(node('summary', '', number(graph.error_count || 0) + ' graph error(s) · ' + number(graph.review_hint_count || 0) + ' review hint(s)')); const list = node('ul'); for (const row of rows.slice(0, 20)) list.append(node('li', '', (explanations[row.code] || row.code.replaceAll('_', ' ')) + (row.task_ids?.length ? ': ' + row.task_ids.join(', ') : ''))); details.append(list); section.append(details);}
+      container.append(section);
+    }
+    const context = preflight.context_readiness;
+    if (context && Number.isInteger(context.instruction_count)) {
+      const details = node('details', 'context-readiness'); details.append(node('summary', '', 'Context and acceptance readiness'));
+      facts(details, 'Frozen context', [['Required documents', number(context.instruction_count)], ['Required instruction size', number(context.instruction_bytes) + ' bytes'], ['Tasks with focused context', number(context.tasks_with_context) + ' / ' + number(context.task_count)], ['Tasks with configured acceptance checks', number(context.tasks_with_acceptance_checks) + ' / ' + number(context.task_count)]]);
+      const warnings = {task_context_selectors_missing: 'Some tasks have no focused contract excerpts.', task_acceptance_checks_missing: 'Some tasks have no separate configured acceptance checks.', large_required_instruction_payload: 'The required global instruction payload is large. Review it before adding more context.', large_context_payload_review_required: 'The instruction and prompt payload needs a context-size review.', context_token_count_unmeasured: 'Token usage has not been measured; byte counts are not token counts.'};
+      for (const code of context.warnings || []) details.append(node('p', 'field-help', warnings[code] || code.replaceAll('_', ' ')));
+      container.append(details);
+    }
   }
 
   async function prepareRun(save) {
@@ -340,12 +371,12 @@
     target.append(node('p', '', draft ? 'This saved draft has not launched any agents. Its configuration is preserved; another run creates a separate record.' : run.has_snapshot ? 'Recorded evidence is shown below when its curated source is available. Missing configuration fields stay unknown.' : 'This run has no imported delivery snapshot. Its execution status does not establish merged or accepted work.'));
     if (run.status === 'historical' && run.has_snapshot) {setText('run-configuration-title', 'Historical evidence'); return;}
     if (run.preflight) renderPlan(target, run);
-    facts(target, 'Frozen run settings', [['Agents', run.workers], ['Selected task IDs', run.task_ids?.join(', ')], ['Source commit', run.base_sha, true], ['Coding time limit', finite(run.timeout) ? secondsLabel(run.timeout) : null], ['Instruction context', run.context_mode === 'task' ? 'Repository-provided task packet' : run.context_mode === 'full' ? 'Full project instructions' : null], ['Created', run.created_at_utc ? dateLabel(run.created_at_utc) : null]]);
+    facts(target, 'Frozen run settings', [['Agents', run.workers], ['Selected task IDs', run.task_ids?.join(', ')], ['Source commit', run.base_sha, true], ['Coding time limit', finite(run.timeout) ? secondsLabel(run.timeout) : null], ['Required independent tasks', finite(run.require_parallel) ? run.require_parallel : 'No additional minimum'], ['No-source-progress stop', finite(run.no_progress_timeout) ? secondsLabel(run.no_progress_timeout) : 'Warnings only'], ['Instruction context', run.context_mode === 'task' ? 'Repository-provided task packet' : run.context_mode === 'full' ? 'Full project instructions' : null], ['Created', run.created_at_utc ? dateLabel(run.created_at_utc) : null]]);
     const execution = node('details', 'run-execution'); execution.open = !draft; execution.append(node('summary', '', 'Execution observations' + (draft ? ' · not launched' : '')));
     const reported = run.execution?.source === 'local_worker_reports' ? run.execution : null;
     const firstStart = run.started_at_utc || reported?.first_agent_started_at_utc;
     facts(execution, 'Recorded execution', [['Launch requested', run.launch_requested_at_utc ? dateLabel(run.launch_requested_at_utc) : null], ['First observed agent start', firstStart ? dateLabel(firstStart) : null], ['Runner finished', run.finished_at_utc ? dateLabel(run.finished_at_utc) : null], ['Runner exit code', Number.isInteger(run.runner_exit_code) ? run.runner_exit_code : null]]);
-    const outcomeLabels = {validated: 'Validated patch', needs_repair: 'Needs repair', rejected: 'Rejected', failed: 'Failed', interrupted: 'Interrupted', not_dispatched: 'Not dispatched', launch_failed: 'Launch failed', working: 'Working', preparing: 'Preparing', checking: 'Checking', ready: 'Prepared', unknown: 'Unknown'};
+    const outcomeLabels = {validated: 'Validated patch', needs_repair: 'Needs repair', needs_recovery: 'Needs artifact recovery', rejected: 'Rejected', failed: 'Failed', interrupted: 'Interrupted', not_dispatched: 'Not dispatched', launch_failed: 'Launch failed', working: 'Working', preparing: 'Preparing', checking: 'Checking', ready: 'Prepared', unknown: 'Unknown'};
     const outcomeRows = Object.entries(reported?.worker_outcomes || run.worker_outcomes || {}).filter(([key, count]) => Object.hasOwn(outcomeLabels, key) && Number.isInteger(count) && count >= 0).map(([key, count]) => [outcomeLabels[key], number(count)]);
     if (outcomeRows.length) facts(execution, 'Recorded worker outcomes', outcomeRows);
     execution.append(node('p', 'field-help', outcomeRows.length ? 'Worker outcomes and a runner exit code do not establish accepted or merged deliveries.' : 'No per-worker outcomes have been recorded. Missing counts remain unknown.'));
@@ -353,9 +384,17 @@
     if (reported) {
       const progress = node('section', 'reported-progress');
       facts(progress, 'Reported worker progress', [['Observed task reports', finite(reported.observed_tasks) ? number(reported.observed_tasks) : null], ['Expected tasks', finite(reported.expected_tasks) ? number(reported.expected_tasks) : null], ['Missing task reports', finite(reported.missing_tasks) ? number(reported.missing_tasks) : null], ['Observed at', reported.observed_at_utc ? dateLabel(reported.observed_at_utc) : null]]);
-      const phaseLabels = {provision: 'Provision', prepare: 'Prepare', barrier: 'Start barrier', agent: 'Agent session', collect: 'Collect patch', check: 'Validation', recover: 'Recover artifacts', artifacts: 'Read artifacts', terminate: 'Terminate sandbox'};
+      const phaseLabels = {provision: 'Provision', prepare: 'Prepare', barrier: 'Start barrier', agent: 'Agent session', collect: 'Collect patch', check: 'Validation', acceptance: 'Task acceptance checks', recover: 'Recover artifacts', artifacts: 'Read artifacts', terminate: 'Terminate sandbox'};
       const phaseRows = Object.entries(reported.phase_counts || {}).filter(([key, count]) => Object.hasOwn(phaseLabels, key) && Number.isInteger(count) && count >= 0).map(([key, count]) => [phaseLabels[key], number(count)]);
       if (phaseRows.length) facts(progress, 'Last reported phase', phaseRows);
+      if (reported.task_observations?.length) {
+        const details = node('details', 'worker-observations'), summary = node('summary', '', 'Per-task progress and observed stop reasons'); details.append(summary);
+        const scroll = node('div', 'table-scroll'), table = node('table'), head = node('thead'), tr = node('tr'), body = node('tbody');
+        for (const text of ['Task', 'Outcome', 'Last phase', 'Source changes', 'Observed stop']) {const cell = node('th', '', text); cell.scope = 'col'; tr.append(cell);} head.append(tr);
+        const reasons = {child_exited: 'Agent process exited', coding_deadline_reached: 'Coding limit reached', configured_no_source_progress: 'Configured source-progress stop', supervisor_interrupted: 'Supervisor interrupted', spawn_failed: 'Could not start agent'};
+        for (const task of reported.task_observations.slice(0, 100)) {const row = node('tr'); row.append(node('td', 'mono', task.task_id), node('td', '', outcomeLabels[task.status] || 'Unknown'), node('td', '', phaseLabels[task.phase] || 'Not observed'), node('td', '', finite(task.source_change_count) ? number(task.source_change_count) : 'Not observed'), node('td', '', (reasons[task.terminal_reason] || 'Unknown') + (task.recovered_candidate_available ? ' · Recovery candidate needs review' : ''))); body.append(row);}
+        table.append(head, body); scroll.append(table); details.append(scroll); progress.append(details);
+      }
       progress.append(node('p', 'field-help', 'These are the last local worker reports. Phase counts are not active machines, continuous useful activity or accepted deliveries. Unobserved work remains unknown.')); target.append(progress);
     }
     if (draft && run.launch_command) {
@@ -744,8 +783,13 @@
   byId('run-form').addEventListener('submit', (event) => {event.preventDefault(); if (byId('run-form').reportValidity()) prepareRun(false);});
   byId('save-run-button').addEventListener('click', () => prepareRun(true));
   byId('run-task-search').addEventListener('input', renderTaskChoices);
+  byId('select-matching-run-tasks').addEventListener('click', () => {
+    const query = byId('run-task-search').value.trim().toLocaleLowerCase('en-US'), cap = state.context?.limits?.max_tasks || state.context?.limits?.max_workers || 100;
+    const matches = (state.context?.tasks || []).filter((task) => task.status === 'ready' && [task.id, task.title].join(' ').toLocaleLowerCase('en-US').includes(query));
+    state.selectedTasks = new Set(matches.slice(0, cap).map((task) => task.id)); invalidatePreview(); renderTaskChoices(); updateBuilder(); announce(number(state.selectedTasks.size) + ' matching ready task definitions selected. Check the plan to inspect their dependencies.');
+  });
   byId('clear-run-tasks').addEventListener('click', () => {state.selectedTasks.clear(); invalidatePreview(); renderTaskChoices(); updateBuilder();});
-  for (const id of ['run-workers', 'run-label', 'run-budget', 'run-base', 'run-timeout', 'run-context', 'run-synchronized', 'run-overlap']) byId(id).addEventListener('input', () => {invalidatePreview(); updateBuilder();});
+  for (const id of ['run-workers', 'run-label', 'run-budget', 'run-base', 'run-timeout', 'run-context', 'run-synchronized', 'run-overlap', 'run-required-parallel', 'run-no-progress']) byId(id).addEventListener('input', () => {invalidatePreview(); updateBuilder();});
   byId('task-filter').addEventListener('change', renderTable);
   byId('task-search').addEventListener('input', renderTable);
   byId('close-detail').addEventListener('click', () => byId('task-dialog').close());

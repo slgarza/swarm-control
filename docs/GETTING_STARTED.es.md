@@ -125,6 +125,20 @@ borrador. Un borrador anterior no se actualiza silenciosamente.
 
 ## 5. Ejecutar agentes de verdad
 
+Antes de una corrida grande, pulsa **Check plan** y revisa **Parallelism review**.
+Cien tareas en una cadena de dependencias permiten comenzar una sola; cien tareas
+independientes pueden ocupar cien agentes. El panel muestra la frontera lista,
+la cadena más larga y las etapas teóricas. Al elegir 100 agentes propone exigir
+100 tareas independientes antes del lanzamiento. Las etapas posteriores necesitan
+dependencias integradas y otro borrador sobre la nueva base.
+
+El detalle **Context and acceptance readiness** indica si existen extractos de
+contrato y pruebas de aceptación por tarea. La supervisión registra cambios de
+archivos y el motivo observado de parada. **Stop after no source changes** es
+opcional: vacío conserva avisos y el límite total, sin detener por silencio del
+modelo. Consulta [dependencias](DEPENDENCIES.md) y
+[supervisión](WORKER_SUPERVISION.md) para preparar los contratos.
+
 Esta parte usa servicios de pago. Antes necesitas preparar tus propias cuentas
 de GitHub, Modal y OpenAI, configurar el presupuesto autorizado, publicar las
 tareas y el código, desplegar tu gateway y verificar su funcionamiento. Sigue

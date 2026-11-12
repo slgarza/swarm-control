@@ -68,6 +68,8 @@ def write_json(path, data):
 
 
 def load_task(task_id):
+    from .dependencies import validate_task_resources
+
     if not re.fullmatch(r"[A-Z][A-Z0-9_-]{1,39}", task_id):
         raise ValueError("invalid task ID")
     path = task_directory() / f"{task_id}.json"
@@ -103,6 +105,7 @@ def load_task(task_id):
         raise ValueError(f"{task_id}: missing or invalid dependency metadata")
     acceptance_commands(task)
     acceptance_files(task)
+    validate_task_resources(task)
     return task
 
 
@@ -894,6 +897,8 @@ def main():
     )
     parser.add_argument("--no-progress-timeout", type=int,
                         help="Explicitly stop after this many seconds without an observed owned-source change (30–coding limit); default warns only")
+    parser.add_argument("--require-parallel", type=int,
+                        help="Require this many conservatively independent ready tasks before resource admission")
     parser.add_argument("--model", help="explicit OpenAI model ID for a real agent run")
     parser.add_argument("--environment")
     parser.add_argument(
@@ -918,6 +923,8 @@ def main():
         help="explicitly retry a reviewed failed attempt",
     )
     args = parser.parse_args()
+    if args.require_parallel is None and args.workers == 100:
+        args.require_parallel = 100
     args.run_id = validated_run_id(args.run_id)
     project = load_project(args.project)
     configure(project)
@@ -930,6 +937,8 @@ def main():
         parser.error("pilot timeout must be between 30 and 1800 seconds")
     if args.no_progress_timeout is not None and not 30 <= args.no_progress_timeout <= args.timeout:
         parser.error("--no-progress-timeout must be between 30 seconds and the coding limit")
+    if args.require_parallel is not None and not 1 <= args.require_parallel <= args.workers:
+        parser.error("--require-parallel must fit within the selected worker count")
     if args.command == "run" and not args.model:
         parser.error("run requires --model")
     tasks = [load_task(task) for task in args.tasks]
@@ -970,6 +979,12 @@ def main():
     base_sha = subprocess.check_output(
         ["git", "rev-parse", "--verify", f"{args.base}^{{commit}}"], cwd=ROOT, text=True
     ).strip()
+    from .workload import analyze_project, effective_tasks, require_cohort
+
+    dependency_analysis = analyze_project(project, args.tasks, workers=args.workers,
+                                         base=base_sha, allow_overlap=args.allow_overlap)
+    if args.command != "plan":
+        require_cohort(dependency_analysis, args.require_parallel)
     args.context_packets = build_context_packets(tasks, base_sha, args.context_mode, timeout=args.timeout)
     context_readiness = build_context_readiness(tasks, project, base_sha, args.context_mode,
                                               packets=args.context_packets)
@@ -980,6 +995,8 @@ def main():
         "context_mode": args.context_mode,
         "context_packets": {task_id: packet["metadata"] for task_id, packet in args.context_packets.items()},
         "context_readiness": context_readiness,
+        "dependency_analysis": dependency_analysis,
+        "required_parallelism": args.require_parallel,
         "supervision_policy": {"coding_limit_seconds": args.timeout,
                                "no_progress_timeout_seconds": args.no_progress_timeout,
                                "automatic_retries": 0},
@@ -991,8 +1008,8 @@ def main():
         "allow_overlap": args.allow_overlap,
         "overlap_pairs": args.overlap_pairs,
         "requested_workers": args.workers,
-        "maximum_active_agents": min(args.workers, len(tasks)),
-        "enough_tasks_for_100": len(tasks) >= 100 and args.workers >= 100,
+        "maximum_active_agents": min(args.workers, dependency_analysis["ready_count"]),
+        "enough_tasks_for_100": dependency_analysis["supports_100_now"] and args.workers >= 100,
         "agent_timeout_seconds": args.timeout,
         "sandbox_lifecycle_timeout_seconds": args.timeout + 900,
         "gateway_run_ttl_seconds": run_ttl_seconds(args.timeout),
@@ -1018,7 +1035,8 @@ def main():
         operations.require_admission(project.failure_policy)
         ledger = project.ledger(state / "control.sqlite3")
         if args.command == "run":
-            verify_github_tasks(tasks, ROOT, base_sha, repository=project.repository, tasks_dir=project.tasks_dir)
+            verify_github_tasks(effective_tasks(tasks, dependency_analysis), ROOT, base_sha,
+                                repository=project.repository, tasks_dir=project.tasks_dir)
         app = modal.App.lookup(
             APP, environment_name=args.environment, create_if_missing=True
         )

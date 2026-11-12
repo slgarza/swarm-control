@@ -191,6 +191,26 @@ dependency domains and local integration tools.
 | `status` | Explicitly use `ready` before dispatch and `merged` after delivery; live admission accepts only `ready` (also the default if omitted) |
 | `issue` | Positive integer naming a real open issue in this target; unique within the cohort |
 | `pullRequest` | Actual merged PR number for a completed dependency |
+| `produces` | Optional unique stable artifact IDs or owned file paths provided by this task |
+| `consumes` | Optional artifact IDs which require a unique producing task; the analyzer derives prerequisite edges |
+| `reads` | Optional repository-relative input paths; overlaps and source imports provide explainable review hints |
+| `context_files` | Optional frozen document line selectors; required when choosing task context mode |
+| `acceptance_checks` | Optional bounded lists of command arguments for task-specific acceptance; executed separately within the shared validation allowance |
+| `acceptance_files` | Optional repository-relative acceptance inputs protected against modification from the frozen base |
+
+For example, a schema producer can declare `produces: ["schema-v1"]` and its
+consumer `consumes: ["schema-v1"]`. The dependency analyzer derives producer →
+consumer without editing either definition. A missing input whose exact produced
+file path is declared also establishes a prerequisite. Existing-source imports
+and shared reads/writes are conservative review evidence, rather than invented
+dependency directions. [Dependency analysis](DEPENDENCIES.md) explains the
+distinction and static limits.
+
+Freeze acceptance commands and their protected input files before releasing a
+workload. The worker checks both the baseline and configured task acceptance;
+source changes to protected inputs reject the result. These configured checks
+do not replace independent review, exact-head CI or an end-to-end product test.
+See [worker supervision](WORKER_SUPERVISION.md).
 
 Ownership includes a path and its descendants. `src/search` therefore conflicts
 with `src/search/parser.py`, while separate sibling files can be dispatched
