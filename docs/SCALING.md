@@ -20,6 +20,14 @@ another large run; they do not justify expansion from VM counts alone.
 
 ## Implemented controls
 
+The 100-worker target now has an explicit workload-readiness validator:
+`swarm-control analyze --project swarm.toml --manifest swarm/cohort.json --workers 100 --require-parallel 100`.
+It separates a larger backlog from its current independent frontier. One hundred
+serial tasks remain one initially ready task; a broad set of independent leaves
+can fill 100 coding slots. Cycles and hard dependencies block admission; import
+and resource hints retain their uncertainty. A successful static check grants no
+provider capacity or spending authority. See [dependency analysis](DEPENDENCIES.md).
+
 | Control | Behavior |
 | --- | --- |
 | Cohort admission | `budget.max_live_agents` accepts 1–100, defaults to ten; disabled/funding gates still apply |
@@ -31,6 +39,9 @@ another large run; they do not justify expansion from VM counts alone.
 | Provider pacing | Optional paired token/request rolling-minute permits, verified input plus maximum output weight, FIFO queue of at most 100 waiters and one shared 300-second deadline |
 | Coding duration | Default 300 seconds; explicit 30–1800 seconds, lifecycle `timeout + 900`, gateway TTL `max(1800, timeout + 900)` within the 3600-second ceiling |
 | Preparation inspection | Read-only `preflight`; optional GitHub GETs, separate source/admission/live blockers and no launch approval |
+| Useful-work observations | Worker-owned process supervision, source-change checkpoints and explicit observed stop reasons; no automatic paid retries |
+| Task acceptance | Optional frozen argv checks and protected base inputs, sharing the existing validation allowance with the baseline |
+| Integration preparation | Up to eight local preparation lanes with durable candidate reservations, bounded pending work and independent advancement around CI holds |
 | Pagination | Open PRs and exact-head checks are read across bounded pages; incomplete/inconsistent responses stop admission/merge |
 
 An exhausted gateway queue returns `429 gateway_busy` before reserving budget or
@@ -96,10 +107,11 @@ baseline. Measure merged green PRs per hour including reviews, CI and retries, a
 per dollar with reconciled billing. Current accounting ceilings are not invoices.
 
 A persistent control service and shared database can later replace the local
-coordinator. The local dashboard now shows explicitly selected curated evidence
-for original worker outcomes, attributed recovery, PR/check links and separate
-admission/estimate/billing fields. It reads local snapshots; execution controls
-and a persistent shared control service remain future work.
+coordinator. The local dashboard shows selected curated evidence for original
+worker outcomes, attributed recovery, PR/check links and separate
+admission/estimate/billing fields. Its workspace also prepares run drafts and
+supports explicit browser launch through the existing source and budget gates.
+The persistent shared control service remains future work.
 
 ## Gates for each stage
 
@@ -118,7 +130,7 @@ comparative-efficiency gate.
 The gateway has a USD180 hard per-run model ceiling. Its administrative default
 remains USD18, and an existing project's durable policy may be much smaller. This
 does not authorize a new allowance or migrate one. The runner retains bounded
-timeouts, one local coordinator and assisted serial integration. A larger worker
+timeouts, one local coordinator, explicit review and serialized publication/merge. A larger worker
 count can increase an integration backlog without improving delivered PRs/hour.
 Clean three-way application handles compatible edits; semantic conflicts, failed
 combined checks and CI contention still need observed recovery at each stage.

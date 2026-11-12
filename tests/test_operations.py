@@ -1,7 +1,9 @@
 """Offline faults exercise admission and restart-safe remote-action boundaries."""
 
+import hashlib
 import json
 import sqlite3
+import subprocess
 import sys
 import tempfile
 import unittest
@@ -165,8 +167,25 @@ class MergeFaultTests(unittest.TestCase):
             project = make_project(root / "repo")
             directory = root / "artifact"
             directory.mkdir()
+            base = pilot_integrate.git(project.root, "rev-parse", "HEAD")
+            task = json.loads((project.tasks_dir / "A1.json").read_text())
+            source = project.root / "src/item.txt"
+            source.write_text("Useful reviewed change\n")
+            patch_bytes = subprocess.check_output(["git", "diff", "--binary", "--full-index"], cwd=project.root)
+            source.write_text("baseline\n")
+            digest = hashlib.sha256(patch_bytes).hexdigest()
+            report = {"task_id": task["id"], "base_sha": base, "status": "validated",
+                      "agent_exit": 0, "check_exit": 0, "patch_sha256": digest,
+                      "checked_patch_sha256": digest, "changes": {"head_unchanged": True,
+                      "ownership_violations": [], "prohibited_files": []}}
+            (directory / "changes.patch").write_bytes(patch_bytes)
+            (directory / "manifest.json").write_text(json.dumps({"repository": project.clone_url,
+                "base_sha": base, "task": task}))
+            (directory / "report.json").write_text(json.dumps(report))
             state = {"status": "published", "pr_number": 1, "head_sha": "a" * 40,
-                     "branch": "swarm/task", "tested_base_sha": "b" * 40}
+                     "branch": "swarm/task", "tested_base_sha": base, "patch_sha256": digest,
+                     "baseline_checks_exit": 0, "checks_finished_at": datetime.now(UTC).isoformat(),
+                     "acceptance_configured": False}
             merged, writes = False, []
 
             def github(path, *, method="GET", body=None):
@@ -174,7 +193,7 @@ class MergeFaultTests(unittest.TestCase):
                     writes.append(body)
                     raise TimeoutError("uncertain response")
                 if path == "git/ref/heads/main":
-                    return {"object": {"sha": "b" * 40}}
+                    return {"object": {"sha": base}}
                 return {"state": "closed" if merged else "open", "merged": merged, "draft": False,
                         "base": {"ref": "main"}, "head": {"sha": "a" * 40, "ref": "swarm/task"},
                         "merged_at": datetime.now(UTC).isoformat() if merged else None,
@@ -182,16 +201,18 @@ class MergeFaultTests(unittest.TestCase):
 
             checks = {"total_count": 1, "check_runs": [{"app": {"slug": "github-actions"},
                 "name": "checks", "status": "completed", "conclusion": "success", "head_sha": "a" * 40}]}
-            with patch.object(pilot_integrate, "ROOT", project.root), patch.object(pilot_integrate, "PROJECT", project), \
+            with patch.multiple(pilot_integrate, ROOT=project.root, PROJECT=project,
+                                REPO=project.repository, BASE_BRANCH="main"), \
                  patch.object(pilot_integrate, "candidate"), patch.object(pilot_integrate, "github", side_effect=github), \
                  patch.object(pilot_integrate, "all_checks", return_value=checks):
+                state["source_bindings"] = pilot_integrate.source_bindings(directory, task, report, base)
                 with self.assertRaises(TimeoutError):
-                    pilot_integrate.merge(directory, {"id": "A1", "title": "Task"}, state)
+                    pilot_integrate.merge(directory, task, state)
                 with self.assertRaisesRegex(ValueError, "reconciliation"):
-                    pilot_integrate.merge(directory, {"id": "A1", "title": "Task"}, state)
+                    pilot_integrate.merge(directory, task, state)
                 self.assertEqual(len(writes), 1)
                 merged = True
-                result = pilot_integrate.merge(directory, {"id": "A1", "title": "Task"}, state)
+                result = pilot_integrate.merge(directory, task, state)
                 self.assertEqual(result["merge_commit_sha"], "c" * 40)
                 self.assertEqual(len(writes), 1)
                 self.assertEqual(json.loads((directory / "integration.json").read_text())["status"], "merged")

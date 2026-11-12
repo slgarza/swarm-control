@@ -19,6 +19,9 @@ class ArtifactTests(unittest.TestCase):
         repo_patch = patch.object(integration, "REPO", "example/project")
         repo_patch.start()
         self.addCleanup(repo_patch.stop)
+        project_patch = patch.object(integration, "PROJECT", None)
+        project_patch.start()
+        self.addCleanup(project_patch.stop)
         self.temporary = tempfile.TemporaryDirectory()
         self.addCleanup(self.temporary.cleanup)
         self.root = Path(self.temporary.name)
@@ -78,7 +81,9 @@ class ArtifactTests(unittest.TestCase):
             integration.artifacts(self.root)
 
     def test_review_acknowledgement_is_required_and_bound_to_integration(self):
-        integration.save(self.root / "integration.json", {"patch_sha256": self.digest})
+        state = {"patch_sha256": self.digest, "tested_base_sha": "a" * 40,
+                 "source_bindings": integration.source_bindings(self.root, self.task, self.report, "a" * 40)}
+        integration.save(self.root / "integration.json", state)
         for acknowledged in (None, "b" * 64):
             with self.assertRaisesRegex(ValueError, "explicit"):
                 integration.load_review(self.root, self.digest, acknowledged)
@@ -146,6 +151,11 @@ class LocalCandidateTests(unittest.TestCase):
 
 class MergeGateTests(unittest.TestCase):
     def setUp(self):
+        # This suite isolates remote merge gates; real source binding regressions
+        # prepare actual Git candidates in test_integration_pipeline.
+        binding_patch = patch.object(integration, "check_source_bindings")
+        binding_patch.start()
+        self.addCleanup(binding_patch.stop)
         self.head = "b" * 40
         self.base = "a" * 40
         self.checks = {"total_count": 1, "check_runs": [{"name": "checks", "app": {"slug": "github-actions"},
@@ -275,8 +285,9 @@ class CollisionIntegrationTests(unittest.TestCase):
         self.artifacts = self.directory / "batch" / "T01"
         self.artifacts.mkdir(parents=True)
         (self.artifacts / "changes.patch").write_bytes(self.patch)
-        (self.artifacts / "manifest.json").write_text(json.dumps({"allow_overlap": True}))
         self.task = {"id": "T01", "ownership": ["src.py"]}
+        self.report = {"base_sha": self.base}
+        self.write_sources()
         self.project = SimpleNamespace(install=((sys.executable, "-c", "pass"),),
                                        checks=((sys.executable, "-c", "pass"),))
         for name, value in (("ROOT", self.root), ("PROJECT", self.project)):
@@ -297,7 +308,11 @@ class CollisionIntegrationTests(unittest.TestCase):
         self.git("push", "origin", "main")
 
     def prepare(self):
-        return integration.prepare(self.artifacts, self.task, {"base_sha": self.base}, self.digest)
+        return integration.prepare(self.artifacts, self.task, self.report, self.digest)
+
+    def write_sources(self, *, overlap=True):
+        (self.artifacts / "manifest.json").write_text(json.dumps({"task": self.task, "allow_overlap": overlap}))
+        (self.artifacts / "report.json").write_text(json.dumps(self.report))
 
     def test_independent_same_file_edits_use_three_way_and_validate_combined_tree(self):
         self.upstream(8)  # Changes patch context, so strict apply fails; edits still merge cleanly.
@@ -345,7 +360,7 @@ class CollisionIntegrationTests(unittest.TestCase):
 
     def test_overlap_opt_in_is_required_and_failed_combined_checks_block_publish(self):
         self.upstream(8)
-        (self.artifacts / "manifest.json").write_text("{}")
+        self.write_sources(overlap=False)
         with self.assertRaises(ValueError):
             self.prepare()
         state_path = self.artifacts / "integration.json"
@@ -354,7 +369,7 @@ class CollisionIntegrationTests(unittest.TestCase):
         self.artifacts = self.directory / "retry" / "T01"
         self.artifacts.mkdir(parents=True)
         (self.artifacts / "changes.patch").write_bytes(self.patch)
-        (self.artifacts / "manifest.json").write_text(json.dumps({"allow_overlap": True}))
+        self.write_sources()
         self.project.checks = ((sys.executable, "-c", "raise SystemExit(1)"),)
         with self.assertRaises(ValueError):
             self.prepare()

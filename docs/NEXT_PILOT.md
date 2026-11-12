@@ -4,6 +4,13 @@ This is a preparation protocol, not a record of another live experiment.
 No paid run, new allowance, AFK win or improved completion rate is implied.
 The original hundred-worker outcomes remain immutable.
 
+The scalability target remains at least **100 useful concurrent workers**.
+Read-only `analyze --require-parallel 100` validates a conservative independent
+frontier for the selected cohort; total task count alone is insufficient.
+Small representative canaries are preparation experiments, not a reduction of
+the 100-worker target or proof of its runtime capacity. Any new live experiment
+still requires its own authorized remaining allowance and frozen source.
+
 ## Freeze a representative small workload
 
 Select ten new, independently reviewable tasks from a clean, pushed target base.
@@ -30,8 +37,10 @@ cumulative; a new experiment needs its own authorized remaining allowance.
    change, completion, semantic quality and the complete integration tail.
 3. Exercise independent integration candidates while one PR waits for CI. The
    offline `ops queue-plan queue.json --project /path/to/target/swarm.toml`
-   classifies bounded waits and selects independent preparation lanes. It never
-   merges, reruns CI or launches repairs. A live integration operator must still
+   classifies bounded waits and selects independent preparation lanes. The explicit
+   local [integration pipeline](INTEGRATION_PIPELINE.md) can execute bounded
+   preparation lanes from reviewed artifacts. Neither command merges, reruns CI
+   or launches paid repairs. An integration operator must still
    recheck review, base, tested tree and exact head before every write.
 4. Run the strongest agreed AFK configuration against the same frozen workload,
    without sharing generated patches. Define its adapter, versions and policy
