@@ -30,7 +30,7 @@ Advanced commands (each accepts --help):
   plan, smoke, run, dashboard, ops, deploy-gateway, integrate, probe, evidence
 
 First time from a GitHub checkout? Run ./easy-run.
-Guide: docs/QUICKSTART.md (English), docs/GETTING_STARTED.es.md (Español)
+Guides: docs/QUICKSTART.md and docs/SETUP.md
 """)
     return 0
 

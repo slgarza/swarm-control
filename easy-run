@@ -14,7 +14,7 @@ Creates .venv and installs Swarm Control on first use, then opens the local GUI.
 Requires Git, Python 3.12 or newer with venv, and internet for the first install.
 On Windows, run this command inside WSL. Keep the terminal open; Ctrl+C stops it.
 Run it again from this checkout whenever you want to reopen your workspace.
-Guides: docs/QUICKSTART.md and docs/GETTING_STARTED.es.md
+Guides: docs/QUICKSTART.md and docs/SETUP.md
 HELP
     exit 0
 fi

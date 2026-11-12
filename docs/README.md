@@ -9,8 +9,7 @@ accounts or knowledge of the development conversation.
 
 | Reader | Start here | Continue with |
 | --- | --- | --- |
-| First-time user | [Easy Run and a local two-task example](QUICKSTART.md) | [Repositories and runs](RUNS.md), [architecture](ARCHITECTURE.md) |
-| Principiante en español | [Descargar, abrir y conectar un proyecto](GETTING_STARTED.es.md) | [Ejemplo local](QUICKSTART.md), [configuración del proyecto](PROJECTS.md) |
+| First-time user | [Easy Run and a local two-task example](QUICKSTART.md) | [Browser setup](SETUP.md), [repositories and runs](RUNS.md), [architecture](ARCHITECTURE.md) |
 | Operator preparing deployment | [Deployment preflight](DEPLOYMENT_PREFLIGHT.md) | [Project settings](PROJECTS.md), [spend reporting](BILLING.md), [operations](OPERATIONS.md) |
 | Operator viewing a run | [Local evidence dashboard](DASHBOARD.md) | [Spend reporting](BILLING.md), [evidence requirements](contest/EVIDENCE.md) |
 | Operator configuring runs | [Repositories and runs](RUNS.md) | [Next-pilot protocol](NEXT_PILOT.md), [deployment preflight](DEPLOYMENT_PREFLIGHT.md) |

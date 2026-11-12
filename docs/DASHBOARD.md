@@ -12,7 +12,7 @@ clone/fork, project/task preparation, reviewed publication, authorized budget
 changes and explicit deployment. Keep the server terminal open during active
 operations. Code review and merge remain explicit operator decisions. See
 [browser setup](SETUP.md), [repositories and run history](RUNS.md) or the
-[Spanish beginner guide](GETTING_STARTED.es.md).
+[local quickstart](QUICKSTART.md).
 
 The legacy evidence-only modes described below remain read-only.
 
