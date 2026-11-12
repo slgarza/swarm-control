@@ -329,6 +329,8 @@ class RepositorySetup:
                 "configured_repository": profile["repository"] if profile else None,
                 "origin_matches_configuration": profile is not None and project.repository == repository,
                 "configuration": configuration,
+                "recommended_runtime": {"gateway_app": _slug(repository) + "-gateway",
+                                        "worker_app": _slug(repository) + "-workers"},
                 "project_path": str(root / "swarm.toml") if configured else None,
                 "language_suggestions": suggestions, "warnings": warnings,
                 "runtime_clone_capability": {"public_repositories": True,

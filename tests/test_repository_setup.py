@@ -99,6 +99,27 @@ class RepositorySetupTests(unittest.TestCase):
         with self.assertRaisesRegex(RepositorySetupError, "Existing swarm.toml"):
             self.initialize()
 
+    def test_inspection_recommends_distinct_apps_for_same_name_different_owners(self):
+        other = self.folder / "other-owner-checkout"
+        shutil.copytree(self.repo, other)
+        applications = []
+        for owner, checkout in (("owner-one", self.repo), ("owner-two", other)):
+            subprocess.run(["git", "remote", "set-url", "origin", f"https://github.com/{owner}/shared.git"],
+                           cwd=checkout, check=True, capture_output=True)
+            recommendation = self.service.inspect(checkout)["recommended_runtime"]
+            self.service.initialize(checkout, install=[[sys.executable, "-c", "pass"]],
+                                    checks=[[sys.executable, "-c", "pass"]],
+                                    openai_secret="operator-linked-model", **recommendation)
+            config = tomllib.loads((checkout / "swarm.toml").read_text())
+            applications.append((config["runtime"]["gateway_app"], config["runtime"]["worker_app"]))
+            self.assertEqual(config["runtime"]["openai_secret"], "operator-linked-model")
+            before = (checkout / "swarm.toml").read_bytes()
+            self.assertEqual(self.service.inspect(checkout)["configuration"]["runtime"]["gateway_app"],
+                             recommendation["gateway_app"])
+            self.assertEqual((checkout / "swarm.toml").read_bytes(), before)
+        self.assertNotEqual(applications[0][0], applications[1][0])
+        self.assertNotEqual(applications[0][1], applications[1][1])
+
     def test_inspection_exposes_actual_reviewable_commands_and_redacts_credentials(self):
         self.initialize()
         result = self.service.inspect(self.repo)
