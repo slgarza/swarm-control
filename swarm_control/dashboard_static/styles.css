@@ -611,7 +611,7 @@ h1 {
   background: var(--mint);
   border-radius: 50%;
 }
-.worker-tile.is-support: :after{
+.worker-tile.is-support::after{
   content: "S";
   position: absolute;
   font-family: var(--font-ui);
@@ -706,7 +706,7 @@ h1 {
   column-gap: var(--space-2);
   min-height: 43px;
 }
-.timeline li: :before{
+.timeline li::before{
   content: "";
   position: absolute;
   left: 3px;
@@ -810,7 +810,7 @@ h1 {
   font-size: var(--text-small);
   outline-offset: 6px;
 }
-.search-box input: :placeholder{
+.search-box input::placeholder{
   color: var(--text-dim);
 }
 .table-scroll {
@@ -897,7 +897,7 @@ h1 {
   color: var(--mint);
   font-size: var(--text-small);
 }
-.ci-good: :before{
+.ci-good::before{
   content: "✓";
   font-size: var(--text-small);
 }
@@ -994,13 +994,13 @@ h1 {
   margin-top: 11px;
   overflow: hidden;
 }
-.budget-track: :-webkit-progress-bar{
+.budget-track::-webkit-progress-bar{
   background: var(--positive-soft);
 }
-.budget-track: :-webkit-progress-value{
+.budget-track::-webkit-progress-value{
   background: var(--mint);
 }
-.budget-track: :-moz-progress-bar{
+.budget-track::-moz-progress-bar{
   background: var(--mint);
 }
 .invoice-value {
@@ -1121,9 +1121,9 @@ dialog {
 
   border-left: 0;
 }
-dialog: :backdrop{
+dialog::backdrop{
   background: var(--backdrop);
-  backdrop-filter: blur(3px);
+  backdrop-filter: none;
 }
 .drawer-header {
   display: flex;
@@ -1768,8 +1768,8 @@ dialog: :backdrop{
 .run-builder .icon-button { min-height: 44px; min-width: 44px; }
 .registration-help { align-self: center; max-width: 620px; font-size: var(--text-small); color: var(--muted); }
 .registration-help summary, .run-advanced summary { cursor: pointer; min-height: 44px; display: flex; align-items: center; gap: var(--space-2); }
-.registration-help summary: :before, .run-advanced summary::before{ content: '+'; font-family: var(--font-mono); color: var(--mint); }
-.registration-help[open] summary: :before, .run-advanced[open] summary::before{ content: '−'; }
+.registration-help summary::before, .run-advanced summary::before{ content: '+'; font-family: var(--font-mono); color: var(--mint); }
+.registration-help[open] summary::before, .run-advanced[open] summary::before{ content: '−'; }
 .registration-help p { line-height: 1.6; }
 .registration-help code { display: block; padding: var(--space-3); background: var(--bg); border: 1px solid var(--line); border-radius: var(--radius-control); white-space: pre-wrap; overflow-wrap: anywhere; font-size: var(--text-small); line-height: 1.8; }
 .builder-description { margin: 9px 0 0; color: var(--muted); max-width: 620px; font-size: var(--text-small); line-height: 1.6; }
@@ -1825,7 +1825,7 @@ dialog: :backdrop{
 .plan-fact span { display: block; font-size: var(--text-small); color: var(--muted); line-height: 1.5; }
 .plan-fact strong { display: block; margin-top: 7px; font-size: var(--text-title); font-weight: 500; overflow-wrap: anywhere; }
 .plan-blockers { margin: 10px 0; padding-left: 20px; color: var(--muted); font-size: var(--text-small); line-height: 1.9; }
-.plan-blockers li: :marker{ color: var(--amber); }
+.plan-blockers li::marker{ color: var(--amber); }
 .plan-heading-row { display: flex; justify-content: space-between; align-items: flex-start; flex-wrap: wrap; gap: 10px; }
 .run-configuration { margin: 20px 0; }
 .configuration-content { padding: 0 var(--space-5) 22px; }
