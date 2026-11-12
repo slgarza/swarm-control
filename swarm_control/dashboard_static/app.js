@@ -9,7 +9,7 @@
   const dateFormat = new Intl.DateTimeFormat("en-US", {dateStyle: 'medium', timeStyle: 'medium', timeZone: 'UTC'});
   const timeFormat = new Intl.DateTimeFormat("en-US", {hour: '2-digit', minute: '2-digit', hour12: false, timeZone: 'UTC'});
   const finite = (value) => typeof value === 'number' && Number.isFinite(value);
-  const number = (value) => finite(value) ? countFormat.format(value) : '—';
+  const number = (value) => finite(value) ? countFormat.format(value) : 'Unknown';
   const money = (value) => finite(value) ? moneyFormat.format(value) : "No data";
   const date = (value) => {const parsed = typeof value === 'string' ? new Date(value) : null; return parsed && Number.isFinite(parsed.getTime()) ? parsed : null;};
   const timeLabel = (value) => {const parsed = date(value); return parsed ? timeFormat.format(parsed) + ' UTC' : "No time";};
@@ -48,13 +48,13 @@
     state.snapshot = null; state.selected = null; state.fetchFailed = false;
     byId('task-dialog').close(); byId('export-button').disabled = true;
     for (const id of ['worker-grid', 'task-rows', 'recovery-chart', 'timeline', 'evidence-links', 'recovery-split', 'detail-content']) clear(byId(id));
-    for (const id of ['metric-workers', 'metric-validated', 'metric-recovered', 'metric-active', 'budget-reserved', 'budget-authorized', 'budget-ceiling', 'budget-invoice', 'metric-per-dollar']) setText(id, '—');
+    for (const id of ['metric-workers', 'metric-validated', 'metric-recovered', 'metric-active', 'budget-reserved', 'budget-authorized', 'budget-ceiling', 'budget-invoice', 'metric-per-dollar']) setText(id, 'Unknown');
     byId('refresh-button').disabled = false; byId('data-alert').hidden = true;
     setText('workspace-empty-title', title); setText('workspace-empty-copy', copy);
     setText('run-name', state.runId || 'No run selected'); setText('run-phase', 'No snapshot');
     byId('run-phase').className = 'pill neutral';
     clear(byId('connection-status')); byId('connection-status').append(node('span', 'status-dot amber'), document.createTextNode(state.runId ? 'Loading source' : 'No run evidence'));
-    setText('snapshot-time', 'Source pending'); setText('nav-worker-count', '—');
+    setText('snapshot-time', 'Source pending'); setText('nav-worker-count', 'Unknown');
     setText('last-fetch', 'Not read yet'); runContent(false);
     state.runDetail = null; byId('run-configuration').hidden = true; clear(byId('run-configuration-content')); delete byId('run-configuration-content').dataset.runKey; updateEasyRunGuide();
   }
@@ -133,7 +133,7 @@
   function configureWorkspace(enabled) {
     const changed = state.workspace !== enabled; state.workspace = enabled;
     for (const element of document.querySelectorAll('[data-workspace-only]')) element.hidden = !enabled;
-    setText('local-mode-label', enabled ? 'LOCAL · WORKSPACE' : 'LOCAL · READ ONLY');
+    setText('local-mode-label', enabled ? 'Local workspace' : 'Read-only evidence');
     setText('workspace-intro-copy', enabled ? 'Choose a repository. Prepare a new run or open an earlier run. Saving a draft does not deploy agents.' : 'Choose a repository, then a run to inspect its reviewed results. Only repositories configured on this local server are listed.');
     if (!enabled) {byId('run-builder').hidden = true; byId('run-configuration').hidden = true; byId('connect-repository').hidden = true;} updateEasyRunGuide();
     if (enabled && (changed || !state.csrf)) loadSession();
@@ -610,16 +610,16 @@
     const y = (value) => 146 - Math.min(max, value) / max * 125;
     for (let tick = 0; tick <= 4; tick++) {
       const value = Math.round(max * tick / 4), atY = y(value);
-      svg.append(svgNode('line', {x1: 34, x2: 581, y1: atY, y2: atY, stroke: '#303c44', 'stroke-width': '.6', 'stroke-dasharray': '3 4'}));
-      svg.append(svgNode('text', {x: 23, y: atY + 3, fill: '#788c9a', 'font-size': 8, 'text-anchor': 'end', 'font-family': 'sans-serif'}, value));
+      svg.append(svgNode('line', {x1: 34, x2: 581, y1: atY, y2: atY, stroke: 'var(--line)', 'stroke-width': '.6', 'stroke-dasharray': '3 4'}));
+      svg.append(svgNode('text', {x: 23, y: atY + 3, fill: 'var(--muted)', 'font-size': 12, 'text-anchor': 'end', 'font-family': 'var(--font-ui)'}, value));
     }
     let line = 'M 34 ' + y(0), value = 0;
     for (const event of events) {line += ' H ' + x(event.at.getTime()) + ' V ' + y(++value);}
     line += ' H ' + x(end);
     const area = line + ' L ' + x(end) + ' ' + y(0) + ' H 34 Z';
-    svg.append(svgNode('path', {d: area, fill: '#8be1c10d'}), svgNode('path', {d: line, fill: 'none', stroke: '#8be1c1', 'stroke-width': 1.7, 'stroke-linejoin': 'round'}));
-    svg.append(svgNode('circle', {cx: x(end), cy: y(value), r: 3, fill: '#8be1c1'}));
-    for (let tick = 0; tick <= 3; tick++) {const at = start + (end - start) * tick / 3; svg.append(svgNode('text', {x: x(at), y: 169, fill: '#788c9a', 'font-size': 8, 'text-anchor': tick === 0 ? 'start' : tick === 3 ? 'end' : 'middle', 'font-family': 'sans-serif'}, timeFormat.format(new Date(at))));}
+    svg.append(svgNode('path', {d: area, fill: 'var(--positive-soft)'}), svgNode('path', {d: line, fill: 'none', stroke: 'var(--mint)', 'stroke-width': 1.7, 'stroke-linejoin': 'round'}));
+    svg.append(svgNode('circle', {cx: x(end), cy: y(value), r: 3, fill: 'var(--mint)'}));
+    for (let tick = 0; tick <= 3; tick++) {const at = start + (end - start) * tick / 3; svg.append(svgNode('text', {x: x(at), y: 169, fill: 'var(--muted)', 'font-size': 12, 'text-anchor': tick === 0 ? 'start' : tick === 3 ? 'end' : 'middle', 'font-family': 'var(--font-ui)'}, timeFormat.format(new Date(at))));}
     container.append(svg);
     container.setAttribute('aria-label', "Provisional recovery: " + events.length + " modules with merge and CI milestones, from " + timeLabel(data.clock.t0) + " to " + timeLabel(last.toISOString()) + ". This is not acceptance after the quality window.");
   }
@@ -659,7 +659,7 @@
       const original = node('td'); original.append(pill(originalLabel(task), originalType(task)));
       const recovery = node('td'); recovery.append(pill(recoveredLabel(task), task.provisional ? 'mint-pill' : task.empty_patch ? 'neutral' : 'amber-pill'));
       const pr = node('td');
-      if (safeURL(task.delivery?.pr_url)) {const path = new URL(task.delivery.pr_url).pathname; pr.append(link('#' + path.split('/').pop(), task.delivery.pr_url));} else pr.append(node('span', 'subtle', '—'));
+      if (safeURL(task.delivery?.pr_url)) {const path = new URL(task.delivery.pr_url).pathname; pr.append(link('#' + path.split('/').pop(), task.delivery.pr_url));} else pr.append(node('span', 'subtle', 'Unknown'));
       const ci = node('td');
       if (task.provisional && date(task.delivery?.green_at)) ci.append(node('span', 'ci-good', "Verified"));
       else ci.append(node('span', 'subtle', task.empty_patch ? "No candidate" : "Pending"));
