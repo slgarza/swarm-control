@@ -5,7 +5,13 @@ import sys
 
 def main():
     try:
-        if len(sys.argv) > 1 and sys.argv[1] == "dashboard":
+        if len(sys.argv) == 1 or sys.argv[1] in {"-h", "--help"}:
+            from .launcher import print_help
+            return print_help()
+        if sys.argv[1] == "start":
+            from .launcher import main as run
+            del sys.argv[1]
+        elif len(sys.argv) > 1 and sys.argv[1] == "dashboard":
             from .dashboard import main as run
             del sys.argv[1]
         elif len(sys.argv) > 1 and sys.argv[1] in {"workspace", "runs"}:

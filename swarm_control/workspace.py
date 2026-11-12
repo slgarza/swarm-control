@@ -1,7 +1,7 @@
 """Private repository registry, immutable run drafts and explicit CLI execution.
 
-Planning and dashboard methods never start a process that can deploy resources.
-The launch method is used only by the explicit ``runs launch --execute`` CLI.
+Planning and connection methods never deploy resources. Explicit launch uses the
+same source, authorization and accounting gates from either CLI or local UI.
 """
 
 import argparse
@@ -31,6 +31,14 @@ _STATES = {"draft", "historical", "launching", "runner_finished", "interrupted"}
 _WORKER_STATES = frozenset({"starting", "preparing", "ready", "working", "checking", "recovering",
                             "validated", "needs_repair", "rejected", "failed", "interrupted",
                             "not_dispatched", "launch_failed"})
+
+
+class ProjectConnectionError(ValueError):
+    """An actionable, public-safe connection error; never contains local paths."""
+
+    def __init__(self, code, message):
+        self.code = code
+        super().__init__(message)
 
 
 def default_workspace():
@@ -282,6 +290,68 @@ class Workspace:
                     "repository": repository, "project_path": path, "runs": []})
         return self.project_context(project_id)
 
+    def connect_project(self, path, *, label_text=None):
+        """Connect one explicitly selected checkout, preserving its existing runs.
+
+        A connection validates local configuration, origin and task metadata. It
+        never runs target commands, clones a URL, edits the target or opens a ledger.
+        """
+        from .project import load_project
+        if (not isinstance(path, (str, Path)) or not str(path).strip()
+                or len(str(path)) > 4096 or any(ord(c) < 32 for c in str(path))
+                or "://" in str(path) or str(path).startswith("git@")):
+            raise ProjectConnectionError("local_path_required",
+                "Choose the local folder where you cloned the repository, or its swarm.toml file. A GitHub URL is not a local folder.")
+        selected = Path(path).expanduser()
+        if selected.is_dir():
+            selected = selected / "swarm.toml"
+        if not selected.is_file():
+            raise ProjectConnectionError("project_config_missing",
+                "No project configuration was found. Clone the repository first and select its root folder containing swarm.toml. See the setup guide for an unconfigured project.")
+        try:
+            project = load_project(selected)
+        except (OSError, ValueError, TypeError, KeyError, subprocess.SubprocessError):
+            raise ProjectConnectionError("project_config_invalid",
+                "The project configuration is invalid. Check swarm.toml, README.md, AGENTS.md and the task directory using the project setup guide.") from None
+        try:
+            project.verify_origin()
+        except (OSError, ValueError, subprocess.SubprocessError):
+            raise ProjectConnectionError("project_origin_mismatch",
+                "The Git origin must match project.repository in swarm.toml. Check the selected checkout and its GitHub owner/repository.") from None
+        try:
+            project_label = label(label_text) if label_text is not None else label(project.root.name)
+        except ValueError:
+            raise ProjectConnectionError("project_label_invalid",
+                "Use a project name of 1 to 160 characters, without slashes or credentials.") from None
+        slug = re.sub(r"[^a-z0-9_-]", "-", project.repository.lower())[:40]
+        candidate = {"id": slug + "-" + _digest(str(project.path).encode())[:12],
+                     "label": project_label, "repository": project.repository,
+                     "project_path": str(project.path), "runs": []}
+        # Validate tasks before changing the registry: a failed connection cannot
+        # leave a broken selectable project behind.
+        try:
+            self._project_context(candidate)
+        except (OSError, ValueError, TypeError, KeyError, RecursionError, subprocess.SubprocessError):
+            raise ProjectConnectionError("project_tasks_invalid",
+                "The project tasks could not be read. Check the JSON files in the configured task directory before connecting again.") from None
+        with self._write() as value:
+            existing = next((p for p in value["projects"] if p["project_path"] == str(project.path)), None)
+            if existing is None:
+                historical = [p for p in value["projects"] if p["project_path"] is None
+                              and p["repository"] == project.repository]
+                existing = historical[0] if len(historical) == 1 else None
+            if existing is not None:
+                _require(existing["repository"] == project.repository,
+                         "The connected checkout no longer matches its registered repository")
+                existing["project_path"] = str(project.path)
+                if label_text is not None:
+                    existing["label"] = project_label
+                project_id = existing["id"]
+            else:
+                value["projects"].append(candidate)
+                project_id = candidate["id"]
+        return self.project_context(project_id)
+
     def public_catalog(self):
         value = self._read()
         projects = []
@@ -299,6 +369,10 @@ class Workspace:
 
     def project_context(self, project_id):
         registered = self._project(self._read(), project_id)
+        return self._project_context(registered)
+
+    def _project_context(self, registered):
+        project_id = registered["id"]
         result = {"project_id": project_id, "label": registered["label"],
                   "repository": registered["repository"], "configurable": False,
                   "limits": {"max_workers": 0, "gateway_concurrency": 0},
@@ -619,7 +693,7 @@ class Workspace:
         return found[0] if found else None
 
     def launch(self, project_id, run_id, *, gateway_url=None, execute=False):
-        """CLI-only explicit launch; all existing worker/financial gates still apply."""
+        """Explicit launch; all existing worker and financial gates still apply."""
         from .operations import OperationsJournal
         from .pilot_state import common_state
         registered = self._project(self._read(), project_id)

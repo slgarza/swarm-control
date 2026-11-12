@@ -1,0 +1,92 @@
+{
+  "schema_version": 1,
+  "stage": "controller Easy Run implementation and local validation",
+  "controller_base_commit": "ab50b33b76be0d7bdc335553ddea4629fbf4f9c6",
+  "started_at_utc": "2026-11-12T14:50:29.716475+00:00",
+  "source_state": "uncommitted implementation on the recorded clean base",
+  "elapsed_seconds_at_report": 774.878265677,
+  "clock": "UTC wall timestamps; monotonic local durations; early read-only discovery was unmeasured",
+  "scope": [
+    "One-command environment setup and browser startup",
+    "Validated local repository connection preserving history",
+    "Confirmed asynchronous browser launch through existing runner gates",
+    "English and Spanish beginner instructions"
+  ],
+  "validation": {
+    "unit_tests": {
+      "passed": 424,
+      "elapsed_seconds": 52.15250102999562,
+      "receipt_sha256": "2f3097c18730ff435c5522cf14ba8f846fa6c52c67a6d3166fba3ca520b8a9cc"
+    },
+    "ruff": "passed; isolated controller, tests and examples",
+    "python_compilation": "passed; controller and examples",
+    "javascript_and_shell_syntax": "passed",
+    "real_browser": {
+      "passed_checks": 12,
+      "widths_px": [
+        320,
+        390,
+        1440
+      ],
+      "scope": "Local real HTTP project/draft flow; launch HTTP intercepted with synthetic outcome, no real workers",
+      "receipt_sha256": "437f44e99ecf083a98e2681991c4e4ec48b926f9726f4f327142dec49508a89d"
+    },
+    "bootstrap": "Fresh dependency installation and repeat startup passed after separately supplying an empty venv with pip. Host lacks ensurepip; initial clean venv attempt failed and its prerequisite error was repaired. Successful automatic venv creation was not measured on this host.",
+    "entrypoint": "Actual installed launcher passed from a separate checkout containing a harmless shadow module, with spaces and relative project paths",
+    "regressions": [
+      "Failed private-audit writes block dispatch or expose uncertainty without retry",
+      "Disabled policy and duplicate launch gates",
+      "Deferred catalog connection fails before repair and passes after",
+      "Unrelated checkout cannot shadow the installed CLI"
+    ]
+  },
+  "attempts": {
+    "root_command_receipts": 24,
+    "root_failed_checks_retained": 8,
+    "other_failures_retained": "Three backend test/lint failures, one documentation patch-context failure and one UI regression-harness repair; expected failing regression controls are separate",
+    "repairs": "Bootstrap prerequisites and entrypoint, async error handling, audit uncertainty rendering, catalog refresh race, test harness and fixture repairs",
+    "interventions": "Coordinator scope decisions, delegation, independent reviews and repairs are recorded privately; work was assisted"
+  },
+  "evidence_limits": [
+    {
+      "scope": "initial read-only repository discovery",
+      "elapsed_seconds": null,
+      "reason": "Occurred before measured attempt; not reconstructed"
+    },
+    {
+      "scope": "intermediate browser screenshots",
+      "reason": "Filenames were reused by failed QA retries; intermediate original image bytes unavailable. Original command logs and versioned scripts are retained; final screenshots retained and hashed."
+    }
+  ],
+  "cost": {
+    "gross_usd": null,
+    "eligible_usd": null,
+    "reason": "Model billing and attributable local resource cost were not measured"
+  },
+  "delivery": {
+    "paid_workers_started": 0,
+    "accepted_merged_deliveries": 0,
+    "afk_comparison": null,
+    "throughput_rates": null,
+    "note": "Local controller validation is not a live cohort, delivery benchmark or release"
+  },
+  "cleanup": "Temporary test servers stopped. Private checkouts and receipts retained. Afterimage source, task profiles, contracts and budget ledgers unchanged.",
+  "source_sha256": {
+    "README.md": "0d131c6f405a68e4e5b30583ecf654944b78509f3442165c1812511181b144c7",
+    "docs/DASHBOARD.md": "211747893976da072b1fd2fc514e6d64dbbb17312f6c6f0f8e599cecf93aa063",
+    "docs/GETTING_STARTED.es.md": "56264cdda1fadcfb6e17f218623feff30d64e0342972d999f32967a14d40c01a",
+    "docs/QUICKSTART.md": "d63d2fa6731de5ad0605824805b7d8f97ca081a4a06aff834f8219522281b88a",
+    "docs/README.md": "a28cbe0c11c044c195815d04224bbbaf940503b93b6adae4085bda280529d032",
+    "docs/RUNS.md": "0a7738b742b9fc2dd92a40218cf8440395fc3f7d4961c60ca9250628067e0591",
+    "easy-run": "d4cdf618ffe93b714f7c4e81103fb168e9bfcf2fa96d6e2efce968d40d959642",
+    "swarm_control/cli.py": "da0d9f80c088b57c73a62297cb194fda6cfd53745831a8d079c73cc660019e3c",
+    "swarm_control/dashboard.py": "49a8daf50f76fdc50ff0519942a8b49cb16495f44aa7e9a680237c03511c11d1",
+    "swarm_control/dashboard_static/app.js": "1263dcbede1ac26e1a5c478f85087f52a2d565afac2490de51a74124625e1b5f",
+    "swarm_control/dashboard_static/index.html": "08ea93b3a4ce84c31e02bf85956c1c8e7671074cf34bdb017e513faa1fc11daf",
+    "swarm_control/dashboard_static/styles.css": "12c865cdaa9de178754d9bc7942525d62706e5549c5ebe1f0e3c6d7a71183bef",
+    "swarm_control/launcher.py": "14730e888bdcf77e012a0ca4a2b685b87252b4d0b63aa99c6827fb79fcf48acd",
+    "swarm_control/workspace.py": "42dfff2fb8775170c4b85b417415cf6f1bf30c9198b98f6627f6af0f1f1855b8",
+    "tests/test_easy_workspace.py": "fa0fd0476dd5b658553813fe67c3facca1aa69f5f6a01f49eb9fe4ec05f958e0",
+    "tests/test_launcher.py": "840c7305fe75a2588801672066bd71823755e2d844ae2080add95e90cfd9f8cd"
+  }
+}

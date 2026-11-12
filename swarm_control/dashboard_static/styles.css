@@ -1711,7 +1711,7 @@ dialog::backdrop {
   }
 }
 
-/* Explicitly configured project/run navigation; never an execution control. */
+/* Project and run navigation. */
 [data-run-content][hidden], .workspace-empty[hidden] { display: none !important; }
 .workspace-picker { margin: 24px 0 18px; padding: 22px; border: 1px solid var(--line); border-radius: var(--radius); background: var(--surface); }
 .workspace-intro h2 { margin: 0 0 8px; font-size: 17px; letter-spacing: -.3px; }
@@ -1726,7 +1726,7 @@ dialog::backdrop {
 .workspace-empty p { color: var(--muted); max-width: 620px; line-height: 1.7; margin: 0; }
 @media(max-width:760px) { .workspace-fields { grid-template-columns: 1fr; gap: 14px; } .workspace-picker { padding: 18px; } }
 
-/* Local run preparation and history. These controls never launch cloud work. */
+/* Local run preparation and history. Draft actions never launch cloud work. */
 [data-workspace-only][hidden], #run-builder[hidden], #run-configuration[hidden], #run-preview[hidden], .builder-message[hidden] { display: none !important; }
 .workspace-actions { display: flex; align-items: flex-start; gap: 18px; margin-top: 18px; flex-wrap: wrap; }
 .workspace-actions .button, .builder-actions .button, .run-task-search .button, .run-history .button { min-height: 44px; }
@@ -1835,3 +1835,34 @@ dialog::backdrop {
   .history-note { padding: 16px 20px; }
 }
 @media(max-width:420px) { .plan-facts { grid-template-columns: 1fr; } .agent-input-line { align-items: flex-start; } .run-settings { gap: 20px; } }
+
+/* Guided local setup and explicit run launch. */
+.connect-repository[hidden], .connection-result[hidden] { display: none !important; }
+.connect-repository { margin-top: 20px; padding: 20px; border: 1px solid #365b50; border-radius: 8px; background: var(--bg); }
+.connect-repository h3 { margin: 0 0 10px; font-size: 16px; }
+.connect-repository > p { color: var(--muted); font-size: 12px; line-height: 1.8; max-width: 800px; }
+.connect-repository code { overflow-wrap: anywhere; }
+.connect-fields { display: grid; grid-template-columns: minmax(0, 1.8fr) minmax(0, 1fr); gap: 18px; margin: 18px 0; }
+.connect-actions { display: flex; gap: 10px; flex-wrap: wrap; }
+.connect-actions button { min-height: 44px; }
+.connection-result { padding: 12px; border: 1px solid var(--line); border-radius: 7px; font-size: 12px; line-height: 1.8; overflow-wrap: anywhere; }
+.easy-run-guide { margin: 18px 0 22px; padding: 22px; border: 1px solid var(--line); border-radius: var(--radius); background: var(--surface); }
+.easy-run-guide h2 { margin: 0 0 9px; font-size: 17px; letter-spacing: -.3px; }
+.easy-run-guide > div > p { color: var(--muted); font-size: 12px; line-height: 1.8; margin: 0; }
+.easy-run-guide ol { list-style: none; padding: 0; margin: 18px 0; display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 10px; }
+.easy-run-guide li { border: 1px solid var(--line); border-radius: 7px; padding: 13px; min-width: 0; }
+.easy-run-guide li strong { display: block; font-size: 12px; line-height: 1.6; }
+.easy-run-guide li span { display: block; font-size: 11px; line-height: 1.8; color: var(--muted); margin-top: 7px; }
+.easy-run-guide li[aria-current='step'] { border-color: var(--mint); background: #8be1c10b; }
+.easy-run-guide li.is-done strong { color: var(--mint); }
+.easy-run-next { margin: 0; color: var(--mint); font-size: 12px; line-height: 1.8; }
+.launch-guide > summary { cursor: pointer; min-height: 44px; display: flex; align-items: center; font-size: 12px; line-height: 1.8; }
+.browser-launch { border-color: #365b50; }
+.browser-launch .run-field { margin: 18px 0; max-width: 700px; }
+.launch-confirmation { display: flex; align-items: flex-start; gap: 10px; font-size: 12px; line-height: 1.8; margin-bottom: 18px; max-width: 800px; cursor: pointer; }
+.launch-confirmation input { margin: 3px 0 0; width: 19px; height: 19px; accent-color: var(--mint); flex: 0 0 auto; }
+.launch-status { padding: 13px; margin: 16px 0 0; border: 1px solid var(--line); border-radius: 7px; color: var(--muted); font-size: 12px; line-height: 1.8; overflow-wrap: anywhere; }
+.browser-launch .button { min-height: 44px; }
+@media(max-width:1000px) { .easy-run-guide ol { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
+@media(max-width:760px) { .connect-fields { grid-template-columns: 1fr; } .connect-repository, .easy-run-guide { padding: 18px; } }
+@media(max-width:420px) { .easy-run-guide ol { grid-template-columns: 1fr; } .connect-repository { padding: 13px; } }

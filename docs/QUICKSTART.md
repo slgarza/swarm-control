@@ -1,4 +1,4 @@
-# Quickstart: understand the system without paid services
+# Quickstart: Easy Run and a local example
 
 This example creates a tiny independent Python repository with two useful changes
 to implement. You can run its baseline tests and inspect a two-worker plan without
@@ -10,21 +10,38 @@ For actual coding workers, continue with the [paid two-agent walkthrough](TWO_AG
 
 ## 1. Install the controller
 
-Use Linux, macOS or WSL with Git and Python 3.12, including its venv support.
-The examples below use a POSIX shell.
+Use Linux, macOS or Windows through WSL with Git and Python 3.12 or newer,
+including its venv support. Open a terminal; the commands below use a POSIX shell.
+On Windows, run them in the WSL terminal rather than PowerShell.
 
 ```sh
 git clone https://github.com/slgarza/swarm-control.git
 cd swarm-control
-python3.12 -m venv .venv
-source .venv/bin/activate
-python -m pip install -e '.[dev]'
-swarm-control --help
+./easy-run
 ```
+
+Easy Run creates `.venv`, installs the controller on first use and opens
+[http://127.0.0.1:8787](http://127.0.0.1:8787). Keep that terminal open while using
+the app. Opening the app starts a local server, with no cloud workers.
+
+If the browser does not open, copy the URL printed in the terminal. Use
+`./easy-run --no-open` to skip opening it, or `./easy-run --port 8788` if another
+program is using port 8787. To stop the server, press Ctrl+C in its terminal.
+Later, run `./easy-run` from this same checkout; it reuses the environment and
+saved workspace. To connect a prepared existing target immediately, use
+`./easy-run --project /absolute/path/to/target`.
 
 On Debian/Ubuntu, a missing `ensurepip` error usually means the matching Python
 venv package is absent. Install that prerequisite using your system's package
-manager, then create the environment again. See [troubleshooting](TROUBLESHOOTING.md).
+manager, then run Easy Run again. See [troubleshooting](TROUBLESHOOTING.md).
+
+For the separate local example below, stop the server with Ctrl+C and activate
+the environment it created:
+
+```sh
+source .venv/bin/activate
+swarm-control --help
+```
 
 The editable install keeps the CLI attached to this checkout. Keep the virtual
 environment active when changing directories in the following steps.
@@ -87,7 +104,35 @@ Expected: **2 tests pass**. They cover existing behavior, not the new features.
 The tasks require adding regression tests along with their implementations.
 Both independent worker copies can therefore start from a passing baseline.
 
-## 5. Inspect a plan
+## 5. Try the browser workflow
+
+From the demo folder, open the controller and connect this target:
+
+```sh
+../swarm-control/easy-run --project "$PWD"
+```
+
+In the browser:
+
+1. Choose **swarm-demo** in **Repository**. The connection uses the demo's local
+   `swarm.toml`; its placeholder origin does not need to exist for planning.
+2. Click **New run** and select **D01** and **D02**.
+3. Set **Concurrent agents** to **2**, then click **Check plan**.
+4. Review the plan, then click **Save draft**. Open the saved run in **Run history**.
+
+Expected: the draft contains two tasks and two agents, and execution remains
+disabled. Saving does not change that policy, contact a model or create a VM.
+The draft's **Run agents** control is unavailable until the real-execution setup
+is complete. Use Ctrl+C in the server terminal to stop the demo dashboard.
+
+For another prepared repository, click **Connect repository** and enter its local
+folder or `swarm.toml` path. A GitHub URL and a ZIP folder without Git metadata
+are not ready targets. A new target needs its own reviewed profile, task files,
+instructions and checks; follow [project configuration](PROJECTS.md).
+
+## 6. Inspect the same kind of plan from the CLI
+
+After stopping the server, with the environment active in the demo folder:
 
 ```sh
 swarm-control plan D01 D02 \
