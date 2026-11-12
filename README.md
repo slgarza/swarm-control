@@ -26,11 +26,19 @@ a browser, or `./easy-run --port 8788` if the default port is busy.
 **[Guía para principiantes en español](docs/GETTING_STARTED.es.md)** ·
 **[English quickstart with a local example](docs/QUICKSTART.md)**
 
-In the browser, connect a prepared local repository, choose tasks and concurrent
-agents, check the plan and save a draft. A separate, confirmed **Run agents** action uses
-the existing source, gateway and budget gates. The app does not configure service
-accounts or authorize a budget for you. Start with
-[repositories and runs](docs/RUNS.md) for the complete workflow.
+Open **Setup** in the browser to configure your accounts and personal local `.env`,
+clone or fork a GitHub repository, create its profile, prepare tasks, review local
+checks and publish the exact preparation changes. Existing prepared repositories
+can be connected directly. Then choose tasks and concurrent agents, check the plan
+and save a draft. The separate **Run agents** action uses the existing source,
+gateway and budget gates. See [browser setup](docs/SETUP.md) and
+[repositories and runs](docs/RUNS.md).
+
+Each person supplies their own credentials on their own computer. The personal
+`.env` has private file permissions outside every Git repository. Its values stay
+out of browser storage, operation history and preparation commits. Uploading an
+OpenAI key to a named Modal Secret is a separate explicit action. Saving settings
+starts no coding agents.
 
 ![Repository selection and recorded run history](docs/images/dashboard-run-history-2026-11-11.png)
 
@@ -61,6 +69,9 @@ unknowns. The loopback viewer makes no provider calls or execution/accounting wr
 | --- | --- |
 | [Documentation index](docs/README.md) | Reading paths, terminology and current capabilities |
 | [Beginner guide in Spanish](docs/GETTING_STARTED.es.md) | Download, open, connect a repository, choose tasks and understand real execution |
+| [Browser setup](docs/SETUP.md) | Personal accounts/.env, clone/fork, task preparation, local CLI controls and reviewed deployment |
+| [Connections](docs/CONNECTIONS.md) | Credential storage, explicit verification and Modal Secret boundaries |
+| [Repository setup](docs/REPOSITORY_SETUP.md) | Clone/fork, imported issues, protected task history and exact preparation publication |
 | [Quickstart](docs/QUICKSTART.md) | Easy Run, a tiny local target, baseline tests and a local plan |
 | [Architecture](docs/ARCHITECTURE.md) | Who writes code, where it runs, how patches reach GitHub and where state lives |
 | [Two-agent walkthrough](docs/TWO_AGENT_WALKTHROUGH.md) | Own-account setup, real issues, budget, execution, review, PRs, merge and cleanup |
@@ -175,7 +186,8 @@ cannot establish useful live overlap by themselves.
 
 Scheduling uses local SQLite. Dispatcher, candidate and short shared integration
 locks cover Git worktrees sharing one checkout, not other clones or hosts.
-Private target cloning still needs a scoped authentication adapter. Review,
+Profiles can use frozen [source bundles](docs/PRIVATE_REPOSITORIES.md) for private
+targets without forwarding GitHub credentials to coding workers. Review,
 publication and merge remain explicit; the preparation pipeline does not merge PRs.
 
 Offline tests cover the new capacity, backpressure and collision paths. Real provider

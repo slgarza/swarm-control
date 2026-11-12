@@ -50,16 +50,21 @@ provider quota, deployed gateway capacity or money authorization.
 The explicit **Run agents** action can start paid workers. It requires a confirmed
 saved draft, a gateway origin and the same source, issue, task-claim, budget,
 operations-hold and capacity gates as the CLI. A plan passing does not satisfy
-provider setup or authorize spending. The GUI does not deploy a gateway, change
-the cumulative budget, collect API keys, review code or merge PRs. Those steps
-remain in the [two-agent walkthrough](TWO_AGENT_WALKTHROUGH.md).
+provider setup or authorize spending. **Setup** provides explicit account and
+personal `.env` configuration, reviewed cumulative-budget changes, gateway
+deployment and a compatibility probe. Advanced reviewed CLI controls expose
+integration operations; semantic review remains an operator responsibility.
+Follow [browser setup](SETUP.md) or the [two-agent walkthrough](TWO_AGENT_WALKTHROUGH.md).
 
-Only registered repositories are selectable. The server does not scan your disk
-or clone GitHub URLs. The connect form accepts one explicit local path; target
+Only registered repositories are selectable. Setup can clone or fork an explicitly
+chosen GitHub repository into an unused local folder. The ordinary connect form
+accepts one explicit local path; target
 settings remain in each target checkout. The default private registry is
 `~/.config/swarm-control/workspace.json`; use `--workspace PATH` consistently to
-select a different registry. Public HTTP responses omit its filesystem paths,
-raw reports, worker commands, customer source and credentials.
+select a different registry. Evidence/run responses omit its filesystem paths,
+raw reports, worker commands, customer source and credentials. Setup separately
+shows the paths and task drafts the operator explicitly selects; credential values
+are never returned. Setup operation results remain in private local history.
 
 ## Configure and inspect from the CLI
 

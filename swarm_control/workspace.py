@@ -83,7 +83,8 @@ def _safe_text(value, fallback="Unavailable", maximum=160):
 
 
 def _git(project, *args):
-    result = subprocess.run(["git", *args], cwd=project.root, capture_output=True, check=False)
+    result = subprocess.run(["git", "-c", "core.fsmonitor=false", "-c", "core.hooksPath=/dev/null", *args],
+                            cwd=project.root, capture_output=True, check=False)
     _require(result.returncode == 0, "Registered repository metadata is unavailable")
     return result.stdout
 
@@ -398,16 +399,37 @@ class Workspace:
             for filename in files:
                 if not re.fullmatch(r"[A-Z][A-Z0-9_-]{1,39}", filename.stem):
                     continue
+                _require(not filename.is_symlink() and filename.resolve().is_relative_to(project.tasks_dir.resolve()),
+                         "Task definitions must remain inside the task directory")
                 _require(filename.stat().st_size <= MAX_TASK_BYTES, "Task definition is too large")
-                task = runner.load_task(filename.stem)
+                raw, _ = _json(filename, MAX_TASK_BYTES)
+                foreign_issue = isinstance(raw, dict) and "issueUrl" in raw and raw["issueUrl"] != \
+                    f"https://github.com/{project.repository}/issues/{raw.get('issue')}"
+                if isinstance(raw, dict) and (raw.get("status") == "blocked" or foreign_issue):
+                    _require(not filename.is_symlink() and filename.resolve().is_relative_to(project.tasks_dir.resolve()),
+                             "Task definitions must remain inside the task directory")
+                    _require(raw.get("id") == filename.stem
+                             and all(isinstance(raw.get(key), str) and raw[key].strip()
+                                     for key in ("title", "prompt")), "Invalid blocked task draft")
+                    dependencies = raw.get("dependsOn", [])
+                    _require(isinstance(dependencies, list) and len(dependencies) <= 10000
+                             and all(isinstance(item, str) and re.fullmatch(r"[A-Z][A-Z0-9_-]{1,39}", item)
+                                     and not SECRET.search(item) for item in dependencies), "Invalid draft dependencies")
+                    task = raw
+                else:
+                    task = runner.load_task(filename.stem)
                 state = task.get("status", "ready")
+                if foreign_issue and state != "merged":
+                    state = "blocked"
                 rows.append({"id": task["id"], "title": _safe_text(task["title"], task["id"]),
                              "status": state if state in {"ready", "blocked", "running", "merged", "failed"} else "unknown",
                              "dependencies": task.get("dependsOn", []),
+                             "blocker": "issue_belongs_to_another_repository" if foreign_issue and state == "blocked" else None,
                              "has_task_context": bool(task.get("context_files"))})
         result.update(configurable=True, tasks=rows, live_execution_enabled=project.live_enabled,
                       limits={"max_workers": project.max_live_agents, "max_tasks": project.max_live_agents,
                               "gateway_concurrency": project.gateway_concurrency})
+        result["defaults"]["source_transport"] = project.source_transport
         return result
 
     @staticmethod
@@ -429,7 +451,8 @@ class Workspace:
                                         for name in project.instructions},
                 "controller_source_sha256": {name: _digest(Path(__file__).with_name(name).read_bytes())
                     for name in ("modal_runner.py", "modal_worker.py", "context_packet.py", "progress.py",
-                                 "supervision.py", "dependencies.py", "workload.py")
+                                 "supervision.py", "dependencies.py", "workload.py", "source_bundle.py",
+                                 "connections.py", "connection_worker.py", "desktop_tools.py")
                     if Path(__file__).with_name(name).is_file()},
                 "options_sha256": _digest(json.dumps(options, sort_keys=True).encode())}
 
@@ -782,7 +805,7 @@ class Workspace:
                 "--base", run["bindings"]["base_sha"], "--timeout", str(options["timeout"]),
                 "--model", "gpt-6.1-sol", "--model-budget", str(options["model_budget"]),
                 "--gateway-url", gateway_url, "--run-id", run_id,
-                "--context-mode", options["context_mode"]]
+                "--context-mode", options["context_mode"], "--source-transport", project.source_transport]
         for key, flag in (("synchronized", "--synchronized"), ("allow_overlap", "--allow-overlap")):
             if options[key]:
                 argv.append(flag)
@@ -791,7 +814,10 @@ class Workspace:
             if options.get(key) is not None:
                 argv.extend([flag, str(options[key])])
         try:
-            process = subprocess.run(argv, cwd=Path(__file__).resolve().parent.parent, check=False)
+            from .connections import Connections
+            connection_settings = getattr(self, "connections", None) or Connections(self.path)
+            process = subprocess.run(argv, cwd=Path(__file__).resolve().parent.parent, check=False,
+                                     env=connection_settings.environment())
             attempt.update(status="runner_finished", exit_code=process.returncode)
         except BaseException:
             attempt["status"] = "interrupted"

@@ -13,6 +13,7 @@ from tests.test_dashboard import SnapshotFixture
 class LocalWorkspace:
     def __init__(self, snapshot):
         self.snapshot = snapshot
+        self.path = snapshot.with_name("workspace.json")
         self.calls = []
         self.catalog = {"mode": "workspace", "workspace_label": "Local workspace",
                         "projects": [{"id": "first", "label": "First", "repository": "example/project",
@@ -81,11 +82,13 @@ class WorkspaceHTTPTests(SnapshotFixture):
         body = raw if raw is not None else json.dumps(data or {"project_id": "first", "options": {"workers": 2}})
         return self.request(method, path, body, headers)
 
-    def test_workspace_mode_exposes_only_local_preparation(self):
+    def test_workspace_mode_exposes_explicit_setup_and_preserves_draft_preparation(self):
         code, session = self.request("GET", "/api/session")
         self.assertEqual(code, 200)
         self.assertEqual(session["mode"], "workspace")
-        self.assertFalse(session["deployment_enabled"])
+        self.assertTrue(session["deployment_enabled"])
+        self.assertTrue(session["setup_enabled"])
+        self.assertEqual(self.workspace.calls, [])
         self.assertEqual(self.request("GET", "/api/catalog")[1]["mode"], "workspace")
         self.assertEqual(self.request("GET", "/api/project?project=first")[0], 200)
         self.assertEqual(self.request("GET", "/api/runs?project=first")[1]["runs"][0]["id"], "past")

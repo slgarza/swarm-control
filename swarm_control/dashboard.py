@@ -1,4 +1,4 @@
-"""Loopback evidence viewer and explicit local run preparation; never deployment."""
+"""Loopback evidence, guided setup and explicitly reviewed controller operations."""
 
 import argparse
 import hashlib
@@ -226,6 +226,9 @@ class DashboardServer(ThreadingHTTPServer):
         launch = getattr(self, "browser_launch", None)
         if launch is not None:
             launch.wait()
+        setup = getattr(self, "onboarding", None)
+        if setup is not None:
+            setup.wait()
 
 
 def token(value, default=None):
@@ -596,6 +599,12 @@ def make_server(snapshot_path=None, host="127.0.0.1", port=0, *, catalog_path=No
         from .workspace import Workspace
         workspace = Workspace(workspace_path)
     browser_launch = BrowserLaunch(workspace) if workspace is not None else None
+    if workspace is not None:
+        from .onboarding import Onboarding
+        onboarding = Onboarding(workspace)
+    else:
+        onboarding = None
+    activity_lock = threading.Lock()
     catalog = None
     if catalog_path is not None:
         from .dashboard_catalog import load_catalog
@@ -740,22 +749,41 @@ def make_server(snapshot_path=None, host="127.0.0.1", port=0, *, catalog_path=No
                     self.respond(400, b'{"error":"Invalid workspace selection"}')
                 except (OSError, sqlite3.Error, subprocess.SubprocessError):
                     self.respond(503, b'{"error":"Workspace data unavailable"}')
+            elif parsed.path in {"/api/setup", "/api/setup/job"}:
+                if onboarding is None:
+                    self.respond(404, b'{"error":"Setup requires a local workspace"}')
+                    return
+                try:
+                    if parsed.path == "/api/setup":
+                        if parsed.query:
+                            raise ValueError("Unexpected query")
+                        data = onboarding.status()
+                    else:
+                        query = parse_qs(parsed.query, keep_blank_values=True, strict_parsing=True, max_num_fields=1)
+                        if set(query) != {"id"} or len(query["id"]) != 1:
+                            raise ValueError("Invalid operation identity")
+                        data = {"job": onboarding.job(query["id"][0])}
+                    self.respond(200, json.dumps(data, allow_nan=False).encode())
+                except (ValueError, OSError, TypeError, RecursionError):
+                    self.respond(400, b'{"error":"Setup data is unavailable. Check the selected local workspace."}')
             elif parsed.path == "/api/session":
                 data = {"mode": "workspace" if workspace is not None else "viewer",
                         "csrf_token": csrf_token if workspace is not None else None,
-                        "read_only": workspace is None, "deployment_enabled": False,
-                        "launch_enabled": workspace is not None}
+                        "read_only": workspace is None, "deployment_enabled": workspace is not None,
+                        "launch_enabled": workspace is not None, "setup_enabled": workspace is not None}
                 self.respond(200, json.dumps(data).encode())
             elif parsed.path == "/api/health":
                 self.respond(200, json.dumps({"ok": True, "read_only": workspace is None,
-                                             **({"deployment_enabled": False} if workspace is not None else {})}).encode())
+                                             **({"deployment_enabled": True} if workspace is not None else {})}).encode())
             elif parsed.path == "/favicon.ico":
                 self.respond(204, b"", "image/x-icon")
-            elif parsed.path in {"/", "/assets/app.js", "/assets/styles.css"}:
+            elif parsed.path in {"/", "/assets/app.js", "/assets/styles.css", "/assets/setup.js", "/assets/setup.css"}:
                 filename, kind = {
                     "/": ("index.html", "text/html"),
                     "/assets/app.js": ("app.js", "text/javascript"),
                     "/assets/styles.css": ("styles.css", "text/css"),
+                    "/assets/setup.js": ("setup.js", "text/javascript"),
+                    "/assets/setup.css": ("setup.css", "text/css"),
                 }[parsed.path]
                 try:
                     body = (STATIC / filename).read_bytes()
@@ -785,7 +813,7 @@ def make_server(snapshot_path=None, host="127.0.0.1", port=0, *, catalog_path=No
                 parsed = urlsplit(self.path)
                 operation = parsed.path
                 if (parsed.scheme or parsed.netloc or parsed.query
-                        or parsed.path not in {"/api/runs", "/api/runs/preview", "/api/projects", "/api/runs/launch"}):
+                        or parsed.path not in {"/api/runs", "/api/runs/preview", "/api/projects", "/api/runs/launch", "/api/setup/action"}):
                     self.respond(404, b'{"error":"Not found"}')
                     return
                 lengths = self.headers.get_all("Content-Length", [])
@@ -812,6 +840,16 @@ def make_server(snapshot_path=None, host="127.0.0.1", port=0, *, catalog_path=No
                 if len(raw) != int(lengths[0]):
                     raise ValueError("incomplete JSON body")
                 data = json.loads(raw, object_pairs_hook=unique, parse_constant=reject_constant)
+                if parsed.path == "/api/setup/action":
+                    from .onboarding import SetupError
+                    if not isinstance(data, dict) or set(data) != {"action", "options", "confirmed", "request_id"}:
+                        raise ValueError("Invalid setup action fields")
+                    with activity_lock:
+                        if browser_launch.thread is not None and browser_launch.thread.is_alive():
+                            raise SetupError("setup_busy", "An agent run is active. Wait for its outcome before changing setup.")
+                        result = onboarding.start(data["action"], data["options"], data["confirmed"], data["request_id"])
+                    self.respond(202, json.dumps({"job": result}, allow_nan=False).encode())
+                    return
                 if parsed.path == "/api/projects":
                     if (not isinstance(data, dict) or "path" not in data
                             or set(data) - {"path", "label"}):
@@ -822,8 +860,11 @@ def make_server(snapshot_path=None, host="127.0.0.1", port=0, *, catalog_path=No
                 if parsed.path == "/api/runs/launch":
                     if not isinstance(data, dict) or set(data) != {"project_id", "run_id", "gateway_url", "confirmed"}:
                         raise ValueError("invalid launch fields")
-                    result = browser_launch.start(data["project_id"], data["run_id"],
-                                                  data["gateway_url"], data["confirmed"])
+                    with activity_lock:
+                        if onboarding.busy:
+                            raise BrowserLaunchBusy("Setup operation in progress")
+                        result = browser_launch.start(data["project_id"], data["run_id"],
+                                                      data["gateway_url"], data["confirmed"])
                     self.respond(202, json.dumps(result, allow_nan=False).encode())
                     return
                 if not isinstance(data, dict) or set(data) != {"project_id", "options"}:
@@ -837,7 +878,15 @@ def make_server(snapshot_path=None, host="127.0.0.1", port=0, *, catalog_path=No
             except BrowserLaunchBusy:
                 self.respond(409, b'{"error":"A run is already launching on this dashboard. Wait for its recorded outcome.","code":"launch_busy"}')
             except (ValueError, TypeError, UnicodeError, RecursionError) as error:
+                from .onboarding import SetupError
                 from .workspace import ProjectConnectionError
+                if operation == "/api/setup/action":
+                    if isinstance(error, SetupError):
+                        self.respond(409 if error.code == "setup_busy" else 400,
+                                     json.dumps({"error": str(error), "code": error.code}).encode())
+                    else:
+                        self.respond(400, b'{"error":"Review the setup action and fields.","code":"invalid_setup"}')
+                    return
                 if isinstance(error, ProjectConnectionError):
                     self.respond(400, json.dumps({"error": str(error), "code": error.code}).encode())
                     return
@@ -849,6 +898,9 @@ def make_server(snapshot_path=None, host="127.0.0.1", port=0, *, catalog_path=No
                     return
                 self.respond(400, b'{"error":"Invalid run configuration. Choose registered projects, existing tasks and an allowed agent count."}')
             except (OSError, sqlite3.Error, subprocess.SubprocessError):
+                if operation == "/api/setup/action":
+                    self.respond(503, b'{"error":"Could not preserve this setup request. Check local storage before trying again.","code":"setup_evidence_unavailable"}')
+                    return
                 if operation == "/api/runs/launch":
                     self.respond(503, b'{"error":"Could not preserve the private launch request. No workers were launched. Check local storage and permissions before trying again.","code":"launch_evidence_unavailable"}')
                     return
@@ -864,6 +916,7 @@ def make_server(snapshot_path=None, host="127.0.0.1", port=0, *, catalog_path=No
 
     server = DashboardServer(("127.0.0.1", port), Handler)
     server.browser_launch = browser_launch
+    server.onboarding = onboarding
     return server
 
 
