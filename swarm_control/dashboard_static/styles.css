@@ -1837,6 +1837,16 @@ dialog::backdrop {
 @media(max-width:420px) { .plan-facts { grid-template-columns: 1fr; } .agent-input-line { align-items: flex-start; } .run-settings { gap: 20px; } }
 
 /* Guided local setup and explicit run launch. */
+.scalability-settings { margin-top: 22px; border-top: 1px solid var(--line); padding-top: 20px; }
+.run-task-search { flex-wrap: wrap; }
+.run-task-search input { flex: 1 1 160px; }
+.dependency-review { margin: 20px 0; padding: 18px; border: 1px solid var(--line); border-radius: 8px; }
+.dependency-review .plan-heading-row { flex-wrap: wrap; }
+.dependency-review h3 { margin: 0; font-size: 15px; }
+.dependency-chain { font-size: 12px; line-height: 1.8; overflow-wrap: anywhere; }
+.dependency-details, .context-readiness { font-size: 12px; line-height: 1.8; margin-top: 16px; }
+.dependency-details summary, .context-readiness summary { cursor: pointer; min-height: 40px; }
+.dependency-details li { overflow-wrap: anywhere; }
 .connect-repository[hidden], .connection-result[hidden] { display: none !important; }
 .connect-repository { margin-top: 20px; padding: 20px; border: 1px solid #365b50; border-radius: 8px; background: var(--bg); }
 .connect-repository h3 { margin: 0 0 10px; font-size: 16px; }

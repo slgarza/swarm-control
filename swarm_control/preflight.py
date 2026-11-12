@@ -113,7 +113,8 @@ def _remote_base(query, prefix, base_sha, branch):
 
 
 def build_preflight(project, task_ids, *, workers=1, synchronized=False, base=None,
-                    online=False, model_budget=None, allow_overlap=False, query=None, timeout=300):
+                    online=False, model_budget=None, allow_overlap=False, query=None, timeout=300,
+                    context_mode="full", require_parallel=None):
     """Return stage-specific evidence; no result authorizes a live operation."""
     modal_runner.configure(project)
     tasks = [modal_runner.load_task(task_id) for task_id in task_ids]
@@ -125,8 +126,21 @@ def build_preflight(project, task_ids, *, workers=1, synchronized=False, base=No
     if not isinstance(base, str) or base.startswith("-"):
         raise ValueError("invalid base ref")
     base_sha = _git(project, "rev-parse", "--verify", f"{base}^{{commit}}")
+    from .context_packet import build_context_readiness
+    from .workload import analyze_project, effective_tasks, preparation_blockers
+
+    if require_parallel is None and workers == 100:
+        require_parallel = 100
+    if require_parallel is not None and (type(require_parallel) is not int
+            or not 1 <= require_parallel <= workers):
+        raise ValueError("Required parallelism must be within the selected worker count")
+    dependency_analysis = analyze_project(project, task_ids, workers=workers,
+                                         base=base_sha, allow_overlap=allow_overlap)
+    context_packets = modal_runner.build_context_packets(tasks, base_sha, context_mode, timeout=timeout)
+    context_readiness = build_context_readiness(tasks, project, base_sha, context_mode,
+                                               packets=context_packets)
     local = modal_runner.local_admission_summary(tasks, workers, project)
-    blockers = []
+    blockers = preparation_blockers(dependency_analysis, require_parallel)
     try:
         project.verify_origin()
     except (ValueError, subprocess.SubprocessError):
@@ -171,7 +185,8 @@ def build_preflight(project, task_ids, *, workers=1, synchronized=False, base=No
             budget_blockers.append("local_model_reserve_insufficient")
     if proposed is None:
         budget_blockers.append("cohort_model_reserve_not_selected")
-    github = (_online(project, tasks, base_sha, query or (lambda path: _github(project, path)))
+    github = (_online(project, effective_tasks(tasks, dependency_analysis), base_sha,
+                      query or (lambda path: _github(project, path)))
               if online else {"checked": False, "issues_and_dependencies_verified": None,
                               "base_reachable_from_remote_branch": None, "exact_base_ci_green": None,
                               "blockers": ["github_readiness_not_checked"], "github_get_requests": 0})
@@ -185,6 +200,8 @@ def build_preflight(project, task_ids, *, workers=1, synchronized=False, base=No
         "version": 1, "kind": "cohort_preflight", "repository": project.repository,
         "recorded_at_utc": datetime.now(UTC).isoformat(), "base_sha": base_sha,
         "task_ids": task_ids, "requested_workers": workers, "synchronized": synchronized,
+        "dependency_analysis": dependency_analysis, "context_readiness": context_readiness,
+        "required_parallelism": require_parallel,
         "read_only": True, "cloud_resources_created": False, "local_allocations_changed": False,
         "authorizes_spend": False, "launch_ready": False,
         "preparation_checks_passed": not blockers and (not online or not github["blockers"]),
@@ -250,6 +267,9 @@ def main():
     parser.add_argument("--base")
     parser.add_argument("--timeout", type=int, default=300)
     parser.add_argument("--allow-overlap", action="store_true")
+    parser.add_argument("--context-mode", choices=("full", "task"), default="full")
+    parser.add_argument("--require-parallel", type=int,
+                        help="Require a conservative independent ready frontier of this size")
     parser.add_argument("--model-budget", help="proposed cohort model reserve in USD; not authorization")
     parser.add_argument("--online", action="store_true", help="permit read-only GitHub GET requests")
     args = parser.parse_args()
@@ -258,6 +278,7 @@ def main():
         synchronized=args.synchronized, base=args.base, online=args.online,
         model_budget=args.model_budget, allow_overlap=args.allow_overlap,
         timeout=args.timeout,
+        context_mode=args.context_mode, require_parallel=args.require_parallel,
     )
     print(json.dumps(result, indent=2))
     # Exit describes checked source preparation, never financial or launch approval.

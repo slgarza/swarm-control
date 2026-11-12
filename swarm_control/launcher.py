@@ -22,6 +22,7 @@ Projects and runs:
   swarm-control workspace --help  Register repositories and preserve history
   swarm-control runs --help       Plan, save, inspect and launch runs
   swarm-control preflight --help  Inspect source and budget readiness
+  swarm-control analyze --help    Detect dependencies and inspect a 100-agent frontier
   swarm-control budget --help     Inspect cumulative allowances and spend
 
 Advanced commands (each accepts --help):
