@@ -67,7 +67,9 @@ unknowns. The loopback viewer makes no provider calls or execution/accounting wr
 | [Project reference](docs/PROJECTS.md) | Every configuration field and the task format |
 | [Operations](docs/OPERATIONS.md) | Commands, side effects, flags and integration gates |
 | [Repositories and runs](docs/RUNS.md) | Connect targets, choose concurrent agents, save drafts and explicitly launch through the browser or CLI |
-| [Dependency and parallelism analysis](docs/DEPENDENCIES.md) | Detect prerequisite chains, resource relationships and a conservative independent frontier for 100 workers |
+| [Dependency and parallelism analysis](docs/DEPENDENCIES.md) | Detect prerequisite chains, inferred resource relationships and a conservative independent frontier for 100 workers |
+| [Worker supervision](docs/WORKER_SUPERVISION.md) | Observe source changes, preserve termination reasons and run frozen task acceptance checks |
+| [Integration preparation pipeline](docs/INTEGRATION_PIPELINE.md) | Prepare independent reviewed candidates in bounded local lanes while other PRs wait for CI |
 | [Next pilot](docs/NEXT_PILOT.md) | Small completion experiment, scoped context, CI scheduling and matched AFK gates |
 | [Operational feedback](docs/OPERATIONS_SAFETY.md) | Failure brakes, durable action reservations, CI diagnosis and conservative scaling advice |
 | [Deployment preflight](docs/DEPLOYMENT_PREFLIGHT.md) | Read-only source, ledger, GitHub and resource checks before a separately authorized deployment |
@@ -140,15 +142,21 @@ Validate an independent frontier before planning a 100-worker cohort:
 swarm-control analyze --project /path/to/target/swarm.toml --manifest /path/to/target/swarm/cohort.json --workers 100 --require-parallel 100
 ```
 
-The cohort manifest contains a `taskIds` array. Without task IDs or a manifest,
-analysis inspects the whole backlog, up to 10,000 definitions, and suggests at
-most 100 ready tasks for a separate reviewed run. A chain of 100 tasks initially
-has one ready slot; 100 independent leaves can fill 100 slots. The report explains
-cycles, prerequisites, resource/import review hints, theoretical waves and scan
-limits. Selecting 100 agents in the browser or CLI requires a frontier of 100 by
-default, and saved requirements are checked again before resource admission.
-Static preparation does not establish semantic independence, provider capacity
-or successful live work. See the [dependency guide](docs/DEPENDENCIES.md).
+The explicit cohort manifest contains a `taskIds` array. Without task IDs or a
+manifest, analysis inspects the whole backlog (up to 10,000 definitions) and
+suggests at most 100 ready tasks for a separate reviewed run. A chain of 100 tasks
+has only one initially ready slot; a graph with 100 independent leaves can fill
+100 slots. The report explains cycles, prerequisites, resource/import review
+hints, theoretical waves and scan limits. Static preparation does not establish
+semantic independence, provider capacity or successful live work.
+
+**Check plan** in the browser shows dependency-frontier and context/acceptance
+readiness. Selecting 100 agents automatically proposes a minimum frontier of 100;
+the saved requirement is rechecked before resource admission. Workers preserve
+observed deadline/source-progress stop reasons and recovery candidates. Optional
+task acceptance checks complement the baseline suite, and independent local
+integration preparation can proceed in separate lanes. See the guides above for
+the exact contracts and remaining review gates.
 
 The runner accepts cohorts of up to 100 workers when the target explicitly sets
 that capacity and has an authorized allowance. Defaults remain ten workers and
@@ -165,9 +173,10 @@ default to 300 seconds; `--timeout 1800` is an explicit opt-in with longer bound
 gateway expiry. These settings require reviewed deployment and allowance, and
 cannot establish useful live overlap by themselves.
 
-Scheduling uses local SQLite. Separate dispatcher and integration locks cover Git
-worktrees sharing one checkout, not other clones or hosts. Private target cloning
-still needs a scoped authentication adapter. Review and integration remain assisted.
+Scheduling uses local SQLite. Dispatcher, candidate and short shared integration
+locks cover Git worktrees sharing one checkout, not other clones or hosts.
+Private target cloning still needs a scoped authentication adapter. Review,
+publication and merge remain explicit; the preparation pipeline does not merge PRs.
 
 Offline tests cover the new capacity, backpressure and collision paths. Real provider
 capacity, useful 100-agent overlap and efficiency remain unproven. The next steps

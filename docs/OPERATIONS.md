@@ -109,8 +109,9 @@ Actual conflicts save `needs_repair`, conflicting paths and the original patch/a
 log, then clean partial application from the dedicated candidate worktree. Assign
 a separate repair attempt and preserve the failed receipt; no agent is launched.
 
-Prepare/publish/merge acquire a separate local integration lock shared by this
-checkout's worktrees. Merge checks the current base and green exact-head Actions
+Preparation uses a candidate lock plus a short shared lock for Git worktree
+setup; installation and checks run outside the shared lock. Publish/merge retain
+the shared local integration lock. Merge checks the current base and green exact-head Actions
 across all bounded pages. GitHub atomically checks the head, not the base; other
 clones and clients still need coordination. Changed bases need a new validated
 attempt with old artifacts preserved.
@@ -142,12 +143,14 @@ These commands do not automatically move through every stage for you.
 | `runs launch PROJECT RUN` | Inspect a saved draft; `--execute` explicitly invokes the existing runner | Inspection by default; paid resources possible only with `--execute` and ordinary gates |
 | `plan TASK...` | Validate local task structure/ownership, resolve a local base ref and print potential concurrency | No cloud calls, budget reservation or GitHub writes |
 | `preflight TASK...` | Inspect prepared source, existing claims/allowance, cached spend and configured resource/runtime requirements | Offline by default; `--online` adds GitHub GETs only; no admission/deployment or launch approval |
+| `analyze [TASK...]` | Inspect explicit/inferred dependencies, cycles, source hints and a conservative ready frontier; up to 10,000 backlog definitions | Local metadata and frozen Git source reads only; `--require-parallel 100` fails an insufficient frontier |
 | `smoke TASK...` | Create worker environments, clone/install/check the unchanged target and recover artifacts | Paid Modal resources and infrastructure allocation; no coding model calls or delivered feature |
 | `deploy-gateway` | Deploy the configured trusted model service | Modal deployment/build costs possible; no coding cohort |
 | `probe` | Exercise the real gateway/model/tool round trip in one bounded sandbox | Paid model/Modal usage and durable allowance allocation |
 | `run TASK...` | Admit and execute coding tasks, validate/recover patches and attempt cleanup | Paid model/Modal usage and durable claims; no PR publication |
 | `integrate plan ARTIFACT_DIR` | Verify local worker artifacts and report the patch hash/scope | Local inspection, including target origin verification |
 | `integrate prepare ARTIFACT_DIR` | Fetch the current base, create a candidate worktree, apply the patch and run checks | Local files/worktree and configured commands; GitHub reads |
+| `integrate-queue MANIFEST` | Preview reviewed candidates or explicitly execute bounded independent local preparation lanes | Read-only preview; `--execute` runs local checks and fetches the base; optional `--online` uses bounded GitHub GETs; no publication/merge |
 | `integrate publish ARTIFACT_DIR` | Require patch review and an unchanged tested candidate, commit/push it and create a PR | GitHub branch/PR writes and any CI they trigger |
 | `integrate merge ARTIFACT_DIR` | Require review, current base and successful exact-head checks, merge and reconcile the ledger | GitHub merge/issue closure and any CI it triggers |
 | `evidence collect BATCH` | Export sanitized activity, delivery and billing aggregates with original evidence hashes | Offline reads; writes only through explicit stdout redirection |
@@ -195,6 +198,8 @@ These flags apply to `plan`, `smoke` and `run` unless stated otherwise:
 | `--agents N` | Alias for `--workers`; concurrent workers are distinct from total selected tasks |
 | `--run-id ID` | Optional bounded identity binding a workspace draft to the actual batch and worker reports |
 | `--context-mode full\|task` | Preserve full instructions, or additionally provide reviewed task contract excerpts from the frozen base; global rules remain mandatory |
+| `--require-parallel N` | Require N conservatively independent ready tasks before admission; 100-agent run/preflight/workspace defaults to 100 |
+| `--no-progress-timeout SECONDS` | Explicitly stop after 30–coding-limit seconds without an observed owned-source change; default warnings only |
 | `--base REF` | Local commit/ref, default `origin/<base_branch>`; workers need that exact commit available remotely |
 | `--timeout SECONDS` | Agent coding time from 30 to 1800, default 300; longer sessions require explicit selection and do not include all setup/recovery time |
 | `--synchronized` | Require exactly one task per requested worker; real agents start after all worker preparations reach the barrier |

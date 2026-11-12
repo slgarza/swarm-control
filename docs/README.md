@@ -14,6 +14,7 @@ accounts or knowledge of the development conversation.
 | Operator preparing deployment | [Deployment preflight](DEPLOYMENT_PREFLIGHT.md) | [Project settings](PROJECTS.md), [spend reporting](BILLING.md), [operations](OPERATIONS.md) |
 | Operator viewing a run | [Local evidence dashboard](DASHBOARD.md) | [Spend reporting](BILLING.md), [evidence requirements](contest/EVIDENCE.md) |
 | Operator configuring runs | [Repositories and runs](RUNS.md) | [Next-pilot protocol](NEXT_PILOT.md), [deployment preflight](DEPLOYMENT_PREFLIGHT.md) |
+| Operator preparing 100 workers | [Dependencies and independent frontiers](DEPENDENCIES.md) | [Worker supervision](WORKER_SUPERVISION.md), [integration preparation lanes](INTEGRATION_PIPELINE.md) |
 | Operator investigating failures | [Operational feedback](OPERATIONS_SAFETY.md) | [Operations](OPERATIONS.md), [troubleshooting](TROUBLESHOOTING.md) |
 | Operator launching real agents | [Two-agent walkthrough](TWO_AGENT_WALKTHROUGH.md) | [Deployment preflight](DEPLOYMENT_PREFLIGHT.md), [operations](OPERATIONS.md), [troubleshooting](TROUBLESHOOTING.md) |
 | Competition reviewer | [Presentation and current evidence](contest/PRESENTATION.md) | [Target assessment](contest/TARGET-ASSESSMENT.md), [benchmark protocol](contest/BENCHMARK.md), [evidence requirements](contest/EVIDENCE.md) |
@@ -34,6 +35,13 @@ drafts, confirmed launch through the existing controller gates and sealed histor
 Easy Run installs and opens this interface; backlog generation and service-account
 setup are not automated. The [dashboard gallery](DASHBOARD.md#screenshots)
 contains actual English desktop, mobile, task, budget and empty-state captures.
+
+Read-only dependency analysis handles larger backlogs while preserving the
+100-worker cohort capacity. It reports a conservative ready frontier instead of
+equating total task count with concurrent work. Worker supervision preserves
+observed stop reasons, and configured task acceptance runs beside baseline
+validation. The explicit local integration pipeline can prepare independent
+reviewed candidates concurrently; publication and merge remain separate gates.
 
 The original Afterimage pilot ran ten real workers and merged ten green PRs.
 One delivery needed a coordinator code repair. It did not run 100 agents, test

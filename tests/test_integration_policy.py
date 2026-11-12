@@ -13,6 +13,11 @@ from swarm_control.pilot_state import Ledger
 
 class IntegrationPolicyTests(unittest.TestCase):
     def setUp(self):
+        # Source binding has real prepared-artifact coverage in the pipeline
+        # suite; isolate the existing financial policy gates here.
+        binding_patch = patch.object(integration, "check_source_bindings")
+        binding_patch.start()
+        self.addCleanup(binding_patch.stop)
         temporary = tempfile.TemporaryDirectory()
         self.addCleanup(temporary.cleanup)
         self.root = Path(temporary.name) / "state with spaces?#"

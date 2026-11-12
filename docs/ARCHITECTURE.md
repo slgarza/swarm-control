@@ -115,8 +115,12 @@ Merge requires all returned GitHub
 Actions checks to succeed on the exact PR head, including the configured required
 names. Check lists and open-PR admission are paginated with a 100-page bound and
 fail on inconsistent/incomplete results. A changed base or candidate stops
-integration. A separate `integration.lock` serializes local prepare/publish/merge
-commands. Other merge clients still require coordination because GitHub's atomic
+integration. A candidate lock protects each preparation while a short shared
+`integration.lock` covers Git worktree setup and credentialed publish/merge.
+Install and validation run outside that shared lock. The bounded local
+[pipeline](INTEGRATION_PIPELINE.md) prepares independent candidates while CI
+waits remain unresolved. Changed bases require explicit revalidation.
+Other merge clients still require coordination because GitHub's atomic
 head check does not lock the base.
 
 The dispatcher lock coordinates Git worktrees sharing one Git common directory.

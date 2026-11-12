@@ -23,6 +23,7 @@ Projects and runs:
   swarm-control runs --help       Plan, save, inspect and launch runs
   swarm-control preflight --help  Inspect source and budget readiness
   swarm-control analyze --help    Detect dependencies and inspect a 100-agent frontier
+  swarm-control integrate-queue --help  Prepare independent candidates in local lanes
   swarm-control budget --help     Inspect cumulative allowances and spend
 
 Advanced commands (each accepts --help):

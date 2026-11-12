@@ -226,8 +226,15 @@ class ProjectTests(unittest.TestCase):
         artifacts = self.root / "artifacts"
         artifacts.mkdir()
         (artifacts / "changes.patch").write_bytes(patch_bytes)
-        (artifacts / "manifest.json").write_text(json.dumps({"allow_overlap": False}))
         task = json.loads((project.tasks_dir / "A1.json").read_text())
+        digest = hashlib.sha256(patch_bytes).hexdigest()
+        report = {"task_id": task["id"], "base_sha": base, "status": "validated",
+                  "agent_exit": 0, "check_exit": 0, "patch_sha256": digest,
+                  "checked_patch_sha256": digest, "changes": {"head_unchanged": True,
+                  "ownership_violations": [], "prohibited_files": []}}
+        (artifacts / "manifest.json").write_text(json.dumps({"allow_overlap": False,
+            "repository": project.clone_url, "base_sha": base, "task": task}))
+        (artifacts / "report.json").write_text(json.dumps(report))
 
         def local_git(root, *args):
             if args[0] == "fetch":
@@ -237,9 +244,9 @@ class ProjectTests(unittest.TestCase):
         with (patch.multiple(integration, PROJECT=project, ROOT=project.root,
                              REPO=project.repository, BASE_BRANCH="main"),
               patch.object(integration, "git", side_effect=local_git)):
-            state = integration.prepare(artifacts, task, {"base_sha": base},
-                                        hashlib.sha256(patch_bytes).hexdigest(),
+            state = integration.prepare(artifacts, task, report, digest,
                                         worktree=self.root / "candidate")
+            integration.check_source_bindings(artifacts, state, task, report)
         self.assertEqual(state["status"], "prepared")
         self.assertEqual((self.root / "candidate/src/item.txt").read_text(), "changed\n")
         self.assertEqual((artifacts / "integration-install-1.log").read_text().strip(), "installed")

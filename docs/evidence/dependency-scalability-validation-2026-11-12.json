@@ -1,0 +1,152 @@
+{
+  "schema_version": 1,
+  "stage": "controller dependency-aware scalability implementation and local validation",
+  "controller_base_commit": "b77c96093d603fd75a85ae849221dcd098197cca",
+  "started_at_utc": "2026-11-12T16:43:38.601026+00:00",
+  "reported_at_utc": "2026-11-12T17:16:45.962792+00:00",
+  "elapsed_seconds_at_report": 1987.361835945,
+  "clock": "UTC wall timestamps and monotonic local durations; initial discovery unmeasured; publication measured separately",
+  "source_state": "reviewed local implementation on recorded base; publication is separate",
+  "scope": [
+    "Dependency graph, cycles, artifact prerequisites and conservative current independent frontier",
+    "CLI and browser readiness gate for 100 independent ready tasks",
+    "Observed worker stop reasons, bounded subprocess cleanup, frozen configured acceptance and separately attributed recovery candidates",
+    "Bounded independent local integration preparation with durable reservations and frozen review bindings"
+  ],
+  "capacity": {
+    "worker_cohort_limit": 100,
+    "backlog_analysis_limit": 10000,
+    "integration_manifest_limit": 1000,
+    "local_preparation_lane_limit": 8,
+    "hundred_independent_tasks": "frontier 100; direct CLI reaches mocked resource-admission boundary",
+    "hundred_serial_tasks": "frontier 1, critical path 100; direct CLI rejects before runtime writes or provider calls",
+    "hundred_shared_write_tasks": "100 declared ready, frontier 1; fails required independent frontier",
+    "live_useful_overlap_verified": false,
+    "semantic_independence_verified": false,
+    "source_scan": "bounded frozen-source relative-import hints and declared resources; future/dynamic/alias/prose relationships remain review work"
+  },
+  "validation": {
+    "unit_tests": {
+      "passed": 521,
+      "suite_elapsed_seconds": 85.894,
+      "elapsed_seconds": 86.73940790101187,
+      "receipt_sha256": "ad500a4f66ef2e65465f932a09012e1b830a24afc9b9873bdee3b50b8fa183d4",
+      "output_sha256": "3813caf7767c364866879fb48ad08ad8d2a98e1ccc04bb088b6417c7323fe0f4"
+    },
+    "ruff": "passed; isolated controller, tests and examples",
+    "python_compilation": "passed; controller and examples",
+    "javascript_syntax": "passed",
+    "real_browser": {
+      "passed_checks": 14,
+      "widths_px": [
+        320,
+        390,
+        1440
+      ],
+      "scope": "Real local HTTP; independent and serial 100-task fixtures, disabled live policy and synthetic final worker reports; no cloud execution",
+      "elapsed_seconds": 6.773102539009415,
+      "receipt_sha256": "f0eee851902966ca55b77b73860c26325f42d037ce9494e5a407fcb2a13facb0",
+      "output_sha256": "8354362b20b87188d8eceefc43667770b09a5736b1df8707f2fe9a747d6847e3"
+    },
+    "local_preparation_scale": {
+      "actual_git_worktrees_checked": 100,
+      "configured_lanes": 8,
+      "scope": "Temporary local Git remotes and real local check commands; synthetic GitHub observations"
+    },
+    "independent_reviews": [
+      "Direct CLI graph admission and sanitized HTTP metadata",
+      "Owned process-group descendant cleanup after natural exit",
+      "Acceptance, dependency, source report and project-profile drift rejected after preparation"
+    ],
+    "existing_target_read_only_analysis": {
+      "repository": "slgarza/Afterimage",
+      "base_sha": "c5c60fce76e3d1af0e8746f6445cfb2eef9e1389",
+      "scope": "Existing local B001-B100 manifest at an older local base; no GitHub freshness, claims or actual run readiness checks",
+      "selected_tasks": 100,
+      "inventory_tasks": 213,
+      "declared_ready": 100,
+      "conservative_frontier": 100,
+      "hard_edges": 0,
+      "graph_errors": 0,
+      "frozen_existing_source_files_scanned": 0,
+      "new_owned_paths_absent_at_base": 150,
+      "meaning": "100 disjoint declared leaf contracts, not independently verified semantic independence; absent future implementations cannot supply static import evidence",
+      "launch_ready": false,
+      "semantic_independence_verified": false,
+      "elapsed_seconds": 0.2627955850039143,
+      "receipt_sha256": "9e16b47284cc0d9e602fc25b7f9e230484d3aa3a4632f6eabad7080956618c16",
+      "source_inventory_sha256": "8dd855e8b5ba4e11c04f095e6094e5c7234adee910071ba5cdd378685acb50f0",
+      "metadata_inventory_sha256": "44cd4da35696ffbb618a4ab760f05838008078dc3fbe7cb6966d0aeed0c95be7"
+    }
+  },
+  "attempts": {
+    "root_command_receipts_at_report": 23,
+    "root_failed_commands_retained": 4,
+    "other_failures": "Agent test/lint/import harness failures and review probes retained separately; transcript-only early inspection gaps recorded in private agent receipts",
+    "repairs": [
+      "Minimal historical merged-task compatibility",
+      "Python parse failures make strict source review incomplete",
+      "Source/projection defaults, JS syntax and private browser harness repairs",
+      "Natural-exit descendant leak",
+      "Prepared metadata drift binding",
+      "Legacy fault-test source receipts and disjoint 100-worker capacity fixture"
+    ],
+    "interventions": "Coordinator decisions, delegated implementations, reviews and repairs recorded privately; operation was assisted"
+  },
+  "cost": {
+    "gross_usd": null,
+    "eligible_usd": null,
+    "reason": "Model billing, attributable local resource and CI costs unmeasured"
+  },
+  "delivery": {
+    "paid_workers_started": 0,
+    "live_cohort_started": false,
+    "accepted_target_deliveries": 0,
+    "afk_comparison": null,
+    "throughput_rates": null,
+    "contest_scale_requirement_verified": false
+  },
+  "cleanup": "Temporary browser servers stopped; private evidence and review worktrees retained; Afterimage source, frozen task definitions, provider resources and budget ledgers unchanged",
+  "source_sha256": {
+    "README.md": "0717314410741b2ca71b1e5585b2d40bbb78161812bdc5053c5bfae8a2ef2119",
+    "docs/ARCHITECTURE.md": "c2e60625942184ba11506d9a96e76b6bdd74ef26527dc7432465ba01a0a8bb09",
+    "docs/DEPENDENCIES.md": "6f57cdeea67ee45b7c0e8fb134a2e9c9f605f4a1dc1ec05a9e841d68f7eb41cf",
+    "docs/GETTING_STARTED.es.md": "6901f5bbed8d2bc531808a802ec814a6772b9a399f7f8251e709c49a5cfd7d21",
+    "docs/INTEGRATION_PIPELINE.md": "a65a1f4d2656c422738222c34e9cb0615a75a8336e25b7adb519bdf84eccebe1",
+    "docs/NEXT_PILOT.md": "640e6032b61a35d43b1cda6fb3f69f00c4584dd861bcd98d4edb04d60a7b3d1f",
+    "docs/OPERATIONS.md": "ff7c7da0e212177ee57b1ddfcdebe09b5e2d8f65c927f419509460f6e345b17f",
+    "docs/PROJECTS.md": "1ad12a40f838dab56c42b8e3b77b0fa75309706893580a69bd426996f719c37a",
+    "docs/README.md": "093e61ac1a0a16887c80e3b23a00aac8946c466bac69fc27450c4f3db50dd508",
+    "docs/RUNS.md": "4b79c1d21661e5fb126a358d022a26c16161147ad6a4fa1ea700192e34372837",
+    "docs/SCALING.md": "19841fb7a8ed48260c759fe5335aadc02b6a5908491a3ad5447993797ea9f290",
+    "docs/WORKER_SUPERVISION.md": "e3f9e30c3cd6d3b71ce93b49e783144e506c67dd9a6abe0a6eac509de160bf95",
+    "swarm_control/cli.py": "3214bc9190a8eda3f08e65e03dfe9d35a998a3aec6e269757c96fc39e94ad476",
+    "swarm_control/context_packet.py": "327ac2deeb421d5beb95ceec0eb3816c23a550b0e7b3befb21d6bbdb30b2e702",
+    "swarm_control/dashboard_static/app.js": "270b8ec64f4f7cd301781634e64d9e203e3e69725758633f027d81e6ebd74fc2",
+    "swarm_control/dashboard_static/index.html": "0bf6a160ac6e54d2ff95d4e89e6a46e7ed3e05d0b7a473171ca3142047612c48",
+    "swarm_control/dashboard_static/styles.css": "5b5208e5983c3ab4c182605ce5fbd5ea43e6d8d29a118ac0734bdac8b6853eac",
+    "swarm_control/dependencies.py": "d091299fed7a39460d17533e7ed64fede718cae94bfed2b17384cf2979c0f1a7",
+    "swarm_control/integration_pipeline.py": "783d6175e1c84f4e2eeb1012219a5842209fe0b5be990fdff55ba0701478dd7b",
+    "swarm_control/launcher.py": "61977a3bf9ed69f78b56ec447ab99b4f14a07b1073c98889d101a856c01bd4a3",
+    "swarm_control/modal_runner.py": "71ecbf2282adeb71a25238cb4fbbf970a7d5d0b87390fcae6b70ab78378d9105",
+    "swarm_control/modal_worker.py": "6152e9ae5b6bf9e892ae74873d30b25809fe5b355610e031aa889c0933ad71a5",
+    "swarm_control/pilot_integrate.py": "198c2fc52d0320a6c6bee8adbe66e3f9bd8dd70765280c27b020f8fc3283727f",
+    "swarm_control/preflight.py": "3b70b75d870425474ff9db490a1b1785c03ecd6974bf94d66f6d4da1f9be5fb1",
+    "swarm_control/progress.py": "4c872ec71939a18761e43be4181ad9ce1e98f9561db3603841fb9ea5ba49a42f",
+    "swarm_control/workload.py": "ab56dd8f86d364ed50ae3a8a8a1ac6bbf340e3479edacecaff1718d5432cf73a",
+    "swarm_control/workspace.py": "0d1ac6096a1015e09fc1ff313710f17721e24c98e49ac27ce70cf3949b030223",
+    "tests/test_acceptance_checks.py": "6117c546babcd1ab8cf779095e7beb0227bd152e42091c53b97a904d5ceed3ea",
+    "tests/test_context_readiness.py": "7a318937b7ce3039f4eb6bb62a63780f65c181191d6691e638114bdd45befc42",
+    "tests/test_dependencies.py": "cb4c3719d47b41c797a5fc5c8e35027ad16365fd2346f4dda9acdbf40f0265d0",
+    "tests/test_integration_pipeline.py": "b3ec7c4c1ff252df56d8498fb07f4eded460ac0a8e24edc62400f2654330e5fa",
+    "tests/test_integration_policy.py": "9151b1d2318500c3e9c7f371a0842b38f0c3a1664ffdb105bfdcb7be4d2e84d7",
+    "tests/test_modal_runner.py": "f99a9730084b3d9734d4f5dbe8e6cb09ba5ab5d73d72ea5826b6722ae9ce5054",
+    "tests/test_operations.py": "0fa3f6effa1abf83ee4361f63c1b2f357d4d7a0f016d34f4b00cff22ad5c364d",
+    "tests/test_pilot_integrate.py": "53595d7ff419c20b7dbf7d53806d3402302609823df3839d87ccf40acac845ed",
+    "tests/test_project.py": "ebdba3b89d04d24d2c40a81e9b363510c333b0e4da2e2c0ebf3fbfd14d6e0948",
+    "tests/test_supervision.py": "e32f171e8c97cd1c14553abe2302093043e2a7291877d7c749eed8c91e79305e",
+    "tests/test_worker_progress.py": "b1732e98c2d9d9767cd2806af9b4dd2d639ab9951bb00735d1e63d729e6e1b37",
+    "tests/test_workload.py": "d11562d5a74bfae101bcc706adcbb6eb868a40e72f69a43e496b3f37812020e8",
+    "tests/test_workload_review.py": "34ef6647626c7b710e29186c0b524544a6b7b9a9d0ed65b84553da1309f602aa"
+  }
+}
