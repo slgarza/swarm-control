@@ -25,6 +25,7 @@ gateway_ledger = "your-project-budget-v1"
 gateway_concurrency = 20
 openai_secret = "your-project-openai"
 environment = "main"
+source_transport = "bundle"
 image = "node:24.6.0-bookworm-slim"
 setup_commands = ["npm install --global npm@11.16.0 @openai/codex@0.166.0"]
 network_domains = ["github.com", "api.github.com", "codeload.github.com", "raw.githubusercontent.com", "registry.npmjs.org"]
@@ -78,6 +79,12 @@ pricing are pinned for `gpt-6.1-sol`; another model needs reviewed compatibility
 and pricing changes, not just a different flag.
 
 ## Configuration reference
+
+`runtime.source_transport` is `github` by default for existing profiles. New GUI
+profiles use `bundle`: one bounded frozen Git bundle is prepared locally and
+uploaded to workers, permitting private source without exposing account tokens.
+See [private repositories](PRIVATE_REPOSITORIES.md). This setting grants no
+provider capacity or spending authority.
 
 The parser accepts only the documented sections and keys. All paths below are
 relative to the target root unless stated otherwise. A configuration file inside

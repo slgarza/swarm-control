@@ -5,9 +5,11 @@ import hashlib
 import json
 import math
 import os
+import re
 import signal
 import stat
 import subprocess
+import tempfile
 import time
 import uuid
 from datetime import UTC, datetime
@@ -468,9 +470,51 @@ def run(args, cwd, *, check=True, timeout=None):
         if key not in {"CODEX_API_KEY", "OPENAI_API_KEY", "OPENAI_ADMIN_KEY",
                        "OPENAI_ADMIN_API_KEY", "GH_TOKEN", "GITHUB_TOKEN"}
     }
-    env.update(GIT_NO_LAZY_FETCH="1", GIT_OPTIONAL_LOCKS="0", GIT_NO_REPLACE_OBJECTS="1")
+    env.update(GIT_NO_LAZY_FETCH="1", GIT_OPTIONAL_LOCKS="0", GIT_NO_REPLACE_OBJECTS="1",
+               GIT_CONFIG_NOSYSTEM="1", GIT_CONFIG_SYSTEM=os.devnull, GIT_CONFIG_GLOBAL=os.devnull)
     return subprocess.run(args, cwd=cwd, env=env, check=check, capture_output=True,
                           **({"timeout": timeout} if timeout is not None else {}))
+
+
+def prepare_repository(manifest, repo, *, bundle_path=None):
+    """Public clone or digest-bound offline source; no controller credential input."""
+    source = manifest.get("source_bundle")
+    if source is None:
+        run(["git", "clone", "--no-checkout", manifest["repository"], str(repo)], repo.parent)
+    else:
+        if (not isinstance(source, dict) or type(source.get("schema_version")) is not int
+                or source["schema_version"] != 1
+                or source.get("transport") != "bundle" or source.get("base_sha") != manifest["base_sha"]
+                or not isinstance(manifest["base_sha"], str) or not re.fullmatch(r"[a-f0-9]{40}", manifest["base_sha"])
+                or source.get("worker_path") != "/tmp/swarm-source.bundle"
+                or not isinstance(source.get("sha256"), str)
+                or not re.fullmatch(r"[a-f0-9]{64}", source["sha256"])
+                or type(source.get("bytes")) is not int or not 0 < source["bytes"] <= 64 * 1024 * 1024
+                or not isinstance(manifest["repository"], str)
+                or not re.fullmatch(r"https://github\.com/[A-Za-z0-9][A-Za-z0-9_.-]{0,99}/[A-Za-z0-9][A-Za-z0-9_.-]{0,99}\.git", manifest["repository"])):
+            raise ValueError("Invalid offline source bundle contract")
+        path = Path(bundle_path or source["worker_path"])
+        if path.is_symlink() or not path.is_file() or path.stat().st_size != source["bytes"]:
+            raise ValueError("Source bundle is missing or has changed size")
+        with path.open("rb") as stream:
+            if hashlib.file_digest(stream, "sha256").hexdigest() != source["sha256"]:
+                raise ValueError("Source bundle digest mismatch")
+        git = ["git", "-c", "core.hooksPath=/dev/null", "-c", "core.fsmonitor=false",
+               "-c", "protocol.allow=never", "-c", "protocol.file.allow=always"]
+        expected = (manifest["base_sha"] + " refs/heads/swarm-source\n").encode()
+        if run([*git, "bundle", "list-heads", str(path)], repo.parent).stdout != expected:
+            raise ValueError("Source bundle refs differ from the exact base")
+        with tempfile.TemporaryDirectory(prefix="swarm-empty-template-") as template:
+            run([*git, "clone", "--no-checkout", "--no-recurse-submodules", "--no-hardlinks",
+                 f"--template={template}", "--branch", "swarm-source", "--", str(path), str(repo)], repo.parent)
+        run([*git, "bundle", "verify", str(path)], repo)
+        run([*git, "remote", "set-url", "origin", manifest["repository"]], repo)
+    run(["git", "checkout", "--detach", manifest["base_sha"]], repo)
+    if run(["git", "rev-parse", "--verify", "HEAD"], repo).stdout.decode().strip() != manifest["base_sha"]:
+        raise ValueError("Prepared worker HEAD differs from the frozen base")
+    run(["git", "switch", "-c", manifest["branch"]], repo)
+    if source is not None and bundle_path is None:
+        path.unlink()
 
 
 def owned(path, ownership):
@@ -592,12 +636,7 @@ def main():
             for tool in ("node", "npm", "codex", "git")
         }
         (artifacts / "versions.json").write_text(json.dumps(versions, indent=2) + "\n")
-        run(
-            ["git", "clone", "--no-checkout", manifest["repository"], str(repo)],
-            "/workspace",
-        )
-        run(["git", "checkout", "--detach", manifest["base_sha"]], repo)
-        run(["git", "switch", "-c", manifest["branch"]], repo)
+        prepare_repository(manifest, repo)
         raise SystemExit(run_commands(manifest.get("install_commands"), repo, artifacts / "install.log"))
     if args.action == "collect":
         collect(repo, manifest["base_sha"], manifest["task"]["ownership"], artifacts)

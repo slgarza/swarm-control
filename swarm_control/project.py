@@ -55,6 +55,7 @@ class Project:
     gateway_tokens_per_minute: int | None = None
     gateway_requests_per_minute: int | None = None
     failure_policy: FailurePolicy = dataclass_field(default_factory=FailurePolicy)
+    source_transport: str = "github"
 
     @property
     def clone_url(self):
@@ -109,7 +110,7 @@ def load_project(path):
         (validation, {"install", "checks", "required_checks"}),
         (runtime, {"network_domains", "worker_app", "gateway_app", "gateway_ledger",
                    "gateway_concurrency", "gateway_tokens_per_minute", "gateway_requests_per_minute",
-                   "openai_secret", "environment", "image", "setup_commands"}),
+                   "openai_secret", "environment", "image", "setup_commands", "source_transport"}),
         (budget, {"live_enabled", "max_live_agents", "model_limit_cents", "infra_limit_cents"}),
         (operations, {"window_seconds", "minimum_failures", "minimum_tasks", "minimum_share"}),
     ):
@@ -155,6 +156,9 @@ def load_project(path):
             "runtime.image must be a container image reference")
     setup = runtime.get("setup_commands", ["npm install --global npm@11.16.0 @openai/codex@0.166.0"])
     setup = string_list(setup, "setup_commands")
+    source_transport = runtime.get("source_transport", "github")
+    require(isinstance(source_transport, str) and source_transport in {"github", "bundle"},
+            "runtime.source_transport must be github or bundle")
     gateway_concurrency = runtime.get("gateway_concurrency", 20)
     require(type(gateway_concurrency) is int and 1 <= gateway_concurrency <= 100,
             "runtime.gateway_concurrency must be an integer between 1 and 100")
@@ -184,4 +188,4 @@ def load_project(path):
                    domains, names["worker_app"], names["gateway_app"], names["gateway_ledger"],
                    names["openai_secret"], names["environment"],
                    image, setup, live, maximum, **limits, gateway_concurrency=gateway_concurrency,
-                   **rates, failure_policy=FailurePolicy(**operations))
+                   **rates, failure_policy=FailurePolicy(**operations), source_transport=source_transport)
