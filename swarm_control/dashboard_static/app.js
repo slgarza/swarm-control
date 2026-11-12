@@ -807,5 +807,7 @@
   document.querySelector('.nav-item')?.setAttribute('aria-current', 'location');
   window.setInterval(() => {if (state.autoRefresh && !document.hidden) refresh(); if (state.workspace && state.runDetail && !document.hidden) checkLaunch(state.runDetail);}, 10000);
   document.addEventListener('visibilitychange', () => {if (!document.hidden && state.autoRefresh) refresh();});
+  window.addEventListener('swarm:setup-changed', (event) => {if (state.workspace) loadCatalog(true, event.detail?.project_id);});
+  window.addEventListener('swarm:setup-run', (event) => {if (state.workspace) {loadCatalog(true, event.detail?.project_id).then(() => toggleBuilder(true));}});
   loadCatalog();
 })();

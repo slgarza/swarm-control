@@ -90,8 +90,8 @@ supplied HTTP URL belongs to that gateway deployment.
 Reservations are not invoices. Failed or ambiguous requests may retain their
 reservation. Local allocations are not automatically refunded when a run finishes.
 The saved budget policy cannot be raised by simply editing `swarm.toml`; there is
-currently no general budget-migration CLI. Existing pilot allocations must survive
-any future, explicitly reviewed migration.
+an explicit [budget migration workflow](BUDGET_MIGRATION.md), also used by the
+reviewed GUI budget form. Existing pilot allocations survive every migration.
 
 ## State and integration boundaries
 
@@ -140,13 +140,16 @@ state are not yet a globally distributed control service.
 | [pilot_integrate.py](../swarm_control/pilot_integrate.py) | Candidate validation, review acknowledgment, PRs and merge |
 | [deployment.py](../swarm_control/deployment.py) | Deploy the gateway with the target's existing identifiers |
 | [workspace.py](../swarm_control/workspace.py) | Private repository registry, frozen run drafts, sealed history and explicit CLI launch |
-| [dashboard.py](../swarm_control/dashboard.py) | Loopback evidence viewing and bounded local run preparation; no HTTP deployment |
+| [dashboard.py](../swarm_control/dashboard.py) | Loopback evidence, CSRF-protected setup and explicit background controller operations |
+| [onboarding.py](../swarm_control/onboarding.py) | Durable setup jobs, provider/repository actions and exact CLI previews |
+| [connections.py](../swarm_control/connections.py) | Personal local `.env`, session overrides and explicit provider verification |
+| [source_bundle.py](../swarm_control/source_bundle.py) | Frozen private source delivery without controller credentials in coding VMs |
 | [progress.py](../swarm_control/progress.py) | Safe worker phase/event observations, with unknown remote termination causes preserved |
 
 ## What remains outside this implementation
 
 Automatic backlog decomposition, peer-to-peer coordination, distributed leases,
-autonomous conflict repair, private-target clone authentication and unattended semantic
+autonomous conflict repair and unattended semantic
 review remain future work. The local dashboard supports repository/run selection,
 draft preparation and historical evidence. Larger cohorts and clean shared-file
 integration have offline coverage; their real scale and throughput still need

@@ -27,13 +27,17 @@ under an explicitly configured project capacity, retrieve patches, enforce a bud
 and integrate reviewed changes through GitHub Actions. Defaults remain ten workers
 and disabled execution. Shared ownership is opt-in; clean three-way integration
 reruns combined checks, while actual conflicts require a separate repair attempt.
-The target is a public GitHub repository with prepared tasks and validation commands.
+The target is a GitHub repository with prepared tasks and validation commands.
+Private source can use a frozen [bundle transport](PRIVATE_REPOSITORIES.md)
+without forwarding GitHub credentials to coding workers.
 Review and integration still require an operator. The local dashboard presents
 curated evidence and links, with explicit project and run selection. Workspace
 mode adds local repository connection, configurable concurrent agents, saved
 drafts, confirmed launch through the existing controller gates and sealed history.
-Easy Run installs and opens this interface; backlog generation and service-account
-setup are not automated. The [dashboard gallery](DASHBOARD.md#screenshots)
+Easy Run installs and opens this interface. [Setup](SETUP.md) configures personal
+accounts and `.env`, clones/forks repositories, prepares task drafts, publishes
+reviewed preparation and exposes CLI operations. Task generation and semantic
+planning still require operator judgment. The [dashboard gallery](DASHBOARD.md#screenshots)
 contains actual English desktop, mobile, task, budget and empty-state captures.
 
 Read-only dependency analysis handles larger backlogs while preserving the

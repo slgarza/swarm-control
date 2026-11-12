@@ -7,9 +7,11 @@ starts use the same command. The installed CLI offers `swarm-control start`;
 
 Workspace mode connects prepared local repositories, checks plans, saves drafts
 and accepts an explicit, confirmed run request through the ordinary controller
-gates. Keep the server terminal open during a run. Setup of provider accounts,
-gateway deployment, budget authorization, code review and merging remain separate
-operator steps. See [repositories and run history](RUNS.md) or the
+gates. Its **Setup** dialog adds personal `.env` and provider connections,
+clone/fork, project/task preparation, reviewed publication, authorized budget
+changes and explicit deployment. Keep the server terminal open during active
+operations. Code review and merge remain explicit operator decisions. See
+[browser setup](SETUP.md), [repositories and run history](RUNS.md) or the
 [Spanish beginner guide](GETTING_STARTED.es.md).
 
 The legacy evidence-only modes described below remain read-only.

@@ -1,0 +1,134 @@
+{
+  "schema_version": 1,
+  "stage": "Complete browser onboarding implementation and local validation",
+  "controller_base_commit": "ea0be9e680ef7e35149b55cd0b7e5bdea3a630d9",
+  "started_at_utc": "2026-11-12T17:37:13.975937+00:00",
+  "reported_at_utc": "2026-11-12T18:12:03.411319+00:00",
+  "elapsed_seconds_at_report": 2089.435387213,
+  "clock": "UTC wall timestamps and monotonic local durations; includes implementation, review, repairs and publication elapsed so far; final publication receipts separate",
+  "scope": [
+    "Personal per-computer .env and session connections outside all Git repositories",
+    "Explicit GitHub/Modal authentication checks and separate OpenAI-key Modal Secret operation",
+    "Checksummed optional per-user GitHub CLI installer",
+    "Clone/fork, preserved inherited tasks, explicit fresh-profile retarget, issue import/create and reviewed draft creation",
+    "Exact allowlisted preparation commits/pushes with isolated index and durable private originals",
+    "GUI allowance changes through the existing ledger-preserving migration, explicit deploy/probe and bound CLI controls",
+    "Private source bundles prepared once before provider admission and uploaded without GitHub account credentials in coding workers"
+  ],
+  "validation": {
+    "unit_tests": {
+      "passed": 607,
+      "suite_elapsed_seconds": 99.759,
+      "command_elapsed_seconds": 100.55684505400131,
+      "receipt_sha256": "4fd016c15bbc87521a26173a3aded160a210fe6559218fd62937b0c7bb89a668",
+      "output_sha256": "5ba2f7db17a44614acb49a0a654ad9be4178c8920160c46b93a0a03c09a3a5b1"
+    },
+    "ruff": "passed, isolated controller/tests/examples",
+    "python_compilation": "passed, controller/examples",
+    "javascript_syntax": "passed, main app and setup app",
+    "browser": {
+      "mocked_http_checks": 23,
+      "real_local_http_checks": 15,
+      "widths_px": [
+        320,
+        390,
+        1440
+      ],
+      "mock_receipt_sha256": "ceb348b919360748ed2c32e91ba9a0701eda825f18a8636f00a6afd02267321c",
+      "real_http_receipt_sha256": "46daddec9fc24bd6792908950c4620951492f17c2ed64e199d8f6b955fd33d3b",
+      "scope": "Real Chromium/local HTTP and Git operations; synthetic credentials and mocked provider runners; no live account mutation or paid execution"
+    },
+    "secret_boundaries": [
+      "Private .env 0600 outside Git, directory 0700",
+      "Fixture keys absent from raw job/history HTTP, DOM and browser storage",
+      "Model key excluded from controller subprocess environment; Modal Secret transfer uses stdin",
+      "Only reviewed generated files enter preparation publication; unrelated changes and env files stay outside it"
+    ],
+    "source_bundle": {
+      "actual_local_git_round_trips": true,
+      "mocked_concurrent_uploads": 100,
+      "worker_limit": 100,
+      "maximum_bundle_bytes": 67108864,
+      "live_vm_upload_verified": false
+    },
+    "accounting": "Synthetic existing allocations, tasks and events remain identical across GUI-authorized migration; attempted reduction rejected",
+    "independent_reviews": [
+      "Provider/credential persistence and private source transport",
+      "Repository preparation and publication boundaries",
+      "Exact CLI artifact bindings and disabled fsmonitor hooks",
+      "Frontend/backend actions, confirmations and correct selected repository"
+    ]
+  },
+  "attempts": {
+    "root_command_receipts_at_report": 24,
+    "root_failed_commands_retained": 7,
+    "other_attempts": "Per-agent implementation, browser, review and publication attempts retained privately, including failures and repairs",
+    "repairs": [
+      "Bounded repository stdin/descendant handling",
+      "Versioned ignore protection with preserved originals",
+      "Exact relative candidate/manifest bindings and fsmonitor suppression",
+      "Installer receipt import and test boundary repairs",
+      "Legacy HTTP fixture path/new explicit setup capability",
+      "Selected repository and prepared-project registration in the wizard"
+    ],
+    "interventions": "Assisted coordinator decisions, reviews and repairs; user explicitly required personal local .env and no keys in GitHub"
+  },
+  "evidence_limits": [
+    "Initial read-only discovery elapsed unknown",
+    "Some intermediate patch-context failures retained in tool transcript, with final source and command failures preserved privately",
+    "Ephemeral unit Git repositories are intentionally cleaned; fixture source and result receipts remain",
+    "Live token permissions, quota, private VM transfer and billed end-to-end account setup were not exercised"
+  ],
+  "cost": {
+    "gross_usd": null,
+    "eligible_usd": null,
+    "reason": "Model, local resource and CI billing unavailable"
+  },
+  "delivery": {
+    "paid_workers_started": 0,
+    "provider_deployments": 0,
+    "real_modal_secret_mutations": 0,
+    "accepted_target_backlog_items": 0,
+    "live_useful_100_agent_scale_verified": false,
+    "afk_comparison": null,
+    "throughput_rates": null
+  },
+  "cleanup": "Temporary test servers stopped; private evidence and review worktrees retained. Afterimage source, frozen tasks and ledgers unchanged. No personal credential configuration changed during validation.",
+  "source_sha256": {
+    "README.md": "d0b30d7d860f79e909de418bd2109ef78a5302194f67b236ac5782a6f918f7fc",
+    "docs/ARCHITECTURE.md": "63fb46276f422906e6830d313614a84265c070b3e4423215a4f99d46bb313cab",
+    "docs/CONNECTIONS.md": "2cc8f65dcab91945048c403052e54885bc0eb1c7ca1ee0d3c9d68cb8756dbb46",
+    "docs/DASHBOARD.md": "6c7a39091142ef1a5aa9324d643002e790b9d08442c2ad50e2a31957b7eb9080",
+    "docs/GETTING_STARTED.es.md": "394fec8a714f62ae81e0a87bcfcd4d5df8219bd21140be497c04e655a49c6e25",
+    "docs/PRIVATE_REPOSITORIES.md": "90c53303c5b6ec36450c5121d89688c0d59b9d36c0cf5cbcb21b09364f75cade",
+    "docs/PROJECTS.md": "89bde74559a9e1ca09d3d8d7d29bd7c891a50171071863bd5212069f8b66f8fa",
+    "docs/README.md": "1e15dda3d5b5d9d925835371e6070eea416006d36b45986bbb772439636d2938",
+    "docs/REPOSITORY_SETUP.md": "f91d6783de9f62e521a89e6bb83e1e8ca5208439457209159c8e9ea3e03f3aca",
+    "docs/RUNS.md": "997c157bee3aac2f385c5f0e64a86682d38a932c4e91907d060de10d4d51bd7d",
+    "docs/SETUP.md": "2086bf1edceea632bdd43d893995cc2ea7782ec19d5ac805145e8461077ea7be",
+    "swarm_control/connection_worker.py": "ac1b2409a610aa4a8b126348f4523f330e16276db2bb00d51864cc29cd8860e6",
+    "swarm_control/connections.py": "8c5f065058116e0950102e37f46ffa4226a2b3c1d5d38213dee110f59876c684",
+    "swarm_control/dashboard.py": "618825934ef8f0fca960f7b80b853c4a4ab636e858cc0b9204975bfbd80e533f",
+    "swarm_control/dashboard_static/app.js": "6f67d0a2d98c3ff819f92aa5a569001ca2cd5b3c149d474c7a03b7133f0836c1",
+    "swarm_control/dashboard_static/index.html": "22d661284f4186a8eb99bbf31d9aa2ab77ba26c18173b5bc410da30351d3953d",
+    "swarm_control/dashboard_static/setup.css": "651e9ea6488d837a4b485dcd9b66b5ecaecd641fbfab39ff9e00137194d33eb3",
+    "swarm_control/dashboard_static/setup.js": "a5ecda03eeca5afde7fdc253b7f23102097851ebb8aff5a694057feca84b9289",
+    "swarm_control/desktop_tools.py": "5496721d44262143bfb896b784201dd8e676ef3dff50f30408b07577b2370f3c",
+    "swarm_control/gui_budget.py": "b14538102448f9eed8750d7c3d640a516ab5b8abcd4462bbce026c172e6fd6b0",
+    "swarm_control/local_commands.py": "cdad7501ce35f63ab08a89824910c689f1bb460fe40808e1e11e9e3d9e0dc51f",
+    "swarm_control/modal_runner.py": "3c95119bc3714cc5c47e401395332af5307072254af75c83e727131b34fc82f7",
+    "swarm_control/modal_worker.py": "a84a582904da13ed56bffc5e7cc54cce45fee99688f895e8e87c5ed647019a58",
+    "swarm_control/onboarding.py": "0fa8c59942d22da6f05b5d4bc249cb3c023fe99502b816a119101a6c0bacaa5c",
+    "swarm_control/project.py": "c0d56465da36c50677dda8f6f3edf23c83b30106db2f868fdb630b5b8fe0b514",
+    "swarm_control/repository_setup.py": "15a097dc4410c6a90cf51a424885e5ad4cb5c047630d717781d02b8f481c9dfc",
+    "swarm_control/setup_common.py": "534375fbc7834fc2f4ee09f449cd7fb1724fab7e5acb8a0feffc590632c964f5",
+    "swarm_control/source_bundle.py": "7e19ede973f2d9ebb992cf2867f95d27214e36b70ae40a1894ec1d4f5c1913ce",
+    "swarm_control/workspace.py": "738e594d510ed4641c7587af5a910bac6bbc10621a4b85cae3ef9ea7f393165b",
+    "tests/test_connections.py": "77d36e31b10e37d2d66ef8a050f278ccbe833b866a9b9e9abda72e401e4d951c",
+    "tests/test_dashboard_workspace.py": "ee54bb8a5f23919297c391b9e43fa9875b18e68547ec7dcf174ce58ccf9edc27",
+    "tests/test_desktop_tools.py": "05ae1ce99e3ceb2e2ac521db0dde865bca020cb676ca20c8ed5bdbc41142f8a8",
+    "tests/test_gui_setup.py": "ba4a3b8867aa139a1b10f036c35e5063604cfb007da67358b809b9417bba2c89",
+    "tests/test_repository_setup.py": "32a6849cc600273787eebe86b70d1b995666193b48a02df0eea16563c5c7ccce",
+    "tests/test_source_bundle.py": "f0a4fe73335aea5b670fe25f871ee7326bfbcbcbe856eed3ad9da01ebe29ca58"
+  }
+}

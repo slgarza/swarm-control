@@ -67,6 +67,57 @@ ningún agente y no se creó ninguna máquina en la nube.
 
 ## 3. Conectar tu propio proyecto
 
+Abre **Setup**. El asistente permite configurar cuentas, clonar o hacer fork,
+preparar tareas y publicar sus archivos desde el navegador.
+
+En **Accounts**, instala GitHub CLI con su botón si falta. Importa tu `.env` o
+introduce tus claves en campos de contraseña. Cada persona usa sus propias
+cuentas. Se admiten `GH_TOKEN`, `MODAL_TOKEN_ID`, `MODAL_TOKEN_SECRET` y
+`CODEX_API_KEY`; `OPENAI_API_KEY` es un alias aceptado. Guardar el archivo no
+ejecuta comandos ni verifica conexiones automáticamente.
+
+Tu `.env` queda en una carpeta privada **fuera de todos los repositorios Git**,
+con permisos `0600`. El panel muestra su ubicación, nunca sus valores. No se
+publica en GitHub ni se guarda en el almacenamiento del navegador. Es un archivo
+de texto protegido por permisos, no una bóveda cifrada. Las conexiones
+individuales también pueden mantenerse solo durante esta sesión del servidor.
+
+Verifica GitHub y Modal con sus botones. Cuando elijas **Create Modal Secret**,
+se enviará explícitamente tu clave de OpenAI a tu propio workspace de Modal.
+Puedes dejar el campo vacío para usar la clave del `.env`. El proyecto guarda
+solo el nombre del secreto; guardar el `.env` no hace ese envío.
+
+En **Repository**, selecciona una carpeta Git existente o indica un GitHub
+`TU_USUARIO/TU_REPO` y una carpeta nueva. Marca la opción de fork si quieres
+crear o comprobar tu propia copia antes de descargarla. Clonar trae las tareas
+versionadas; los issues se importan por separado. Una carpeta existente no se
+sobrescribe. En WSL, usa rutas Linux como `/mnt/c/Users/TuUsuario/mi-repo`.
+
+Si un fork conserva una configuración que nombra el repo original, el asistente
+ofrece retarget después de revisar su explicación. Conserva tareas e historial,
+crea identidades propias de servicios y deja ejecución deshabilitada y cero
+presupuesto. Un ledger existente impide ese cambio. Revisa los issues heredados
+antes de preparar trabajo vinculado a tu fork.
+
+En **Project profile**, revisa el preset de comandos de tu lenguaje, tus pruebas
+reales, instrucciones y nombre/entorno del secreto Modal. Crea el perfil local.
+Los perfiles existentes se conservan y pueden conectarse directamente. Los
+perfiles nuevos envían una copia Git del commit exacto a los workers; también
+funciona con código privado sin entregarles tus tokens GitHub.
+
+En **Tasks**, importa números de issues o crea uno desde el título y la petición
+de tu tarea. Completa sus rutas de trabajo, aceptación y dependencias antes de
+guardarla lista. El editor conserva tareas publicadas o congeladas. El
+controlador todavía requiere que revises el plan semántico de trabajo.
+
+En **Check & publish**, revisa los comandos antes de ejecutarlos en tu computadora.
+Después revisa los archivos exactos de preparación y confirma su commit y push.
+El publicador incluye esos archivos gestionados, sin tu `.env`, claves ni cambios
+ajenos. Consulta **Setup activity** si pierdes una respuesta antes de repetirla.
+La [guía completa de Setup](SETUP.md) detalla cada paso.
+
+### Conexión manual opcional
+
 Primero descarga tu proyecto con Git. Por ejemplo, para un repositorio público,
 reemplaza `TU_USUARIO/TU_REPO` y ejecuta esto desde la carpeta donde guardas tus
 proyectos:
@@ -139,11 +190,18 @@ opcional: vacío conserva avisos y el límite total, sin detener por silencio de
 modelo. Consulta [dependencias](DEPENDENCIES.md) y
 [supervisión](WORKER_SUPERVISION.md) para preparar los contratos.
 
-Esta parte usa servicios de pago. Antes necesitas preparar tus propias cuentas
-de GitHub, Modal y OpenAI, configurar el presupuesto autorizado, publicar las
-tareas y el código, desplegar tu gateway y verificar su funcionamiento. Sigue
-el [tutorial de dos agentes](TWO_AGENT_WALKTHROUGH.md), que contiene los pasos y
-comandos. Abrir Easy Run no hace esa configuración ni concede presupuesto.
+Esta parte usa servicios de pago. En **Setup → Budget & deploy**, introduce los
+límites acumulados que autorizas, el máximo de agentes y, cuando corresponda,
+habilita operaciones pagadas. Los límites existentes no se reducen ni se borran:
+un aumento usa la migración con sus reservas preservadas. Revisa y publica el
+perfil actualizado antes del run.
+
+Despliega el gateway con su botón y confirma por separado la prueba de
+compatibilidad. Ambos pueden generar cargos. El panel devuelve la URL del
+gateway; una prueba correcta no acredita cuota suficiente para 100 workers.
+En **CLI controls** puedes previsualizar y ejecutar comandos admitidos del
+controlador, sin abrir una terminal adicional. Consulta [Setup](SETUP.md) o el
+[tutorial de dos agentes](TWO_AGENT_WALKTHROUGH.md) para los detalles.
 
 Cuando esté preparado, abre el borrador en el panel, revisa las tareas y los
 límites, introduce el origen HTTPS de tu gateway verificado y marca la
@@ -174,5 +232,8 @@ terminó el proceso; no significa que el cambio ya esté aceptado o integrado.
 | No hay tareas seleccionables | Revisa los archivos de tareas y su estado en el proyecto; usa el demo para comprobar el panel. |
 | No permite ejecutar | Lee los bloqueos. Guardar un plan no configura cuentas, habilita ejecución ni autoriza gasto. |
 | `swarm-control` no se encuentra en otra terminal | Usa `./easy-run`, o activa el entorno con `source .venv/bin/activate` desde la carpeta del controlador. |
+| Falta GitHub CLI | Abre **Setup → Accounts** e instala la copia privada con el botón del panel. |
+| El `.env` no se importa | Usa solo claves admitidas, sin duplicados, comandos ni sustituciones; incluye el par completo de Modal. |
+| Un fork conserva tareas bloqueadas | Revisa sus issues originales y prepara tareas vinculadas a issues de tu propio repo. |
 
 Para detalles de opciones e historial, consulta [repositorios y runs](RUNS.md).

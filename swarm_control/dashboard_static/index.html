@@ -7,7 +7,9 @@
   <meta name="description" content="Local Swarm Control evidence, results and recovery dashboard.">
   <title>Swarm Control · Local dashboard</title>
   <link rel="stylesheet" href="/assets/styles.css">
+  <link rel="stylesheet" href="/assets/setup.css">
   <script src="/assets/app.js" defer></script>
+  <script src="/assets/setup.js" defer></script>
 </head>
 <body>
   <a class="skip-link" href="#main">Skip to content</a>
@@ -19,6 +21,7 @@
     <div class="workspace-label">WORKSPACE</div>
     <nav class="nav-list">
       <a class="nav-item is-active" href="#overview"><span aria-hidden="true">◫</span> Overview <span class="nav-shortcut">01</span></a>
+      <button id="setup-open" class="nav-item setup-nav" type="button"><span aria-hidden="true">⚙</span> Setup &amp; connections</button>
       <a class="nav-item" href="#run-history" data-workspace-only hidden><span aria-hidden="true">◷</span> Run history</a>
       <a class="nav-item" href="#workers"><span aria-hidden="true">▦</span> Workers <span id="nav-worker-count" class="nav-count">—</span></a>
       <a class="nav-item" href="#tasks"><span aria-hidden="true">☷</span> Tasks & PRs</a>
@@ -138,6 +141,7 @@
     </main>
   </div>
 
+  <dialog id="setup-dialog" aria-labelledby="setup-title"><div id="setup-root"></div></dialog>
   <dialog id="task-dialog" aria-labelledby="detail-title">
     <div class="drawer-header"><div><div class="eyebrow">TASK EVIDENCE</div><h2 id="detail-title" tabindex="-1">Details</h2></div><button id="close-detail" class="icon-button" type="button" aria-label="Close details">×</button></div>
     <div id="detail-content" class="drawer-content"></div>
