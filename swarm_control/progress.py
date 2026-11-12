@@ -6,7 +6,7 @@ from contextlib import contextmanager
 from datetime import UTC, datetime
 from threading import RLock
 
-PHASES = frozenset({"provision", "prepare", "barrier", "agent", "collect", "check",
+PHASES = frozenset({"provision", "prepare", "barrier", "agent", "collect", "check", "acceptance",
                     "recover", "artifacts", "terminate"})
 EVENTS = frozenset({"thread.started", "turn.started", "turn.completed", "turn.failed",
                     "error", "item.started", "item.completed"})
@@ -29,6 +29,7 @@ class WorkerProgress:
         self._checkpoint = checkpoint
         self._lock = RLock()
         self._last_checkpoint = None
+        self._agent_started_tick = None
         self._data = {
             "schema_version": 1,
             "phases": [],
@@ -42,6 +43,12 @@ class WorkerProgress:
             "model_service_seconds": None,
             "request_queue_seconds": None,
             "checkpoint_failures": 0,
+            "first_file_change_received_at_utc": None,
+            "last_file_change_received_at_utc": None,
+            "first_file_change_seconds": None,
+            "file_change_signals": 0,
+            "useful_progress_verified": False,
+            "supervision": None,
         }
 
     def snapshot(self):
@@ -73,6 +80,7 @@ class WorkerProgress:
             self._data["phases"].append(row)
             if name == "agent":
                 self._data["agent_process_outcome"] = "running"
+                self._agent_started_tick = tick
             self._flush(force=True)
         try:
             yield row
@@ -107,6 +115,12 @@ class WorkerProgress:
             self._data["agent_process_outcome"] = outcome
             self._flush(force=True)
 
+    def supervision(self, value):
+        """Attach the caller's validated, safe worker-supervisor projection."""
+        with self._lock:
+            self._data["supervision"] = copy.deepcopy(value)
+            self._flush(force=True)
+
     def event(self, value, received_at):
         if not isinstance(value, dict):
             return
@@ -122,6 +136,15 @@ class WorkerProgress:
                 counts = self._data["item_counts"]
                 key = kind.removeprefix("item.") + ":" + name
                 counts[key] = min(1000000, counts.get(key, 0) + 1)
+                if (kind == "item.completed" and name == "file_change"
+                        and item.get("status", "completed") == "completed"):
+                    self._data["file_change_signals"] = min(1000000, self._data["file_change_signals"] + 1)
+                    if self._data["first_file_change_received_at_utc"] is None:
+                        self._data["first_file_change_received_at_utc"] = received_at
+                        if self._agent_started_tick is not None:
+                            self._data["first_file_change_seconds"] = round(
+                                max(0.0, self._monotonic() - self._agent_started_tick), 6)
+                    self._data["last_file_change_received_at_utc"] = received_at
             self._data["last_event_kind"] = kind
             self._data["last_event_received_at_utc"] = received_at
             self._flush()

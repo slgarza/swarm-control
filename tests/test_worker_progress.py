@@ -1,5 +1,6 @@
 """Offline incident checks for measured worker closure and frozen task packets."""
 
+import hashlib
 import io
 import json
 import subprocess
@@ -171,14 +172,19 @@ class ContextTests(unittest.TestCase):
 
 class WorkerIncidentTests(unittest.TestCase):
     def execute(self, *, mode="run", patch_bytes=b"candidate\n", agent_exit=0,
-                prepare_exit=0, agent_wait_error=None, mutate_check=False, observer_failure=False):
+                prepare_exit=0, agent_wait_error=None, mutate_check=False, observer_failure=False,
+                configured_acceptance=None, acceptance_exit=0, acceptance_inputs_unchanged=True,
+                supervisor_reason="child_exited", supervisor_missing=False, baseline_seconds=0):
+        tick = [0.0]
         class Process:
-            def __init__(self, code=0, events=(), error=None):
+            def __init__(self, code=0, events=(), error=None, elapsed=0):
                 self.returncode, self.stdout, self.stderr = code, iter(events), iter(())
                 self.stdin = SimpleNamespace(write=lambda _: None, write_eof=lambda: None, drain=lambda: None)
                 self.error = error
+                self.elapsed = elapsed
 
             def wait(self):
+                tick[0] += self.elapsed
                 if self.error is not None:
                     raise self.error
                 return self.returncode
@@ -212,8 +218,18 @@ class WorkerIncidentTests(unittest.TestCase):
             terminated = False
 
             def exec(self, *args, **_):
-                if args[0] == "codex":
+                if args[0] == "codex" or args[2] == "agent":
                     actions.append("agent")
+                    if not supervisor_missing:
+                        files["supervision.json"] = json.dumps({"schema_version": 1,
+                            "source": "worker_supervisor_observed", "task_id": "A1", "base_sha": "a" * 40,
+                            "run_id": "draft-one", "coding_limit_seconds": 30,
+                            "terminal_reason": supervisor_reason,
+                            "started_at_utc": "2026-11-11T22:00:00+00:00",
+                            "finished_at_utc": "2026-11-11T22:00:01+00:00",
+                            "automatic_retries": 0, "child_exit_code": agent_exit,
+                            "wrapper_exit_code": agent_exit, "elapsed_seconds": 1,
+                            "warnings": [], "signals": []}).encode()
                     return Process(agent_exit, ['{"type":"thread.started","thread_id":"private-id"}\n',
                         '{"type":"item.completed","item":{"type":"command_execution","command":"private command"}}\n',
                         '{"type":"turn.completed","usage":{"input_tokens":1,"output_tokens":2}}\n'], agent_wait_error)
@@ -223,7 +239,15 @@ class WorkerIncidentTests(unittest.TestCase):
                     files["checks.log"] = b"checked"
                     if mutate_check:
                         files["changes.patch"] = b"changed by check\n"
-                return Process(prepare_exit if action == "prepare" else 0)
+                if action == "acceptance":
+                    files["acceptance.log"] = b"configured acceptance"
+                    files["acceptance.json"] = json.dumps({"configured": True,
+                        "source": "frozen_task_commands", "exit_code": acceptance_exit,
+                        "checks_sha256": hashlib.sha256(json.dumps(configured_acceptance, sort_keys=True).encode()).hexdigest(),
+                        "inputs_unchanged": acceptance_inputs_unchanged}).encode()
+                    return Process(acceptance_exit)
+                return Process(prepare_exit if action == "prepare" else 0,
+                               elapsed=baseline_seconds if action == "check" else 0)
 
             def terminate(self):
                 self.terminated = True
@@ -247,8 +271,12 @@ class WorkerIncidentTests(unittest.TestCase):
         observer_failures = []
         with tempfile.TemporaryDirectory() as directory, patch.dict("sys.modules", {"modal": fake_modal}), \
              patch.object(runner, "PROJECT", None), patch.object(runner, "write_json", side_effect=capture), \
+             patch.object(runner.time, "monotonic", side_effect=lambda: tick[0]), \
              redirect_stdout(io.StringIO()):
-            report = runner.execute_task({"id": "A1", "ownership": ["src"]}, args, "a" * 40,
+            task = {"id": "A1", "ownership": ["src"]}
+            if configured_acceptance is not None:
+                task["acceptance_checks"] = configured_acceptance
+            report = runner.execute_task(task, args, "a" * 40,
                                          Path(directory), None, None, None)
             manifest = json.loads((Path(directory) / "A1/manifest.json").read_text())
             self.assertEqual(manifest["run_id"], "draft-one")
@@ -283,6 +311,44 @@ class WorkerIncidentTests(unittest.TestCase):
         report, _ = self.execute(mutate_check=True)
         self.assertEqual(report["status"], "needs_repair")
         self.assertIn("checks modified", report["error"])
+
+    def test_deadline_closure_with_zero_child_exit_preserves_failed_original_and_recovery_candidate(self):
+        report, _ = self.execute(supervisor_reason="coding_deadline_reached")
+        self.assertEqual(report["status"], "needs_repair")
+        self.assertEqual(report["agent_exit"], 0)
+        self.assertEqual(report["recovered_candidate"]["status"], "candidate")
+        self.assertTrue(report["recovered_candidate"]["requires_independent_validation"])
+        self.assertFalse(report["recovered_candidate"]["authorizes_publish"])
+
+    def test_configured_acceptance_is_separate_from_baseline_and_input_mutations_are_rejected(self):
+        checks = [["python3", "-c", "assert True"]]
+        passed, actions = self.execute(configured_acceptance=checks)
+        self.assertEqual(passed["status"], "validated")
+        self.assertEqual(passed["check_exit"], 0)
+        self.assertEqual(passed["acceptance_exit"], 0)
+        self.assertIn("acceptance", actions)
+        failed, _ = self.execute(configured_acceptance=checks, acceptance_exit=1)
+        self.assertEqual(failed["status"], "needs_repair")
+        self.assertEqual(failed["check_exit"], 0)
+        self.assertFalse(failed["recovered_candidate"]["configured_acceptance_passed"])
+        changed, _ = self.execute(configured_acceptance=checks, acceptance_inputs_unchanged=False)
+        self.assertEqual(changed["status"], "rejected")
+        self.assertIsNone(changed["recovered_candidate"])
+
+    def test_missing_supervision_never_promotes_a_successful_process(self):
+        report, _ = self.execute(supervisor_missing=True)
+        self.assertEqual(report["status"], "needs_recovery")
+        self.assertEqual(report["supervision_error"], "unavailable_or_invalid")
+        self.assertIsNone(report["recovered_candidate"])
+
+    def test_baseline_and_task_acceptance_share_existing_validation_time(self):
+        report, actions = self.execute(configured_acceptance=[["python3", "-c", "pass"]],
+                                       baseline_seconds=240)
+        self.assertEqual(report["check_exit"], 0)
+        self.assertIsNone(report["acceptance_exit"])
+        self.assertEqual(report["acceptance_not_run"], "validation_budget_exhausted")
+        self.assertNotIn("acceptance", actions)
+        self.assertEqual(report["status"], "needs_repair")
 
     def test_failed_prepare_and_wait_timeout_keep_recovery_receipts(self):
         report, actions = self.execute(prepare_exit=1)
