@@ -26,13 +26,19 @@ a browser, or `./easy-run --port 8788` if the default port is busy.
 **[Quickstart with a local example](docs/QUICKSTART.md)** ·
 **[Set up your accounts and project in the browser](docs/SETUP.md)**
 
-Open **Setup** in the browser to configure your accounts and personal local `.env`,
-clone or fork a GitHub repository, create its profile, prepare tasks, review local
-checks and publish the exact preparation changes. Existing prepared repositories
-can be connected directly. Then choose tasks and concurrent agents, check the plan
-and save a draft. The separate **Run agents** action uses the existing source,
-gateway and budget gates. See [browser setup](docs/SETUP.md) and
-[repositories and runs](docs/RUNS.md).
+Open **Settings** to configure your own accounts and private local `.env`.
+In **Projects**, add a GitHub URL to clone or fork, or select a local Git folder.
+Open **Plan work**, inspect the selected repository, describe your goal and
+authorize a bounded OpenAI planning request. Review the proposed commands,
+ownership, acceptance criteria and dependency analysis before approving creation
+of real GitHub issues and local task files. Existing prepared projects also work.
+
+Use **Project settings** to check and publish preparation, configure execution
+allowances, create the worker gateway secret and deploy. **New run** selects the
+reviewed tasks and saves a draft; its separate **Run agents** action uses the
+source, gateway and budget gates. **Runs** contains history. Workers, changes,
+costs and evidence are tabs inside a selected run. See [browser setup](docs/SETUP.md),
+[AI planning](docs/AI_PLANNING.md) and [repositories and runs](docs/RUNS.md).
 
 Each person supplies their own credentials on their own computer. The personal
 `.env` has private file permissions outside every Git repository. Its values stay
@@ -69,6 +75,7 @@ unknowns. The loopback viewer makes no provider calls or execution/accounting wr
 | --- | --- |
 | [Documentation index](docs/README.md) | Reading paths, terminology and current capabilities |
 | [Browser setup](docs/SETUP.md) | Personal accounts/.env, clone/fork, task preparation, local CLI controls and reviewed deployment |
+| [AI planning](docs/AI_PLANNING.md) | Repository and goal to a budgeted model request, dependency review and approved real issue/task preparation |
 | [Connections](docs/CONNECTIONS.md) | Credential storage, explicit verification and Modal Secret boundaries |
 | [Repository setup](docs/REPOSITORY_SETUP.md) | Clone/fork, imported issues, protected task history and exact preparation publication |
 | [Quickstart](docs/QUICKSTART.md) | Easy Run, a tiny local target, baseline tests and a local plan |
@@ -202,7 +209,8 @@ OpenAI Costs API; imported observations keep their source and scope. See
 
 ## Validation
 
-From the controller checkout with its virtual environment active:
+From the controller checkout with its virtual environment active and Node.js 24
+available for the dependency-free browser routing contract tests:
 
 ```sh
 python -m unittest discover -s tests -p 'test_*.py'

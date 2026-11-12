@@ -4,6 +4,27 @@ Swarm Control is a local operations tool. Its interface should make the selected
 repository, run, next action and recorded outcome easy to find. The worker cohort,
 task review and budget records are the product's visual identity.
 
+## Navigation and responsibility
+
+The sidebar has Projects, Plan work, New run, Runs, Project settings and Settings.
+Projects owns GitHub/local repository acquisition. Plan work owns the goal,
+inspected source context, planning authorization, dependency review and approved
+issue/task creation. New run owns task selection and a saved draft. Runs owns
+history; a selected Run owns Summary, Workers, Changes, Costs and Evidence.
+Evidence never shares a page with the new-run form.
+
+Settings owns personal accounts and local credentials. Project settings owns the
+selected repository's profile, task editor, checks/publication, execution allowance
+and advanced CLI tools. Model planning allowance and worker execution allowance
+are separate and explicitly labeled. Opening routes, selecting projects and
+browser back/forward must never create issues, spend money or launch workers.
+
+Hash routes preserve project/run query parameters. Direct links without the
+required context explain the next step. Read-only evidence catalogs keep their
+viewer behavior. Loading a different repository clears stale task, profile and
+planning review bindings before showing its controls; asynchronous results cannot
+overwrite the newly selected repository.
+
 ## Presentation rules
 
 - Keep the dark surfaces and mint selection/action accent. Status colors always

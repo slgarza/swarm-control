@@ -7,6 +7,7 @@ return only the fixed status projection. No network action runs from status().
 import copy
 import fcntl
 import hashlib
+import hmac
 import json
 import os
 import re
@@ -461,6 +462,35 @@ class Connections:
     def _model_key(self):
         return self._session_model_key or self._disk_env.get("CODEX_API_KEY")
 
+    def planning_account_binding(self, binding_secret):
+        """Private keyed identity binding; never a public credential digest.
+
+        The planner keeps its random binding secret outside Git. Rotated keys or
+        a different verified GitHub account invalidate a reviewed plan, including
+        after restart with persisted credentials. Ambient model keys are excluded.
+        """
+        with self._lock:
+            github, source = self._effective("github")
+            token = github.get("token") if github else self._base_environment.get("GH_TOKEN", self._base_environment.get("GITHUB_TOKEN"))
+            observation = github.get("observation", {}) if github else self._ambient_observations.get("github", {})
+            value = [token, self._model_key(), source, observation.get("verified") is True,
+                     self._identity(observation.get("identity"))]
+            return hmac.new(binding_secret, json.dumps(value, separators=(",", ":")).encode(), hashlib.sha256).hexdigest()
+
+    def with_planning_key(self, callback, *, binding_secret, expected_binding):
+        """Deliver the local key directly to one trusted in-process HTTP request.
+
+        It never enters a subprocess environment, an argument or a job result.
+        Copy under the lock, then release it before the bounded network call.
+        """
+        from .setup_common import require
+        with self._lock:
+            require(self.planning_account_binding(binding_secret) == expected_binding,
+                    "The connected account changed. Inspect the repository again.", "planning_accounts_changed")
+            key = self._model_key()
+            require(bool(key), "Save an OpenAI key in Settings before generating a plan.", "planning_key_required")
+        return callback(key)
+
     def _known_credentials(self):
         keys = {"GH_TOKEN", "GITHUB_TOKEN", "GH_ENTERPRISE_TOKEN", "GITHUB_ENTERPRISE_TOKEN",
                 "MODAL_TOKEN_ID", "MODAL_TOKEN_SECRET", *_MODEL_KEYS, *_MODAL_OAUTH}
@@ -566,6 +596,9 @@ class Connections:
                                     "checked_at_utc": observation.get("checked_at_utc"),
                                     "error_code": observation.get("error_code"),
                                     "last_operation_uncertain": observation.get("last_operation_uncertain", False)}
+                if provider == "github":
+                    result[provider]["planning_credential_captured"] = bool(record and record.get("token")
+                        or self._base_environment.get("GH_TOKEN") or self._base_environment.get("GITHUB_TOKEN"))
                 if provider == "openai":
                     modal_status = result["modal"]
                     result[provider]["verified"] = (result[provider]["verified"] and modal_status["verified"]

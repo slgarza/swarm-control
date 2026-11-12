@@ -18,17 +18,18 @@ workspace if needed and opens [http://127.0.0.1:8787](http://127.0.0.1:8787).
 Keep the terminal open. Press Ctrl+C there to stop the server when no run is in
 progress. An existing installation can use `swarm-control start` instead.
 
-1. Click **Connect repository** and enter the absolute path to a local Git checkout
-   containing `swarm.toml`, or the path to that file. This is a folder on the
-   machine running Easy Run, not a GitHub URL. The server validates it before
-   adding it. Reconnecting the same checkout preserves its run history.
-2. Choose that repository in **Repository**, then click **New run**. Select actual
+1. In **Projects**, use **Add repository** to clone/fork a GitHub URL or inspect
+   a local Git folder. Connect its existing profile, or use **Plan work** to
+   generate and approve reviewed tasks from your goal. Reconnecting the same
+   checkout preserves its run history.
+2. Choose that repository in **Project**, then click **New run**. Select actual
    tasks listed by its configuration. Start with one or two independent tasks.
 3. Choose **Concurrent agents**. One agent per selected task is a clear first
    trial. Enter the proposed total model reservation if preparing real execution.
-4. Click **Check plan** and read any blockers. Click **Save draft** to preserve
+4. Click **Check plan** and read any blockers. Click **Save and review run** to preserve
    this exact selection and source. Saving starts no agents. Open the saved entry
-   in **Run history** to inspect it later.
+   in **Runs** to inspect it later. Evidence, costs and workers belong to that
+   run's detail tabs.
 5. For real execution, follow the setup described below, then open the draft's
    launch controls, enter your verified HTTPS gateway origin, review the limits,
    explicitly confirm the authorization and click **Run agents**.
@@ -36,8 +37,8 @@ progress. An existing installation can use `swarm-control start` instead.
 To connect a prepared target at startup, use
 `./easy-run --project /absolute/path/to/target`. The target and controller remain
 separate repositories. A repo with no profile or task files first needs
-[project configuration](PROJECTS.md); the app does not invent a backlog or generate
-an execution policy. Try the [local demo](QUICKSTART.md) to learn the controls.
+[AI planning and review](AI_PLANNING.md), or manual [project configuration](PROJECTS.md).
+New profiles start with a disabled execution policy and zero allowance.
 
 Concurrent agents limits how many task workers can run at once. For example,
 six tasks with two concurrent agents are queued through two execution slots;
@@ -50,15 +51,14 @@ provider quota, deployed gateway capacity or money authorization.
 The explicit **Run agents** action can start paid workers. It requires a confirmed
 saved draft, a gateway origin and the same source, issue, task-claim, budget,
 operations-hold and capacity gates as the CLI. A plan passing does not satisfy
-provider setup or authorize spending. **Setup** provides explicit account and
-personal `.env` configuration, reviewed cumulative-budget changes, gateway
+provider setup or authorize spending. **Settings** provides account and personal
+`.env` configuration. **Project settings** provides reviewed cumulative-budget changes, gateway
 deployment and a compatibility probe. Advanced reviewed CLI controls expose
 integration operations; semantic review remains an operator responsibility.
 Follow [browser setup](SETUP.md) or the [two-agent walkthrough](TWO_AGENT_WALKTHROUGH.md).
 
-Only registered repositories are selectable. Setup can clone or fork an explicitly
-chosen GitHub repository into an unused local folder. The ordinary connect form
-accepts one explicit local path; target
+Only registered repositories can execute runs. Projects can clone or fork an explicitly
+chosen GitHub repository into an unused local folder, or inspect one explicit local path; target
 settings remain in each target checkout. The default private registry is
 `~/.config/swarm-control/workspace.json`; use `--workspace PATH` consistently to
 select a different registry. Evidence/run responses omit its filesystem paths,

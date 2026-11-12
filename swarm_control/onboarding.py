@@ -20,16 +20,17 @@ from .setup_common import project_path as _path
 
 ACTIONS = {
     "github.configure", "modal.configure", "connections.verify", "openai.configure", "environment.configure",
-    "repository.inspect", "repository.clone", "repository.retarget", "repository.connect", "tools.install-github", "project.initialize", "tasks.import", "tasks.save",
+    "repository.inspect", "repository.select", "repository.clone", "repository.retarget", "repository.connect", "tools.install-github", "project.initialize", "tasks.import", "tasks.save",
     "tasks.create-issue", "preparation.preview", "preparation.publish", "project.configure-budget",
     "project.check", "project.deploy", "project.probe", "cli.preview", "cli.execute",
+    "planning.inspect", "planning.generate", "planning.apply", "planning.get",
 }
 SECRET_FIELDS = {"token", "token_id", "token_secret", "api_key"}
 CONTROLLER = Path(__file__).resolve().parent.parent
 
 
 class Onboarding:
-    def __init__(self, workspace, *, connections=None, repositories=None):
+    def __init__(self, workspace, *, connections=None, repositories=None, planner_transport=None):
         from .connections import Connections
         from .repository_setup import RepositorySetup
         self.workspace = workspace
@@ -37,6 +38,7 @@ class Onboarding:
         workspace.connections = self.connections
         self.repositories = repositories
         self.repository_type = RepositorySetup
+        self.planner_transport = planner_transport
         self.lock = threading.RLock()
         self.thread = None
         self.jobs = {}
@@ -45,6 +47,22 @@ class Onboarding:
 
     def _repository(self):
         return self.repositories or self.repository_type(self.workspace, environment=self.connections.environment())
+
+    def selected_repository(self, project_id):
+        """Explicit local setup context, never the last inspected repository."""
+        try:
+            registered = self.workspace._project(self.workspace._read(), project_id)
+            require(registered.get("project_path") is not None,
+                    "This project has historical evidence only. Connect its local profile first.", "selected_project_unavailable")
+            project = load_project(registered["project_path"])
+            require(project.repository == registered["repository"],
+                    "The selected project's profile identity changed. Reconnect it first.", "selected_project_unavailable")
+            result = self._repository().inspect(str(project.root))
+            require(result["repository"] == registered["repository"],
+                    "The selected project's Git origin changed. Reconnect it first.", "selected_project_unavailable")
+            return {**result, "project_id": project_id, "path": str(project.root)}
+        except (ValueError, OSError, KeyError, subprocess.SubprocessError):
+            raise SetupError("selected_project_unavailable", "The selected project has no available matching local profile. Connect its local repository first.") from None
 
     @property
     def busy(self):
@@ -68,7 +86,7 @@ class Onboarding:
         return {"schema_version": 1, "connections": self.connections.status(), "tools": tools_status(self.workspace.path),
                 "operations": summaries[-30:], "busy": self.busy,
                 "capabilities": {"actions": sorted(ACTIONS), "worker_capacity": 100,
-                    "arbitrary_shell": False, "automatic_ai_planning": False,
+                    "arbitrary_shell": False, "automatic_ai_planning": True,
                     "credentials_entered_only_in_explicit_connection_forms": True,
                     "cli_commands": ["plan", "analyze", "preflight", "budget", "ops", "integrate", "integrate-queue", "probe", "deploy-gateway"]}}
 
@@ -91,8 +109,12 @@ class Onboarding:
                     require(value.get("status") in {"finished", "failed", "uncertain"}, "The setup operation record is incomplete.")
                     return self._scrub({key: value.get(key) for key in ("id", "action", "status", "result", "error", "error_code",
                         "automatic_retries", "started_at_utc", "finished_at_utc", "elapsed_seconds")})
+                result = None
+                if value["action"] == "planning.generate":
+                    from .planning import Planner
+                    result = self._scrub(Planner.interrupted_attempt(self.workspace.path, job_id))
                 return {"id": job_id, "action": value["action"], "status": "uncertain",
-                        "result": None, "error": "The controller stopped before recording this operation. Inspect its result before requesting another action.",
+                        "result": result, "error": "The controller stopped before recording this operation. Inspect its result before requesting another action.",
                         "error_code": "interrupted_setup", "automatic_retries": 0}
         raise SetupError("setup_evidence_unavailable", "Setup history is unavailable. Inspect local storage before retrying.")
 
@@ -143,32 +165,46 @@ class Onboarding:
 
     def _run(self, job, options, directory):
         started = time.monotonic()
+        terminal = {}
         try:
             result = self._scrub(self.perform(job["action"], options, directory))
             encoded = json.dumps(result, allow_nan=False)
             require(len(encoded.encode()) <= 4 * 1024 * 1024, "The result is too large. Select fewer items.")
-            with self.lock:
-                job.update(status="finished", result=result)
+            terminal.update(status="finished", result=result)
         except (Exception, SystemExit) as error:  # noqa: BLE001 - terminal job boundary
             # External exception text can contain credentials or provider output.
             from .connections import ConnectionsError
             from .repository_setup import RepositorySetupError
             safe = isinstance(error, (SetupError, ConnectionsError, RepositorySetupError))
-            with self.lock:
-                job.update(status="failed", error=str(error) if safe else
-                    "The operation could not complete. Check the selected configuration and recorded result before retrying; remote changes may already exist.",
-                    error_code=error.code if safe else "setup_operation_failed")
+            terminal.update(status="failed", error=str(error) if safe else
+                "The operation could not complete. Check the selected configuration and recorded result before retrying; remote changes may already exist.",
+                error_code=error.code if safe else "setup_operation_failed")
+            if isinstance(error, SetupError) and isinstance(getattr(error, "result", None), dict):
+                terminal["result"] = self._scrub(error.result)
         finally:
             options.clear()
             with self.lock:
-                job.update(finished_at_utc=datetime.now(UTC).isoformat(), elapsed_seconds=time.monotonic() - started)
-                outcome = dict(job)
+                outcome = {**job, **terminal, "finished_at_utc": datetime.now(UTC).isoformat(),
+                           "elapsed_seconds": time.monotonic() - started}
             try:
                 private_json(directory / "outcome.json", outcome)
-            except OSError:
-                with self.lock:
-                    job.update(status="uncertain", error="The result could not be saved. Inspect the operation before taking another action.",
-                               error_code="setup_evidence_unavailable", result=None)
+            except (OSError, ValueError, TypeError, RecursionError):
+                known_plan = (outcome.get("result") or {}).get("plan_id") if isinstance(outcome.get("result"), dict) else None
+                result = ({"plan_id": known_plan, "state": "uncertain", "can_apply": False}
+                          if isinstance(known_plan, str) and re.fullmatch(r"[a-f0-9]{32}", known_plan) else None)
+                if result is not None and job["action"].startswith("planning."):
+                    # Preserve only already-scrubbed routing metadata so history
+                    # can associate the held ID with its selected repository.
+                    for key in ("path", "project_id", "repository"):
+                        value = outcome["result"].get(key)
+                        if value is None or isinstance(value, str):
+                            result[key] = value
+                outcome.update(status="uncertain", error="The result could not be saved. Inspect the operation before taking another action.",
+                               error_code="setup_evidence_unavailable", result=result)
+            # Terminal status is public only after durable publication succeeds,
+            # or as an explicit uncertain result when storage could not confirm it.
+            with self.lock:
+                job.update(outcome)
 
     def wait(self):
         thread = self.thread
@@ -201,6 +237,28 @@ class Onboarding:
             require(not options)
             return install_github(self.workspace.path)
         repository = self._repository()
+        if action == "repository.select":
+            require(set(options) == {"project_id"})
+            return self.selected_repository(options["project_id"])
+        if action.startswith("planning."):
+            from .planning import Planner
+            planner = Planner(self.workspace, self.connections, repository, transport=self.planner_transport,
+                              operation_id=directory.name if re.fullmatch(r"[a-f0-9]{32}", directory.name) else None)
+            options = dict(options)
+            if action in {"planning.inspect", "planning.generate"}:
+                require(("path" in options) != ("project_id" in options),
+                        "Select either a local repository or a registered project.")
+                if "project_id" in options:
+                    selected = self.selected_repository(options["project_id"])
+                    options["path"] = selected["path"]
+            if action == "planning.inspect":
+                return planner.inspect(**options)
+            if action == "planning.generate":
+                return planner.generate(**options)
+            if action == "planning.apply":
+                return planner.apply(**options)
+            if action == "planning.get":
+                return planner.get(**options)
         if action == "repository.inspect":
             return repository.inspect(**options)
         if action == "repository.clone":

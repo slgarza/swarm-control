@@ -749,7 +749,7 @@ def make_server(snapshot_path=None, host="127.0.0.1", port=0, *, catalog_path=No
                     self.respond(400, b'{"error":"Invalid workspace selection"}')
                 except (OSError, sqlite3.Error, subprocess.SubprocessError):
                     self.respond(503, b'{"error":"Workspace data unavailable"}')
-            elif parsed.path in {"/api/setup", "/api/setup/job"}:
+            elif parsed.path in {"/api/setup", "/api/setup/job", "/api/setup/project"}:
                 if onboarding is None:
                     self.respond(404, b'{"error":"Setup requires a local workspace"}')
                     return
@@ -758,6 +758,11 @@ def make_server(snapshot_path=None, host="127.0.0.1", port=0, *, catalog_path=No
                         if parsed.query:
                             raise ValueError("Unexpected query")
                         data = onboarding.status()
+                    elif parsed.path == "/api/setup/project":
+                        query = parse_qs(parsed.query, keep_blank_values=True, strict_parsing=True, max_num_fields=1)
+                        if set(query) != {"project"} or len(query["project"]) != 1 or not query["project"][0]:
+                            raise ValueError("Invalid project identity")
+                        data = onboarding.selected_repository(query["project"][0])
                     else:
                         query = parse_qs(parsed.query, keep_blank_values=True, strict_parsing=True, max_num_fields=1)
                         if set(query) != {"id"} or len(query["id"]) != 1:
@@ -777,13 +782,18 @@ def make_server(snapshot_path=None, host="127.0.0.1", port=0, *, catalog_path=No
                                              **({"deployment_enabled": True} if workspace is not None else {})}).encode())
             elif parsed.path == "/favicon.ico":
                 self.respond(204, b"", "image/x-icon")
-            elif parsed.path in {"/", "/assets/app.js", "/assets/styles.css", "/assets/setup.js", "/assets/setup.css"}:
+            elif parsed.path in {"/", "/assets/app.js", "/assets/styles.css", "/assets/setup.js", "/assets/setup.css",
+                                 "/assets/navigation.js", "/assets/navigation.css", "/assets/planner.js", "/assets/planner.css"}:
                 filename, kind = {
                     "/": ("index.html", "text/html"),
                     "/assets/app.js": ("app.js", "text/javascript"),
                     "/assets/styles.css": ("styles.css", "text/css"),
                     "/assets/setup.js": ("setup.js", "text/javascript"),
                     "/assets/setup.css": ("setup.css", "text/css"),
+                    "/assets/navigation.js": ("navigation.js", "text/javascript"),
+                    "/assets/navigation.css": ("navigation.css", "text/css"),
+                    "/assets/planner.js": ("planner.js", "text/javascript"),
+                    "/assets/planner.css": ("planner.css", "text/css"),
                 }[parsed.path]
                 try:
                     body = (STATIC / filename).read_bytes()

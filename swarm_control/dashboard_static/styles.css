@@ -1883,25 +1883,6 @@ dialog::backdrop{
 .dependency-details, .context-readiness { font-size: var(--text-small); line-height: 1.8; margin-top: var(--space-4); }
 .dependency-details summary, .context-readiness summary { cursor: pointer; min-height: 40px; }
 .dependency-details li { overflow-wrap: anywhere; }
-.connect-repository[hidden], .connection-result[hidden] { display: none !important; }
-.connect-repository { margin-top: 20px; padding: 20px; border: 1px solid var(--positive-line); border-radius: var(--radius-control); background: var(--bg); }
-.connect-repository h3 { margin: 0 0 10px; font-size: var(--text-title); }
-.connect-repository > p { color: var(--muted); font-size: var(--text-small); line-height: 1.8; max-width: 800px; }
-.connect-repository code { overflow-wrap: anywhere; }
-.connect-fields { display: grid; grid-template-columns: minmax(0, 1.8fr) minmax(0, 1fr); gap: 18px; margin: 18px 0; }
-.connect-actions { display: flex; gap: 10px; flex-wrap: wrap; }
-.connect-actions button { min-height: 44px; }
-.connection-result { padding: var(--space-3); border: 1px solid var(--line); border-radius: var(--radius-control); font-size: var(--text-small); line-height: 1.8; overflow-wrap: anywhere; }
-.easy-run-guide { margin: 18px 0 22px; padding: 22px; border: 1px solid var(--line); border-radius: var(--radius); background: var(--surface); }
-.easy-run-guide h2 { margin: 0 0 9px; font-size: var(--text-title); letter-spacing: normal; }
-.easy-run-guide > div > p { color: var(--muted); font-size: var(--text-small); line-height: 1.8; margin: 0; }
-.easy-run-guide ol { list-style: none; padding: 0; margin: 18px 0; display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 10px; }
-.easy-run-guide li { border: 1px solid var(--line); border-radius: var(--radius-control); padding: 13px; min-width: 0; }
-.easy-run-guide li strong { display: block; font-size: var(--text-small); line-height: 1.6; }
-.easy-run-guide li span { display: block; font-size: var(--text-small); line-height: 1.8; color: var(--muted); margin-top: 7px; }
-.easy-run-guide li[aria-current='step'] { border-color: var(--mint); background: var(--positive-soft); }
-.easy-run-guide li.is-done strong { color: var(--mint); }
-.easy-run-next { margin: 0; color: var(--mint); font-size: var(--text-small); line-height: 1.8; }
 .launch-guide > summary { cursor: pointer; min-height: 44px; display: flex; align-items: center; font-size: var(--text-small); line-height: 1.8; }
 .browser-launch { border-color: var(--positive-line); }
 .browser-launch .run-field { margin: 18px 0; max-width: 700px; }
@@ -1909,9 +1890,6 @@ dialog::backdrop{
 .launch-confirmation input { margin: 3px 0 0; width: 19px; height: 19px; accent-color: var(--mint); flex: 0 0 auto; }
 .launch-status { padding: 13px; margin: var(--space-4) 0 0; border: 1px solid var(--line); border-radius: var(--radius-control); color: var(--muted); font-size: var(--text-small); line-height: 1.8; overflow-wrap: anywhere; }
 .browser-launch .button { min-height: 44px; }
-@media(max-width: 1000px){ .easy-run-guide ol { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
-@media(max-width: 760px){ .connect-fields { grid-template-columns: 1fr; } .connect-repository, .easy-run-guide { padding: 18px; } }
-@media(max-width: 420px){ .easy-run-guide ol { grid-template-columns: 1fr; } .connect-repository { padding: 13px; } }
 
 /* App polish preserves region order and all interaction contracts. */
 html, body { overflow-x: clip; }
@@ -2020,18 +1998,11 @@ main { max-width: 1440px; }
 .field-help { min-height: 1lh; }
 .run-task-heading strong { font-size: var(--text-small); }
 .run-task-option > .pill { font-size: var(--text-small); }
-.run-preview, .dependency-review, .connect-repository, .launch-guide { border: 0; border-top: 1px solid var(--line); border-radius: 0; padding: var(--space-4) 0 0; background: var(--clear); }
+.run-preview, .dependency-review, .launch-guide { border: 0; border-top: 1px solid var(--line); border-radius: 0; padding: var(--space-4) 0 0; background: var(--clear); }
 .run-preview { margin-top: var(--space-4); }
 .plan-fact { border: 0; border-left: 1px solid var(--line); border-radius: 0; padding-left: var(--space-3); }
 .plan-fact:first-child { border-left: 0; padding-left: 0; }
 .plan-fact span { font-size: var(--text-small); }
-.easy-run-guide { background: var(--clear); border: 0; border-top: 1px solid var(--line); border-bottom: 1px solid var(--line); border-radius: 0; padding-left: 0; padding-right: 0; }
-.easy-run-guide ol { gap: 0; }
-.easy-run-guide li { border: 0; border-left: 1px solid var(--line); border-radius: 0; padding: var(--space-3); }
-.easy-run-guide li:first-child { border-left: 0; padding-left: 0; }
-.easy-run-guide li[aria-current='step'] { background: var(--clear); border-color: var(--line); }
-.easy-run-guide li[aria-current='step'] strong { color: var(--mint); }
-.easy-run-guide li span { font-size: var(--text-small); }
 .workspace-empty { border: 0; border-bottom: 1px solid var(--line); border-radius: 0; padding-left: 0; padding-right: 0; }
 .error-message { background: var(--negative-soft); color: var(--negative-text); border-color: var(--negative-line); }
 .run-task-options { border: 0; border-top: 1px solid var(--line); border-bottom: 1px solid var(--line); border-radius: 0; background: var(--field-bg); }
@@ -2075,9 +2046,6 @@ dialog::backdrop { background: var(--backdrop);
   .panel-footer > span:last-child { max-width: none; text-align: left; }
   .budget-card { border-left: 0; border-top: 1px solid var(--line); padding: var(--space-4) 0; }
   .budget-card:first-child { border-top: 0; }
-  .easy-run-guide li:nth-child(2n + 1) { border-left: 0; padding-left: 0; }
-  .easy-run-guide li:nth-child(n + 3) { border-top: 1px solid var(--line); }
-  .connect-repository, .easy-run-guide { padding-left: 0; padding-right: 0; }
   .button, .workspace-actions .button, .builder-actions .button, .run-task-search .button, .filter-group select, .evidence-links a { min-height: 44px; }
   .run-field input, .run-field select, .run-task-search input, .workspace-fields select, .search-box input { font-size: 16px; min-height: 44px; }
   .search-box { min-height: 46px; }
@@ -2089,8 +2057,6 @@ dialog::backdrop { background: var(--backdrop);
   main { padding-left: var(--space-3); padding-right: var(--space-3); }
   .topbar { padding-left: var(--space-3); padding-right: var(--space-3); }
   .worker-grid { grid-template-columns: repeat(4, minmax(0, 1fr)); }
-  .easy-run-guide li { border-left: 0; border-top: 1px solid var(--line); padding-left: 0; padding-right: 0; }
-  .easy-run-guide li:first-child { border-top: 0; }
   .plan-fact { border-left: 0; border-top: 1px solid var(--line); padding: var(--space-3) 0; }
   .plan-fact:first-child { border-top: 0; }
 }

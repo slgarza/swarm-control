@@ -34,10 +34,12 @@ Review and integration still require an operator. The local dashboard presents
 curated evidence and links, with explicit project and run selection. Workspace
 mode adds local repository connection, configurable concurrent agents, saved
 drafts, confirmed launch through the existing controller gates and sealed history.
-Easy Run installs and opens this interface. [Setup](SETUP.md) configures personal
+Easy Run installs and opens this interface. [Browser setup](SETUP.md) configures personal
 accounts and `.env`, clones/forks repositories, prepares task drafts, publishes
-reviewed preparation and exposes CLI operations. Task generation and semantic
-planning still require operator judgment. The [dashboard gallery](DASHBOARD.md#screenshots)
+reviewed preparation and exposes CLI operations. [AI planning](AI_PLANNING.md)
+generates dependency-validated work proposals from a repository and goal, with
+explicit model budget and human approval before creating real issues and files.
+Semantic review still requires operator judgment. The [dashboard gallery](DASHBOARD.md#screenshots)
 contains actual English desktop, mobile, task, budget and empty-state captures.
 
 Read-only dependency analysis handles larger backlogs while preserving the
