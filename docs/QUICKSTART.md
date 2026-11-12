@@ -20,6 +20,12 @@ cd swarm-control
 ./easy-run
 ```
 
+If you downloaded a ZIP, extract it first and open a terminal in the folder
+containing `easy-run` and `pyproject.toml`. If `./easy-run` reports "Permission
+denied", run `chmod +x easy-run` once, or use `sh easy-run` with the same options.
+The controller can start from a ZIP; a target project still needs its own Git
+repository.
+
 Easy Run creates `.venv`, installs the controller on first use and opens
 [http://127.0.0.1:8787](http://127.0.0.1:8787). Keep that terminal open while using
 the app. Opening the app starts a local server, with no cloud workers.
@@ -45,6 +51,9 @@ swarm-control --help
 
 The editable install keeps the CLI attached to this checkout. Keep the virtual
 environment active when changing directories in the following steps.
+
+To configure your own accounts, clone or fork a repository, prepare tasks and
+review real execution settings through the GUI, follow [browser setup](SETUP.md).
 
 ## 2. Create a separate target repository
 
@@ -126,7 +135,10 @@ The draft's **Run agents** control is unavailable until the real-execution setup
 is complete. Use Ctrl+C in the server terminal to stop the demo dashboard.
 
 For another prepared repository, click **Connect repository** and enter its local
-folder or `swarm.toml` path. A GitHub URL and a ZIP folder without Git metadata
+folder or `swarm.toml` path on the computer running the server. Keep spaces in
+the field without adding quotes; use `pwd` in the target's terminal to find its
+path. In WSL, use a Linux path such as `/mnt/c/Users/YourUser/my-repo` rather than
+`C:\Users\YourUser\my-repo`. A GitHub URL and a ZIP folder without Git metadata
 are not ready targets. A new target needs its own reviewed profile, task files,
 instructions and checks; follow [project configuration](PROJECTS.md).
 

@@ -23,8 +23,8 @@ server. Next time, run `./easy-run` from the same folder. No cloud workers start
 when you open the app. Use `./easy-run --no-open` to print the URL without opening
 a browser, or `./easy-run --port 8788` if the default port is busy.
 
-**[Guía para principiantes en español](docs/GETTING_STARTED.es.md)** ·
-**[English quickstart with a local example](docs/QUICKSTART.md)**
+**[Quickstart with a local example](docs/QUICKSTART.md)** ·
+**[Set up your accounts and project in the browser](docs/SETUP.md)**
 
 Open **Setup** in the browser to configure your accounts and personal local `.env`,
 clone or fork a GitHub repository, create its profile, prepare tasks, review local
@@ -68,7 +68,6 @@ unknowns. The loopback viewer makes no provider calls or execution/accounting wr
 | Guide | What it explains |
 | --- | --- |
 | [Documentation index](docs/README.md) | Reading paths, terminology and current capabilities |
-| [Beginner guide in Spanish](docs/GETTING_STARTED.es.md) | Download, open, connect a repository, choose tasks and understand real execution |
 | [Browser setup](docs/SETUP.md) | Personal accounts/.env, clone/fork, task preparation, local CLI controls and reviewed deployment |
 | [Connections](docs/CONNECTIONS.md) | Credential storage, explicit verification and Modal Secret boundaries |
 | [Repository setup](docs/REPOSITORY_SETUP.md) | Clone/fork, imported issues, protected task history and exact preparation publication |
@@ -91,9 +90,9 @@ unknowns. The loopback viewer makes no provider calls or execution/accounting wr
 | [Target assessment](docs/contest/TARGET-ASSESSMENT.md) | Why Afterimage suits the next collision pilot and what the final benchmark target needs |
 | [Benchmark and evidence](docs/contest/BENCHMARK.md) | Fair AFK comparison; [reporting checklist and template](docs/contest/EVIDENCE.md) |
 
-The interface and example use English; the beginner guide is also available in
-Spanish. The standalone extraction and tutorial are tested offline; their
-documentation does not imply a new paid cohort ran.
+The interface, guides and example use English. The standalone extraction and
+tutorial are tested offline; their documentation does not imply a new paid
+cohort ran.
 
 ## What lives where
 
