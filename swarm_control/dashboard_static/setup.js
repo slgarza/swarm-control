@@ -5,7 +5,7 @@
   if (!dialog || !mount) return;
   const state = {csrf: null, available: false, busy: false, step: 0, path: '', repository: '', projectId: null,
     connections: {}, jobs: new Map(), publishBinding: null, publishPath: null,
-    cliBinding: null, cliCommand: null, drafts: [], polling: new Set(), suggestedSlug: null};
+    cliBinding: null, cliCommand: null, drafts: [], polling: new Set(), runtimeOverrides: new Map()};
   const steps = ['Accounts', 'Repository', 'Project profile', 'Tasks', 'Check & publish', 'Budget & deploy', 'CLI controls'];
   const titles = {'github.configure': 'Connect GitHub', 'modal.configure': 'Connect Modal',
     'openai.configure': 'Create OpenAI secret', 'environment.configure': 'Save personal .env', 'connections.verify': 'Verify connection',
@@ -136,19 +136,23 @@
     if (!state.path) throw new Error('PROJECT_PATH');
     return state.path;
   }
-  function selectPath(path, repository) {
+  function selectPath(path, repository, recommendations = {}, configuredRuntime = {}) {
     if (typeof path === 'string' && path.length <= 4096) {if (state.path !== path) state.projectId = null; state.path = path;}
     if (typeof repository === 'string') state.repository = repository;
     for (const node of document.querySelectorAll('[data-setup-path]')) node.textContent = state.path || 'No folder selected yet. Choose one in Repository.';
     if (state.path) byId('setup-local-path').value = state.path;
     if (state.repository) {
       byId('setup-project-repository').value = state.repository;
-      const slug = state.repository.split('/').at(-1).toLowerCase().replace(/[^a-z0-9-]/g, '-').slice(0, 45);
-      for (const [id, suffix] of [['gateway-app', 'gateway'], ['worker-app', 'workers']]) {
-        const input = byId('setup-' + id);
-        if (!input.value || input.value === 'swarm-control-' + suffix || state.suggestedSlug && input.value === state.suggestedSlug + '-' + suffix) input.value = slug + '-' + suffix;
+      if (state.runtimeOverrides.has('')) {
+        state.runtimeOverrides.set(state.repository, state.runtimeOverrides.get(''));
+        state.runtimeOverrides.delete('');
       }
-      state.suggestedSlug = slug;
+      const overrides = state.runtimeOverrides.get(state.repository) || {};
+      for (const [id, key] of [['gateway-app', 'gateway_app'], ['worker-app', 'worker_app']]) {
+        const input = byId('setup-' + id);
+        const selected = configuredRuntime[key] || overrides[key] || recommendations[key] || '';
+        input.value = /^[A-Za-z0-9_-]{1,100}$/.test(selected) ? selected : '';
+      }
     }
     for (const id of ['project-confirm', 'check-confirm', 'publish-confirm', 'budget-confirm', 'deploy-confirm', 'probe-confirm', 'cli-confirm', 'create-issue-confirm']) byId('setup-' + id).checked = false;
     state.publishBinding = null; byId('setup-publish-review').hidden = true;
@@ -315,7 +319,8 @@
     if (!['cli.preview'].includes(name)) {state.cliBinding = null; byId('setup-cli-review').hidden = true;}
     if (['tasks.save', 'project.configure-budget', 'project.check', 'repository.retarget', 'project.initialize'].includes(name)) {state.publishBinding = null; byId('setup-publish-review').hidden = true;}
     if (['repository.inspect', 'repository.clone', 'project.initialize', 'repository.retarget'].includes(name)) {
-      selectPath(result.path || result.root || state.path, result.repository || state.repository);
+      selectPath(result.path || result.root || state.path, result.repository || state.repository,
+        result.recommended_runtime, result.configuration?.runtime);
       if (result.base_branch) {byId('setup-base-branch').value = result.base_branch; byId('setup-cli-base').value = 'origin/' + result.base_branch;}
       renderRepositoryFacts(result);
     }
@@ -487,6 +492,13 @@
     } catch (error) {feedback(errorMessage(error), true);}
   });
   byId('setup-cli-command').addEventListener('input', () => {state.cliBinding = null; byId('setup-cli-review').hidden = true;});
+  for (const [id, key] of [['gateway-app', 'gateway_app'], ['worker-app', 'worker_app']]) {
+    byId('setup-' + id).addEventListener('input', () => {
+      const overrides = {...state.runtimeOverrides.get(state.repository || '')};
+      if (value(id)) overrides[key] = value(id); else delete overrides[key];
+      state.runtimeOverrides.set(state.repository || '', overrides);
+    });
+  }
   for (const [formId, confirmation] of [['env-form', 'env-confirm'], ['clone-form', 'clone-confirm'], ['project-form', 'project-confirm'], ['publish-form', 'publish-confirm'], ['budget-form', 'budget-confirm'], ['probe-form', 'probe-confirm']]) {
     byId('setup-' + formId).addEventListener('input', (event) => {if (event.target.id !== 'setup-' + confirmation) byId('setup-' + confirmation).checked = false;});
   }
