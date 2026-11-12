@@ -18,6 +18,7 @@ accounts or knowledge of the development conversation.
 | Operator launching real agents | [Two-agent walkthrough](TWO_AGENT_WALKTHROUGH.md) | [Deployment preflight](DEPLOYMENT_PREFLIGHT.md), [operations](OPERATIONS.md), [troubleshooting](TROUBLESHOOTING.md) |
 | Competition reviewer | [Presentation and current evidence](contest/PRESENTATION.md) | [Target assessment](contest/TARGET-ASSESSMENT.md), [benchmark protocol](contest/BENCHMARK.md), [evidence requirements](contest/EVIDENCE.md) |
 | Contributor | [Architecture](ARCHITECTURE.md) | [Repository contract](../AGENTS.md), [scaling roadmap](SCALING.md), [gateway policy](GATEWAY.md) |
+| GUI contributor | [GUI design](GUI_DESIGN.md) | [Local dashboard](DASHBOARD.md), [browser setup](SETUP.md) |
 
 ## What is available today
 
