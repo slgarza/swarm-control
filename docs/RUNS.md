@@ -7,17 +7,37 @@ The interface and CLI use English.
 
 ## Use the local interface
 
+From the controller checkout:
+
 ```sh
-swarm-control workspace init --label "My projects"
-swarm-control workspace add /path/to/target/swarm.toml --id my-project --label "My project"
-swarm-control dashboard --workspace --port 8787
+./easy-run
 ```
 
-If the workspace already exists, skip `init`. Open
-[http://localhost:8787](http://localhost:8787). Choose a repository, click
-**New run**, select its actual tasks and choose **Concurrent agents**. Click
-**Check plan**, review its preparation and admission observations, then **Save
-draft**. Open the saved entry in **Run history** to inspect its settings later.
+The launcher installs the local environment on first use, initializes a private
+workspace if needed and opens [http://127.0.0.1:8787](http://127.0.0.1:8787).
+Keep the terminal open. Press Ctrl+C there to stop the server when no run is in
+progress. An existing installation can use `swarm-control start` instead.
+
+1. Click **Connect repository** and enter the absolute path to a local Git checkout
+   containing `swarm.toml`, or the path to that file. This is a folder on the
+   machine running Easy Run, not a GitHub URL. The server validates it before
+   adding it. Reconnecting the same checkout preserves its run history.
+2. Choose that repository in **Repository**, then click **New run**. Select actual
+   tasks listed by its configuration. Start with one or two independent tasks.
+3. Choose **Concurrent agents**. One agent per selected task is a clear first
+   trial. Enter the proposed total model reservation if preparing real execution.
+4. Click **Check plan** and read any blockers. Click **Save draft** to preserve
+   this exact selection and source. Saving starts no agents. Open the saved entry
+   in **Run history** to inspect it later.
+5. For real execution, follow the setup described below, then open the draft's
+   launch controls, enter your verified HTTPS gateway origin, review the limits,
+   explicitly confirm the authorization and click **Run agents**.
+
+To connect a prepared target at startup, use
+`./easy-run --project /absolute/path/to/target`. The target and controller remain
+separate repositories. A repo with no profile or task files first needs
+[project configuration](PROJECTS.md); the app does not invent a backlog or generate
+an execution policy. Try the [local demo](QUICKSTART.md) to learn the controls.
 
 Concurrent agents limits how many task workers can run at once. For example,
 six tasks with two concurrent agents are queued through two execution slots;
@@ -27,19 +47,30 @@ the target profile may impose a smaller cap on both. A synchronized run requires
 exactly one task per concurrent agent. Increasing a setting does not increase
 provider quota, deployed gateway capacity or money authorization.
 
-The main workflow creates local plans and drafts. **The GUI does not launch
-workers.** It has no deployment endpoint, budget toggle, credential entry or
-merge control. The CLI inspection command shown in a draft does not execute it.
-An intentional CLI `--execute` operation remains the launch boundary.
+The explicit **Run agents** action can start paid workers. It requires a confirmed
+saved draft, a gateway origin and the same source, issue, task-claim, budget,
+operations-hold and capacity gates as the CLI. A plan passing does not satisfy
+provider setup or authorize spending. The GUI does not deploy a gateway, change
+the cumulative budget, collect API keys, review code or merge PRs. Those steps
+remain in the [two-agent walkthrough](TWO_AGENT_WALKTHROUGH.md).
 
-Only registered repositories are selectable. The server does not scan your disk,
-clone arbitrary URLs or accept target configuration paths from the browser.
-Target settings remain in each target checkout. The default private registry is
+Only registered repositories are selectable. The server does not scan your disk
+or clone GitHub URLs. The connect form accepts one explicit local path; target
+settings remain in each target checkout. The default private registry is
 `~/.config/swarm-control/workspace.json`; use `--workspace PATH` consistently to
 select a different registry. Public HTTP responses omit its filesystem paths,
 raw reports, worker commands, customer source and credentials.
 
 ## Configure and inspect from the CLI
+
+The manual registration commands remain available with the Python environment
+active. Skip `init` if the workspace already exists:
+
+```sh
+swarm-control workspace init --label "My projects"
+swarm-control workspace add /path/to/target/swarm.toml --id my-project --label "My project"
+swarm-control dashboard --workspace --port 8787
+```
 
 Replace the task IDs with existing IDs from the selected repository:
 
@@ -70,7 +101,9 @@ the remaining allowance, explicit execution uses:
 swarm-control runs launch my-project RUN_ID --gateway-url GATEWAY_ORIGIN --execute
 ```
 
-Replace `GATEWAY_ORIGIN` with the separately verified HTTPS gateway origin.
+Replace `GATEWAY_ORIGIN` with the separately verified Modal gateway origin,
+`https://NAME.modal.run`, without a port, `/v1`, other paths or credentials. The
+browser form accepts that same origin format.
 This command can create paid resources. Every existing live-policy, task claim,
 issue/dependency, budget, operations-hold and deployed-capacity gate still
 applies. Source, task, profile, instruction and controller hashes must match the
@@ -84,6 +117,12 @@ unknown unless a matching batch supplies an aware agent-start observation.
 **Runner finished** describes a subprocess result, not merged or accepted work.
 Worker outcome counts remain separate from review, CI, integration and invoices.
 Worker processes still receive no credentialed GitHub integration access.
+
+Browser launches run in the local server while the UI remains available. Watch
+the request status and saved run history; refresh after a lost connection before
+taking further action. Do not close the server terminal during execution or
+automatically retry an uncertain attempt. A run ending with a validated patch
+still needs independent review, passing CI and integration before it is a delivery.
 
 ## Preserve past evidence
 
@@ -106,9 +145,11 @@ target config remain available for history viewing. Register their config using
 than overwriting old history.
 
 Legacy `dashboard --snapshot PATH` and `dashboard --catalog PATH` remain evidence
-viewers with no write methods. The new workspace mode adds only bounded local
-preview/draft creation, protected by exact Origin/Host checks and a per-server
-CSRF token. It does not add remote execution to HTTP.
+viewers with no write methods. Workspace mode adds bounded repository connection,
+preview/draft creation and explicit confirmed launch requests, protected by exact
+Origin/Host checks and a per-server CSRF token. A server accepts one active browser
+launch request at a time; this does not replace the controller's durable dispatch
+locks or per-run attempt reservation.
 
 ## Worker context and measurements
 

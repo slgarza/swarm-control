@@ -1,0 +1,78 @@
+#!/bin/sh
+# Bootstrap the checkout once; every later invocation reuses its environment.
+set -eu
+
+task_root=$(CDPATH= cd -- "$(dirname -- "$0")" && pwd -P)
+task_python="$task_root/.venv/bin/python"
+
+if [ "${1-}" = "--help" ] || [ "${1-}" = "-h" ]; then
+    cat <<'HELP'
+Usage: ./easy-run [--project /path/to/repo] [--port 8787] [--no-open]
+                  [--workspace /path/to/workspace.json]
+
+Creates .venv and installs Swarm Control on first use, then opens the local GUI.
+Requires Git, Python 3.12 or newer with venv, and internet for the first install.
+On Windows, run this command inside WSL. Keep the terminal open; Ctrl+C stops it.
+Run it again from this checkout whenever you want to reopen your workspace.
+Guides: docs/QUICKSTART.md and docs/GETTING_STARTED.es.md
+HELP
+    exit 0
+fi
+
+if ! command -v git >/dev/null 2>&1; then
+    printf '%s\n' 'Git is missing. Install Git, reopen your terminal and run ./easy-run again.' >&2
+    exit 1
+fi
+
+if [ ! -d "$task_root/.venv" ]; then
+    task_interpreter=''
+    for task_candidate in python3.12 python3 python; do
+        if command -v "$task_candidate" >/dev/null 2>&1 &&
+            "$task_candidate" -c 'import sys; raise SystemExit(sys.version_info < (3, 12))' 2>/dev/null; then
+            task_interpreter=$task_candidate
+            break
+        fi
+    done
+    if [ -z "$task_interpreter" ]; then
+        printf '%s\n' 'Python 3.12 or newer is required. Install it with venv support, then run ./easy-run again.' >&2
+        exit 1
+    fi
+    if ! "$task_interpreter" -c 'import venv, ensurepip' 2>/dev/null; then
+        printf '%s\n' 'Python venv support is missing. On Ubuntu with Python 3.12, run:' \
+            '  sudo apt install python3.12-venv' \
+            'Then run ./easy-run again. No environment has been created.' >&2
+        exit 1
+    fi
+    printf '%s\n' 'First-time setup: creating the local Python environment…'
+    if ! "$task_interpreter" -m venv "$task_root/.venv"; then
+        printf '%s\n' 'Could not create .venv. Install Python venv support (Ubuntu: python3.12-venv).' \
+            'If setup left a partial .venv, move that folder aside, then run ./easy-run again.' >&2
+        exit 1
+    fi
+fi
+
+if [ ! -x "$task_python" ] || ! "$task_python" -c 'import sys; raise SystemExit(sys.version_info < (3, 12))' 2>/dev/null; then
+    printf '%s\n' 'The local .venv is incomplete or uses an older Python. Move it aside and run ./easy-run again.' >&2
+    exit 1
+fi
+
+# Compare the package metadata so changed dependencies trigger a fresh install.
+task_stamp="$task_root/.venv/.easy-run-installed"
+if [ ! -f "$task_stamp" ] || ! cmp -s "$task_root/pyproject.toml" "$task_stamp" ||
+    [ ! -x "$task_root/.venv/bin/swarm-control" ]; then
+    if ! "$task_python" -m pip --version >/dev/null 2>&1; then
+        printf '%s\n' 'The local .venv is missing pip. Move that incomplete folder aside, then run ./easy-run again.' \
+            'Make sure Python venv support is installed before retrying.' >&2
+        exit 1
+    fi
+    printf '%s\n' 'Installing Swarm Control and its dependencies. This can take a few minutes…'
+    if ! "$task_python" -m pip install --disable-pip-version-check -e "$task_root"; then
+        printf '%s\n' 'Installation failed. Check your internet connection and the error above, then run ./easy-run again.' >&2
+        exit 1
+    fi
+    cp "$task_root/pyproject.toml" "$task_stamp"
+fi
+
+# Use the installed entry point so a target checkout cannot shadow the module
+# when this script is invoked from a different current directory.
+exec "$task_root/.venv/bin/swarm-control" start "$@"

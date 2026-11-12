@@ -5,10 +5,14 @@ import hashlib
 import hmac
 import json
 import math
+import os
 import re
 import secrets
 import sqlite3
 import subprocess
+import threading
+import time
+import traceback
 from datetime import UTC, datetime
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
@@ -50,6 +54,178 @@ FINANCES = (
     "remaining_model_admission_usd",
     "remaining_infra_admission_usd",
 )
+
+
+def _launch_error(error):
+    """Map controller failures to fixed operator guidance, never raw exceptions."""
+    text = str(error)
+    for fragment, message in (
+        ("live execution is disabled", "Live execution is disabled in this project's policy. Follow the real-run setup guide and obtain an authorized budget before enabling it."),
+        ("Draft source or configuration changed", "The source or configuration changed after this draft was saved. Create and review a new draft."),
+        ("already been attempted", "This run has already been attempted. Inspect its history and create a new draft for a separately reviewed attempt."),
+        ("already reserved", "A launch was already reserved for this run. Inspect its history before taking another action."),
+        ("source preparation is blocked", "Source preparation is blocked. Check the plan and resolve its reported blockers before saving a new draft."),
+        ("admission is blocked", "Budget admission is blocked. Inspect the existing allowance and retained reservations; preserve the ledger."),
+        ("explicit total model reservation", "This draft needs an explicit total model reservation. Save a new draft with a budget you are authorized to use."),
+        ("operations", "An operations hold blocks this run. Inspect the controller's operations report before attempting a new run."),
+    ):
+        if fragment.lower() in text.lower():
+            return message
+    return "The controller could not launch this run. Inspect the local terminal and run history before creating a new draft. No automatic retry was made."
+
+
+class BrowserLaunchValidation(ValueError):
+    """Fixed validation guidance which is safe to return over HTTP."""
+
+
+class BrowserLaunchBusy(RuntimeError):
+    pass
+
+
+class BrowserLaunch:
+    """One bounded background launch; the ordinary durable runner owns execution.
+
+    The thread is deliberately non-daemon. Closing the HTTP server waits for it
+    so a closed tab or Ctrl+C cannot silently abandon a running subprocess.
+    """
+
+    def __init__(self, workspace):
+        self.workspace = workspace
+        self.lock = threading.Lock()
+        self.thread = None
+        self.observations = {}
+
+    def observation(self, project_id, run_id):
+        from .dashboard_catalog import identity
+        identity(project_id)
+        identity(run_id)
+        with self.lock:
+            return dict(self.observations.get((project_id, run_id), {
+                "project_id": project_id, "run_id": run_id, "status": "idle",
+                "error": None, "runner_exit_code": None}))
+
+    @staticmethod
+    def _write_private(path, value):
+        raw = (json.dumps(value, indent=2, allow_nan=False) + "\n").encode()
+        with path.open("xb") as stream:
+            os.chmod(path, 0o600)
+            stream.write(raw)
+            stream.flush()
+            os.fsync(stream.fileno())
+        descriptor = os.open(path.parent, os.O_RDONLY)
+        try:
+            os.fsync(descriptor)
+        finally:
+            os.close(descriptor)
+
+    def _audit(self, project_id, run_id, gateway_url):
+        root = self.workspace.path.with_name(self.workspace.path.stem + ".launch-attempts")
+        if root.is_symlink():
+            raise OSError("Unsafe browser launch evidence directory")
+        root.mkdir(mode=0o700, parents=True, exist_ok=True)
+        if not root.is_dir():
+            raise OSError("Unsafe browser launch evidence directory")
+        os.chmod(root, 0o700)
+        attempt_id = secrets.token_hex(16)
+        directory = root / attempt_id
+        directory.mkdir(mode=0o700)
+        self._write_private(directory / "request.json", {
+            "schema_version": 1, "attempt_id": attempt_id,
+            "stage": "explicit_browser_launch_request",
+            "requested_at_utc": datetime.now(UTC).isoformat(),
+            "project_id": project_id, "run_id": run_id, "gateway_origin": gateway_url,
+            "confirmed": True, "cost_usd": None,
+            "cost_reason": "Provider billing is not measured by a browser launch request",
+            "authority": "The workspace runner's durable attempt and target ledger remain authoritative"})
+        descriptor = os.open(root, os.O_RDONLY)
+        try:
+            os.fsync(descriptor)
+        finally:
+            os.close(descriptor)
+        return directory
+
+    def start(self, project_id, run_id, gateway_url, confirmed):
+        if confirmed is not True:
+            raise BrowserLaunchValidation("Confirm the reviewed run and authorized cost before launching.")
+        if not isinstance(gateway_url, str) or not re.fullmatch(r"https://[A-Za-z0-9-]+\.modal\.run/?", gateway_url):
+            raise BrowserLaunchValidation("Enter the verified deployed gateway HTTPS origin ending in .modal.run.")
+        detail = self.workspace.run_detail(project_id, run_id)
+        if detail["status"] != "draft":
+            raise BrowserLaunchValidation("This run has already been attempted. Inspect its history and create a new draft.")
+        with self.lock:
+            if self.thread is not None and self.thread.is_alive():
+                raise BrowserLaunchBusy("A run is already launching on this dashboard. Wait for its recorded outcome.")
+            # Fail closed before dispatch if the private request cannot be kept.
+            audit = self._audit(project_id, run_id, gateway_url)
+            key = (project_id, run_id)
+            if len(self.observations) >= 1000:
+                del self.observations[next(iter(self.observations))]
+            self.observations[key] = {"project_id": project_id, "run_id": run_id,
+                "status": "starting", "error": None, "runner_exit_code": None}
+            self.thread = threading.Thread(target=self._run, args=(key, gateway_url, audit, time.monotonic_ns()),
+                                           name="swarm-browser-launch", daemon=False)
+            self.thread.start()
+            return dict(self.observations[key])
+
+    def _run(self, key, gateway_url, audit, started_ns):
+        with self.lock:
+            self.observations[key]["status"] = "running"
+        try:
+            result = self.workspace.launch(*key, gateway_url=gateway_url, execute=True)
+            exit_code = result.get("runner_exit_code")
+            with self.lock:
+                self.observations[key].update(status="finished" if exit_code == 0 else "failed",
+                    runner_exit_code=exit_code,
+                    error=None if exit_code == 0 else "The runner stopped with a failure. Inspect the saved run and local terminal before creating a new draft.")
+        # This is the background task's terminal boundary: unexpected failures
+        # must also get a private original and an explicit failed UI observation.
+        except (Exception, SystemExit) as error:  # noqa: BLE001
+            raw_traceback = traceback.format_exc().encode()
+            try:
+                with (audit / "failure.txt").open("xb") as stream:
+                    os.chmod(audit / "failure.txt", 0o600)
+                    stream.write(raw_traceback)
+                    stream.flush()
+                    os.fsync(stream.fileno())
+            except OSError:
+                raw_traceback = None
+            with self.lock:
+                self.observations[key].update(status="failed", error=_launch_error(error),
+                    failure_evidence_recorded=raw_traceback is not None)
+        finally:
+            with self.lock:
+                outcome = dict(self.observations[key])
+            outcome.update(finished_at_utc=datetime.now(UTC).isoformat(),
+                           elapsed_seconds=(time.monotonic_ns() - started_ns) / 1e9,
+                           cost_usd=None, automatic_retries=0)
+            failure_file = audit / "failure.txt"
+            try:
+                if failure_file.is_file():
+                    outcome["failure_sha256"] = hashlib.sha256(failure_file.read_bytes()).hexdigest()
+                self._write_private(audit / "outcome.json", outcome)
+                if outcome.get("failure_evidence_recorded") is False:
+                    raise OSError("Original launch failure evidence could not be retained")
+                with self.lock:
+                    self.observations[key]["evidence_status"] = "recorded"
+            except OSError:
+                with self.lock:
+                    self.observations[key].update(evidence_status="unavailable",
+                        error="The launch outcome could not be saved. Inspect run history and the local terminal before taking any further action. No automatic retry was made.")
+                print("Browser launch evidence could not be saved. Preserve run history and investigate before retrying.", flush=True)
+
+    def wait(self):
+        thread = self.thread
+        if thread is not None and thread.is_alive():
+            print("Waiting for the active run to finish and preserve its outcome. Keep this terminal open.", flush=True)
+            thread.join()
+
+
+class DashboardServer(ThreadingHTTPServer):
+    def server_close(self):
+        super().server_close()
+        launch = getattr(self, "browser_launch", None)
+        if launch is not None:
+            launch.wait()
 
 
 def token(value, default=None):
@@ -419,6 +595,7 @@ def make_server(snapshot_path=None, host="127.0.0.1", port=0, *, catalog_path=No
     if workspace_path is not None:
         from .workspace import Workspace
         workspace = Workspace(workspace_path)
+    browser_launch = BrowserLaunch(workspace) if workspace is not None else None
     catalog = None
     if catalog_path is not None:
         from .dashboard_catalog import load_catalog
@@ -530,7 +707,7 @@ def make_server(snapshot_path=None, host="127.0.0.1", port=0, *, catalog_path=No
                     200 if data["available"] else 503,
                     json.dumps(data, allow_nan=False).encode(),
                 )
-            elif parsed.path in {"/api/catalog", "/api/project", "/api/runs", "/api/run"}:
+            elif parsed.path in {"/api/catalog", "/api/project", "/api/runs", "/api/run", "/api/launch"}:
                 try:
                     if parsed.path == "/api/catalog":
                         if parsed.query:
@@ -542,7 +719,7 @@ def make_server(snapshot_path=None, host="127.0.0.1", port=0, *, catalog_path=No
                     else:
                         query = parse_qs(parsed.query, keep_blank_values=True, strict_parsing=True,
                                          max_num_fields=2)
-                        expected = {"project", "run"} if parsed.path == "/api/run" else {"project"}
+                        expected = {"project", "run"} if parsed.path in {"/api/run", "/api/launch"} else {"project"}
                         if set(query) != expected or any(len(v) != 1 or not v[0] for v in query.values()):
                             raise ValueError("invalid selection")
                         project_id = query["project"][0]
@@ -550,6 +727,9 @@ def make_server(snapshot_path=None, host="127.0.0.1", port=0, *, catalog_path=No
                             data = workspace.project_context(project_id)
                         elif parsed.path == "/api/run":
                             data = workspace.run_detail(project_id, query["run"][0])
+                        elif parsed.path == "/api/launch":
+                            workspace.run_detail(project_id, query["run"][0])
+                            data = browser_launch.observation(project_id, query["run"][0])
                         else:
                             project = next((p for p in public_catalog()["projects"] if p["id"] == project_id), None)
                             if project is None:
@@ -563,7 +743,8 @@ def make_server(snapshot_path=None, host="127.0.0.1", port=0, *, catalog_path=No
             elif parsed.path == "/api/session":
                 data = {"mode": "workspace" if workspace is not None else "viewer",
                         "csrf_token": csrf_token if workspace is not None else None,
-                        "read_only": workspace is None, "deployment_enabled": False}
+                        "read_only": workspace is None, "deployment_enabled": False,
+                        "launch_enabled": workspace is not None}
                 self.respond(200, json.dumps(data).encode())
             elif parsed.path == "/api/health":
                 self.respond(200, json.dumps({"ok": True, "read_only": workspace is None,
@@ -599,10 +780,12 @@ def make_server(snapshot_path=None, host="127.0.0.1", port=0, *, catalog_path=No
                     or not hmac.compare_digest(tokens[0], csrf_token)):
                 self.respond(403, b'{"error":"Forbidden"}')
                 return
+            operation = None
             try:
                 parsed = urlsplit(self.path)
+                operation = parsed.path
                 if (parsed.scheme or parsed.netloc or parsed.query
-                        or parsed.path not in {"/api/runs", "/api/runs/preview"}):
+                        or parsed.path not in {"/api/runs", "/api/runs/preview", "/api/projects", "/api/runs/launch"}):
                     self.respond(404, b'{"error":"Not found"}')
                     return
                 lengths = self.headers.get_all("Content-Length", [])
@@ -629,15 +812,49 @@ def make_server(snapshot_path=None, host="127.0.0.1", port=0, *, catalog_path=No
                 if len(raw) != int(lengths[0]):
                     raise ValueError("incomplete JSON body")
                 data = json.loads(raw, object_pairs_hook=unique, parse_constant=reject_constant)
+                if parsed.path == "/api/projects":
+                    if (not isinstance(data, dict) or "path" not in data
+                            or set(data) - {"path", "label"}):
+                        raise ValueError("invalid connection fields")
+                    result = workspace.connect_project(data["path"], label_text=data.get("label"))
+                    self.respond(200, json.dumps(result, allow_nan=False).encode())
+                    return
+                if parsed.path == "/api/runs/launch":
+                    if not isinstance(data, dict) or set(data) != {"project_id", "run_id", "gateway_url", "confirmed"}:
+                        raise ValueError("invalid launch fields")
+                    result = browser_launch.start(data["project_id"], data["run_id"],
+                                                  data["gateway_url"], data["confirmed"])
+                    self.respond(202, json.dumps(result, allow_nan=False).encode())
+                    return
                 if not isinstance(data, dict) or set(data) != {"project_id", "options"}:
                     raise ValueError("invalid request fields")
                 result = workspace.prepare_run(data["project_id"], data["options"],
                                                save=parsed.path == "/api/runs")
                 self.respond(201 if parsed.path == "/api/runs" else 200,
                              json.dumps(result, allow_nan=False).encode())
-            except (ValueError, TypeError, UnicodeError, RecursionError):
+            except BrowserLaunchValidation as error:
+                self.respond(400, json.dumps({"error": str(error), "code": "invalid_launch"}).encode())
+            except BrowserLaunchBusy:
+                self.respond(409, b'{"error":"A run is already launching on this dashboard. Wait for its recorded outcome.","code":"launch_busy"}')
+            except (ValueError, TypeError, UnicodeError, RecursionError) as error:
+                from .workspace import ProjectConnectionError
+                if isinstance(error, ProjectConnectionError):
+                    self.respond(400, json.dumps({"error": str(error), "code": error.code}).encode())
+                    return
+                if operation == "/api/projects":
+                    self.respond(400, b'{"error":"Choose a local repository folder or swarm.toml file and an optional display name.","code":"invalid_connection"}')
+                    return
+                if operation == "/api/runs/launch":
+                    self.respond(400, b'{"error":"Choose an existing saved draft, a verified gateway origin and explicitly confirm the launch.","code":"invalid_launch"}')
+                    return
                 self.respond(400, b'{"error":"Invalid run configuration. Choose registered projects, existing tasks and an allowed agent count."}')
             except (OSError, sqlite3.Error, subprocess.SubprocessError):
+                if operation == "/api/runs/launch":
+                    self.respond(503, b'{"error":"Could not preserve the private launch request. No workers were launched. Check local storage and permissions before trying again.","code":"launch_evidence_unavailable"}')
+                    return
+                if operation == "/api/projects":
+                    self.respond(503, b'{"error":"Could not connect this local repository. Check that the folder and workspace are readable and writable, then try again.","code":"connection_unavailable"}')
+                    return
                 self.respond(503, b'{"error":"Could not prepare this local run. No workers were launched."}')
 
         do_PUT = do_POST
@@ -645,7 +862,9 @@ def make_server(snapshot_path=None, host="127.0.0.1", port=0, *, catalog_path=No
         do_DELETE = do_POST
         do_OPTIONS = do_POST
 
-    return ThreadingHTTPServer(("127.0.0.1", port), Handler)
+    server = DashboardServer(("127.0.0.1", port), Handler)
+    server.browser_launch = browser_launch
+    return server
 
 
 def main():
@@ -659,14 +878,14 @@ def main():
     source.add_argument("--catalog", type=Path, help="Explicit local project/run catalog; source paths remain private")
     source.add_argument("--workspace", type=Path, nargs="?",
                         const=Path.home() / ".config/swarm-control/workspace.json",
-                        help="Local repository registry and run preparation; no worker launch")
+                        help="Local registry, run preparation and explicitly confirmed launches")
     parser.add_argument("--port", default=8787, type=int)
     args = parser.parse_args()
     server = make_server(args.snapshot, port=args.port, catalog_path=args.catalog,
                          workspace_path=args.workspace)
     print(
         f"Swarm Control: http://127.0.0.1:{server.server_port} "
-        f"({'local run preparation' if args.workspace is not None else 'read only'}; deployment disabled)", flush=True
+        f"({'local workspace; launches require confirmation' if args.workspace is not None else 'read only'}; deployment disabled)", flush=True
     )
     try:
         server.serve_forever()

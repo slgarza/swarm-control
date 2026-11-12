@@ -1,9 +1,9 @@
-/* Local workspace and evidence dashboard. Draft preparation never launches agents. */
+/* Local workspace and evidence dashboard. Launch requires a saved draft and explicit confirmation. */
 'use strict';
 
 (() => {
   const byId = (id) => document.getElementById(id);
-  const state = {snapshot: null, autoRefresh: true, fetching: false, selected: null, fetchFailed: false, catalog: null, catalogLoading: false, projectId: null, runId: null, requestVersion: 0, controller: null, workspace: false, context: null, contextVersion: 0, contextController: null, csrf: null, selectedTasks: new Set(), preview: null, previewFingerprint: null, planning: false, planVersion: 0};
+  const state = {snapshot: null, autoRefresh: true, fetching: false, selected: null, fetchFailed: false, catalog: null, catalogLoading: false, catalogFlight: null, projectId: null, runId: null, requestVersion: 0, controller: null, workspace: false, context: null, contextVersion: 0, contextController: null, csrf: null, selectedTasks: new Set(), preview: null, previewFingerprint: null, planning: false, planVersion: 0, connecting: false, launchEnabled: false, runDetail: null, launchChecks: new Set(), launchRequests: new Set(), launchStates: new Map(), launchInputs: new Map()};
   const countFormat = new Intl.NumberFormat("en-US");
   const moneyFormat = new Intl.NumberFormat("en-US", {style: 'currency', currency: 'USD', maximumFractionDigits: 2});
   const dateFormat = new Intl.DateTimeFormat("en-US", {dateStyle: 'medium', timeStyle: 'medium', timeZone: 'UTC'});
@@ -56,7 +56,7 @@
     clear(byId('connection-status')); byId('connection-status').append(node('span', 'status-dot amber'), document.createTextNode(state.runId ? 'Loading source' : 'No run evidence'));
     setText('snapshot-time', 'Source pending'); setText('nav-worker-count', '—');
     setText('last-fetch', 'Not read yet'); runContent(false);
-    byId('run-configuration').hidden = true; clear(byId('run-configuration-content'));
+    state.runDetail = null; byId('run-configuration').hidden = true; clear(byId('run-configuration-content')); delete byId('run-configuration-content').dataset.runKey; updateEasyRunGuide();
   }
 
   function persistSelection() {
@@ -85,14 +85,14 @@
     setText('repo-name', project.repository || project.label || project.id);
     setText('workspace-summary', workspaceSummary(project));
     persistSelection();
-    resetSelection(state.runId ? 'Loading selected run…' : 'No run evidence yet', state.runId ? 'Reading the reviewed evidence for this selection.' : 'This project has no recorded runs in the local catalog. Run agents through the controller, then load their reviewed evidence here.');
+    resetSelection(state.runId ? 'Loading selected run…' : state.workspace ? 'Ready to prepare your first run' : 'No run evidence yet', state.runId ? 'Reading the reviewed evidence for this selection.' : state.workspace ? 'Click New run, select a ready task, keep Concurrent agents at 1 and click Check plan. Saving a draft gives you a separate run record.' : 'This project has no recorded runs in the local catalog. Run agents through the controller, then load their reviewed evidence here.');
     if (state.workspace) {resetBuilder(); renderHistory(project.runs); loadProjectContext(project.id);}
     if (state.runId) refresh();
   }
 
-  async function loadCatalog(preserveForm = false) {
-    if (state.catalogLoading) return;
-    state.catalogLoading = true;
+  async function loadCatalog(preserveForm = false, preferredProject = null) {
+    if (state.catalogLoading) {await state.catalogFlight; return loadCatalog(preserveForm, preferredProject);}
+    state.catalogLoading = true; let finishCatalog; state.catalogFlight = new Promise((resolve) => {finishCatalog = resolve;});
     const controller = new AbortController(), timeout = window.setTimeout(() => controller.abort(), 15000);
     try {
       const response = await fetch('/api/catalog', {cache: 'no-store', credentials: 'same-origin', signal: controller.signal, headers: {'Accept': 'application/json'}});
@@ -103,7 +103,7 @@
       configureWorkspace(data.mode === 'workspace');
       selectOptions(byId('project-select'), data.projects, 'No configured projects');
       const query = new URL(window.location.href).searchParams;
-      const wanted = state.projectId || query.get('project') || data.default_project_id;
+      const wanted = preferredProject || state.projectId || query.get('project') || data.default_project_id;
       const project = data.projects.find((item) => item.id === wanted) || data.projects.find((item) => item.id === data.default_project_id) || data.projects[0];
       if (project && preserveForm && state.workspace && state.projectId === project.id) {
         byId('project-select').value = project.id;
@@ -115,9 +115,10 @@
         if (state.runId) refresh();
       }
       else if (project) chooseProject(project.id, state.runId || query.get('run') || data.default_run_id);
-      else {state.projectId = null; state.runId = null; persistSelection(); selectOptions(byId('run-select'), [], 'No runs yet'); resetSelection('No configured projects', 'Add your projects to the local server catalog to inspect their reviewed run evidence. No example projects or results are displayed.'); setText('workspace-summary', 'No projects are configured on this local server.');}
-    } catch {resetSelection('Workspace unavailable', 'The local server did not provide a valid project catalog. Refresh to try reading it again. No example projects or results are displayed.'); showError('Could not read the local project catalog.');}
-    finally {clearTimeout(timeout); state.catalogLoading = false;}
+      else {state.projectId = null; state.runId = null; persistSelection(); selectOptions(byId('run-select'), [], 'No runs yet'); resetSelection(state.workspace ? 'Connect your first repository' : 'No configured projects', state.workspace ? 'Use Connect repository above and paste the full local folder path. Your code stays in its own repository. You can also try the included local demo.' : 'Add your projects to the local server catalog to inspect their reviewed run evidence. No example projects or results are displayed.'); setText('workspace-summary', 'No projects are configured on this local server.'); if (state.workspace) toggleConnect(true, false);}
+      return data;
+    } catch {resetSelection('Workspace unavailable', 'The local server did not provide a valid project catalog. Refresh to try reading it again. No example projects or results are displayed.'); showError('Could not read the local project catalog.'); return null;}
+    finally {clearTimeout(timeout); state.catalogLoading = false; finishCatalog();}
   }
 
   function workspaceSummary(project) {
@@ -132,9 +133,9 @@
   function configureWorkspace(enabled) {
     const changed = state.workspace !== enabled; state.workspace = enabled;
     for (const element of document.querySelectorAll('[data-workspace-only]')) element.hidden = !enabled;
-    setText('local-mode-label', enabled ? 'LOCAL · RUN PLANNING' : 'LOCAL · READ ONLY');
+    setText('local-mode-label', enabled ? 'LOCAL · WORKSPACE' : 'LOCAL · READ ONLY');
     setText('workspace-intro-copy', enabled ? 'Choose a repository. Prepare a new run or open an earlier run. Saving a draft does not deploy agents.' : 'Choose a repository, then a run to inspect its reviewed results. Only repositories configured on this local server are listed.');
-    if (!enabled) {byId('run-builder').hidden = true; byId('run-configuration').hidden = true;}
+    if (!enabled) {byId('run-builder').hidden = true; byId('run-configuration').hidden = true; byId('connect-repository').hidden = true;} updateEasyRunGuide();
     if (enabled && (changed || !state.csrf)) loadSession();
   }
 
@@ -145,8 +146,8 @@
       if (!response.ok) throw new Error('SESSION');
       const data = await response.json();
       if (data.mode !== 'workspace' || typeof data.csrf_token !== 'string' || !data.csrf_token) throw new Error('SESSION');
-      state.csrf = data.csrf_token; updateBuilder();
-    } catch {state.csrf = null; builderError('Could not prepare a local planning session. Refresh the workspace before saving a draft.');}
+      state.csrf = data.csrf_token; state.launchEnabled = data.launch_enabled === true; byId('connect-submit').disabled = state.connecting; updateBuilder(); if (state.runDetail) renderRunConfiguration(state.runDetail);
+    } catch {state.csrf = null; byId('connect-submit').disabled = true; connectionResult('Could not open a local session. Refresh the workspace to connect or save a draft.', true); builderError('Could not prepare a local planning session. Refresh the workspace before saving a draft.');}
     finally {clearTimeout(timeout);}
   }
 
@@ -175,7 +176,7 @@
       if (data.project_id !== projectId || !Array.isArray(data.tasks)) throw new Error('PROJECT');
       state.context = data;
       if (!data.configurable) {
-        setText('history-note', 'This repository has historical evidence only. Register its project configuration with the CLI to prepare new runs.');
+        setText('history-note', 'This repository has historical evidence only. Use Connect repository to add its project configuration and prepare new runs.');
         byId('new-run-button').disabled = true; return;
       }
       const cap = data.limits?.max_workers;
@@ -191,7 +192,7 @@
         if (count > cap) button.title = 'Above this repository’s configured limit';
         button.addEventListener('click', () => {byId('run-workers').value = String(count); invalidatePreview(); updateBuilder();}); byId('worker-presets').append(button);
       }
-      renderTaskChoices(); updateBuilder();
+      renderTaskChoices(); updateBuilder(); updateEasyRunGuide(); if (state.runDetail) updateLaunchStatus(state.runDetail);
       if (!state.runId) toggleBuilder(true, false);
     } catch (error) {
       if (version !== state.contextVersion || projectId !== state.projectId) return;
@@ -228,7 +229,7 @@
   }
 
   function validateOptions(options) {
-    if (!state.context?.configurable) return 'Register a project configuration to prepare a run.';
+    if (!state.context?.configurable) return 'Connect a project configuration to prepare a run.';
     if (!options.task_ids.length) return 'Select at least one task.';
     if (!Number.isInteger(options.workers) || options.workers < 1 || options.workers > state.context.limits.max_workers) return 'Choose an agent count within this repository’s limit.';
     if (options.workers > options.task_ids.length) return 'Select at least ' + options.workers + ' tasks for ' + options.workers + ' concurrent agents.';
@@ -253,7 +254,7 @@
     byId('preview-run-button').disabled = state.planning || Boolean(problem) || !state.csrf;
     byId('save-run-button').disabled = state.planning || !state.preview || state.previewFingerprint !== JSON.stringify(options) || Boolean(problem) || !state.csrf;
     byId('preview-run-button').textContent = state.planning ? 'Checking…' : 'Check plan';
-    if (problem && options.task_ids.length) builderError(problem);
+    if (problem && options.task_ids.length) builderError(problem); updateEasyRunGuide();
   }
 
   const blockerCopy = {
@@ -330,7 +331,9 @@
   }
 
   function renderRunConfiguration(run) {
-    const target = byId('run-configuration-content'); clear(target); byId('run-configuration').hidden = false;
+    state.runDetail = run; updateEasyRunGuide(); const target = byId('run-configuration-content'), key = launchKey(run.project_id, run.id);
+    if (target.dataset.runKey === key && run.status === 'draft' && target.querySelector('.browser-launch')?.contains(document.activeElement)) {updateLaunchStatus(run); return;}
+    clear(target); target.dataset.runKey = key; byId('run-configuration').hidden = false;
     setText('configuration-status', runStatus(run.status));
     setText('run-configuration-title', run.label || run.id || 'Run configuration'); setText('run-name', run.label || run.id); setText('run-phase', runStatus(run.status));
     const draft = run.status === 'draft';
@@ -356,13 +359,147 @@
       progress.append(node('p', 'field-help', 'These are the last local worker reports. Phase counts are not active machines, continuous useful activity or accepted deliveries. Unobserved work remains unknown.')); target.append(progress);
     }
     if (draft && run.launch_command) {
-      const guide = node('section', 'launch-guide'); guide.append(node('h3', '', 'Continue from the CLI'), node('p', '', 'If shown, replace placeholders with your local workspace file and gateway. This command inspects the launch. Actual execution requires the explicit --execute option, a gateway and an authorized remaining allowance.'), node('code', '', run.launch_command));
-      target.append(guide);
+      const guide = node('details', 'launch-guide'); guide.append(node('summary', '', 'Inspect this draft from the terminal'), node('p', '', 'This command inspects the saved run without starting agents. Use it from an activated controller environment. Replace a workspace placeholder, if shown, with the same workspace file used by this dashboard.'), node('code', '', run.launch_command));
+      const copy = node('button', 'button button-quiet', 'Copy inspect command'); copy.type = 'button'; copy.addEventListener('click', async () => {try {await navigator.clipboard.writeText(run.launch_command); copy.textContent = 'Copied'; announce('Inspect command copied.');} catch {copy.textContent = 'Select and copy the command above';}}); guide.append(copy); target.append(guide);
     }
+    if (state.workspace && (draft || state.launchStates.has(key) || ['launching', 'runner_finished', 'interrupted'].includes(run.status))) renderBrowserLaunch(target, run);
     if (!run.has_snapshot) {
       runContent(false); byId('workspace-empty').hidden = true; setText('snapshot-time', 'No delivery snapshot'); setText('last-fetch', 'Read: ' + timeLabel(new Date().toISOString()));
       clear(byId('connection-status')); byId('connection-status').append(node('span', 'status-dot amber'), document.createTextNode(draft ? 'Draft · no agents launched' : 'Run record available'));
     }
+  }
+
+  function updateEasyRunGuide() {
+    if (!state.workspace) return;
+    const connected = Boolean(state.projectId), planned = Boolean(state.preview || state.runDetail), saved = Boolean(state.runId), launched = Boolean(state.runDetail && !['draft', 'historical'].includes(state.runDetail.status));
+    for (const [id, done, current] of [['step-connect', connected, !connected], ['step-plan', planned, connected && !planned], ['step-save', saved, planned && !saved], ['step-run', launched, saved && !launched]]) {
+      byId(id).classList.toggle('is-done', done); if (current) byId(id).setAttribute('aria-current', 'step'); else byId(id).removeAttribute('aria-current');
+    }
+    setText('easy-run-next', !connected ? 'Next: connect a local repository folder.' : launched ? 'Launch observations appear in this run. Keep the controller terminal open while workers run.' : saved ? 'Next: review the saved draft and its launch requirements below.' : planned ? 'Next: click Save draft to preserve these settings.' : 'Next: select ready tasks, choose the number of concurrent agents and click Check plan.');
+  }
+
+  function toggleConnect(open, focus = true) {
+    byId('connect-repository').hidden = !open; byId('connect-toggle').setAttribute('aria-expanded', String(open));
+    if (open && focus) byId('connect-path').focus();
+  }
+
+  function connectionResult(message, error = false) {
+    const box = byId('connect-result'); box.hidden = !message; box.textContent = message; box.classList.toggle('error-message', error);
+  }
+
+  async function connectRepository() {
+    if (state.connecting || !state.csrf) return;
+    const path = byId('connect-path').value.trim(), label = byId('connect-label').value.trim();
+    if (/^[a-z]+:\/\//i.test(path) || /^git@/i.test(path)) {connectionResult('Download or clone the repository first, then paste its full local folder path. A GitHub URL cannot be connected here.', true); return;}
+    if (/^['"]|['"]$/.test(path)) {connectionResult('Paste the folder path without surrounding quotes. Spaces in folder names are allowed.', true); return;}
+    state.connecting = true; byId('connect-submit').disabled = true; byId('connect-submit').textContent = 'Connecting…'; connectionResult('Checking the local project configuration…');
+    const controller = new AbortController(), timeout = window.setTimeout(() => controller.abort(), 30000);
+    try {
+      const response = await fetch('/api/projects', {method: 'POST', cache: 'no-store', credentials: 'same-origin', signal: controller.signal, headers: {'Accept': 'application/json', 'Content-Type': 'application/json', 'X-Swarm-CSRF': state.csrf}, body: JSON.stringify({path, ...(label ? {label} : {})})});
+      const data = await response.json();
+      if (!response.ok) throw new Error(typeof data.error === 'string' ? data.error : 'The project could not be connected. Check its local path, swarm.toml and Git origin.');
+      if (typeof data.project_id !== 'string' || data.configurable !== true) throw new Error('The server did not confirm a connected project. Refresh the workspace before trying again.');
+      state.projectId = data.project_id; state.runId = null; state.runDetail = null; persistSelection();
+      const catalog = await loadCatalog(false, data.project_id);
+      if (!catalog?.projects.some((project) => project.id === data.project_id)) throw new Error('The repository connected, but the refreshed workspace could not confirm it. Refresh the workspace before trying another connection.');
+      connectionResult('Repository connected. Select ready tasks below to prepare a run.'); byId('connect-path').value = ''; byId('connect-label').value = ''; toggleConnect(false, false); announce('Repository connected. Prepare a new run.');
+    } catch (error) {connectionResult(error.name === 'AbortError' ? 'The connection check took too long. Refresh the workspace to see whether it connected before retrying.' : error.message, true);}
+    finally {clearTimeout(timeout); state.connecting = false; byId('connect-submit').disabled = !state.csrf; byId('connect-submit').textContent = 'Connect repository';}
+  }
+
+  const launchKey = (project, run) => String(project) + ':' + String(run);
+  const pendingKey = (run) => 'swarm-control-launch:' + launchKey(run.project_id, run.id);
+  function pendingLaunch(run) {try {return window.sessionStorage.getItem(pendingKey(run)) === 'pending';} catch {return false;}}
+  function rememberPending(run, pending) {try {if (pending) window.sessionStorage.setItem(pendingKey(run), 'pending'); else window.sessionStorage.removeItem(pendingKey(run));} catch { /* In-memory duplicate protection remains available. */ }}
+  function gatewayOrigin(value) {
+    if (!/^https:\/\/[A-Za-z0-9-]+\.modal\.run\/?$/.test(value)) return null;
+    try {return new URL(value).origin;} catch {return null;}
+  }
+
+  function launchProblem(run) {
+    if (!state.launchEnabled) return 'This server does not support browser launch. Use the CLI execution guide.';
+    if (!state.csrf) return 'Refresh the workspace to establish a local session.';
+    if (run.status !== 'draft') return 'This run has already been attempted. Review its observations before preparing another draft.';
+    if (state.context?.project_id !== run.project_id) return 'Reading this repository’s current policy…';
+    if (state.context?.live_execution_enabled !== true) return 'Live execution is disabled for this repository. Follow docs/TWO_AGENT_WALKTHROUGH.md to configure your own services and authorize a bounded budget. Planning and drafts work without cloud accounts.';
+    if (!finite(run.model_budget) || run.model_budget <= 0) return 'This draft has no model reservation. Prepare a new run with a total model reservation before launching.';
+    if (run.preflight?.preparation_checks_passed !== true) return 'The saved source checks need attention. Resolve the listed preparation items, then prepare and check a new draft.';
+    return null;
+  }
+
+  function launchObservation(run) {
+    const observed = state.launchStates.get(launchKey(run.project_id, run.id));
+    if (run.status === 'launching') return {status: 'running', error: observed?.evidence_status === 'unavailable' ? observed.error : null, evidence_status: observed?.evidence_status};
+    if (run.status === 'runner_finished') return {status: 'finished', error: observed?.error || null, evidence_status: observed?.evidence_status, runner_exit_code: run.runner_exit_code};
+    if (run.status === 'interrupted') return {status: 'failed', error: 'The runner was interrupted. Inspect its preserved evidence before preparing another draft.'};
+    if (observed && observed.status !== 'idle') return observed;
+    if (pendingLaunch(run)) return {status: 'uncertain', error: 'The launch response is unknown. Refresh run history and inspect the controller terminal before preparing another draft. This request will not be sent again automatically.'};
+    return observed || {status: 'idle', error: null};
+  }
+
+  function updateLaunchStatus(run) {
+    const form = byId('browser-launch-form'); if (!form || form.dataset.runKey !== launchKey(run.project_id, run.id)) return;
+    const observation = launchObservation(run), problem = launchProblem(run), blocked = observation.status !== 'idle', button = byId('launch-run-button');
+    const statusCopy = {starting: 'Launch requested. Checking the saved source, policy and budget gates…', running: 'The runner is active. Keep the controller terminal open. Closing this browser tab does not stop workers.', finished: observation.runner_exit_code === 0 ? 'Runner finished. Review worker outcomes, patches and checks; accepted deliveries are recorded separately.' : 'Runner finished with an error or an unknown exit status. Inspect the preserved worker outcomes and controller terminal.', failed: observation.error || 'Launch failed. Inspect the controller terminal and preserved evidence before preparing another draft.', uncertain: observation.error};
+    const gatewayValue = byId('launch-gateway').value.trim(), gatewayProblem = gatewayValue && !gatewayOrigin(gatewayValue) ? 'Enter your verified HTTPS Modal gateway origin, for example https://your-gateway.modal.run. Other domains, ports, paths and API keys are not accepted.' : null;
+    byId('launch-gateway').setAttribute('aria-invalid', String(Boolean(gatewayProblem)));
+    const evidenceProblem = observation.evidence_status === 'unavailable' ? observation.error || 'The runner status was observed, but its private launch evidence could not be fully recorded. Inspect the controller terminal and preserved history before preparing another draft.' : observation.error;
+    setText('browser-launch-status', evidenceProblem || statusCopy[observation.status] || problem || gatewayProblem || 'Ready for your explicit confirmation. The controller will recheck the saved source and all ordinary launch gates.');
+    byId('browser-launch-status').classList.toggle('error-message', ['failed', 'uncertain'].includes(observation.status) || Boolean(evidenceProblem) || Boolean(gatewayProblem && !problem));
+    byId('launch-gateway').disabled = blocked || Boolean(problem); byId('launch-confirm').disabled = blocked || Boolean(problem);
+    button.disabled = blocked || Boolean(problem) || !byId('launch-confirm').checked || !gatewayOrigin(byId('launch-gateway').value.trim());
+    button.textContent = observation.status === 'starting' ? 'Requesting launch…' : observation.status === 'running' ? 'Runner active' : blocked ? 'Launch attempt recorded' : 'Run agents';
+  }
+
+  function renderBrowserLaunch(target, run) {
+    const key = launchKey(run.project_id, run.id), section = node('section', 'launch-guide browser-launch');
+    section.append(node('h3', '', 'Run this saved draft'), node('p', '', 'Run agents starts real coding workers on Modal using your configured services. Review the total model reservation and infrastructure admission above, resolve the launch requirements and keep the controller terminal open.'));
+    const form = node('form'); form.id = 'browser-launch-form'; form.dataset.runKey = key;
+    const field = node('div', 'run-field'), label = node('label', '', 'Verified gateway HTTPS origin'); label.htmlFor = 'launch-gateway';
+    const input = node('input'); input.id = 'launch-gateway'; input.type = 'url'; input.required = true; input.placeholder = 'https://your-verified-gateway.modal.run'; input.autocomplete = 'off'; input.spellcheck = false; input.setAttribute('aria-describedby', 'gateway-help');
+    const savedInput = state.launchInputs.get(key) || {gateway: '', confirmed: false}; input.value = savedInput.gateway;
+    field.append(label, input); const help = node('p', 'field-help', 'Use your verified https://…modal.run origin, without a port, path or API key. No service credentials are entered in this panel.'); help.id = 'gateway-help'; field.append(help);
+    const confirmation = node('label', 'launch-confirmation'), checkbox = node('input'); checkbox.type = 'checkbox'; checkbox.id = 'launch-confirm'; checkbox.required = true; checkbox.checked = savedInput.confirmed;
+    confirmation.append(checkbox, node('span', '', 'I authorize this run within the configured model and infrastructure allowances, and have verified my gateway and provider capacity.'));
+    const button = node('button', 'button button-primary', 'Run agents'); button.id = 'launch-run-button'; button.type = 'submit'; button.disabled = true;
+    const status = node('p', 'launch-status'); status.id = 'browser-launch-status'; status.setAttribute('role', 'status'); status.setAttribute('aria-live', 'polite');
+    const recordInput = () => {state.launchInputs.set(key, {gateway: input.value, confirmed: checkbox.checked}); updateLaunchStatus(run);}; input.addEventListener('input', () => {checkbox.checked = false; recordInput();}); checkbox.addEventListener('change', recordInput);
+    form.append(field, confirmation, button, status); form.addEventListener('submit', (event) => {event.preventDefault(); if (form.reportValidity()) launchRun(run);}); section.append(form); target.append(section); updateLaunchStatus(run); checkLaunch(run);
+  }
+
+  async function checkLaunch(run) {
+    if (!state.launchEnabled) return;
+    const key = launchKey(run.project_id, run.id); if (state.launchChecks.has(key)) return; state.launchChecks.add(key);
+    const controller = new AbortController(), timeout = window.setTimeout(() => controller.abort(), 10000);
+    try {
+      const response = await fetch('/api/launch?' + new URLSearchParams({project: run.project_id, run: run.id}), {cache: 'no-store', credentials: 'same-origin', signal: controller.signal, headers: {'Accept': 'application/json'}});
+      if (!response.ok) return; const data = await response.json();
+      if (data.project_id !== run.project_id || data.run_id !== run.id || !['idle', 'starting', 'running', 'finished', 'failed'].includes(data.status)) return;
+      const previous = state.launchStates.get(key); if (state.launchRequests.has(key) && data.status === 'idle') return;
+      state.launchStates.set(key, data); if (data.status !== 'idle') rememberPending(run, false);
+      if (state.projectId !== run.project_id || state.runId !== run.id) return; updateLaunchStatus(state.runDetail || run);
+      if (previous?.status !== data.status && ['finished', 'failed', 'running'].includes(data.status)) {refreshHistory(); refresh();}
+    } catch { /* Missing observations never make an uncertain launch retryable. */ }
+    finally {clearTimeout(timeout); state.launchChecks.delete(key);}
+  }
+
+  async function launchRun(run) {
+    const key = launchKey(run.project_id, run.id), gateway = gatewayOrigin(byId('launch-gateway').value.trim());
+    if (launchProblem(run) || !gateway || !byId('launch-confirm').checked || launchObservation(run).status !== 'idle') return;
+    rememberPending(run, true); state.launchRequests.add(key); state.launchStates.set(key, {status: 'starting', error: null}); updateLaunchStatus(run);
+    const controller = new AbortController(), timeout = window.setTimeout(() => controller.abort(), 30000);
+    try {
+      const response = await fetch('/api/runs/launch', {method: 'POST', cache: 'no-store', credentials: 'same-origin', signal: controller.signal, headers: {'Accept': 'application/json', 'Content-Type': 'application/json', 'X-Swarm-CSRF': state.csrf}, body: JSON.stringify({project_id: run.project_id, run_id: run.id, gateway_url: gateway, confirmed: true})});
+      const data = await response.json();
+      if (!response.ok) {
+        if ([400, 403, 404, 409].includes(response.status)) {rememberPending(run, false); state.launchStates.set(key, {status: 'failed', error: typeof data.error === 'string' ? data.error : 'The controller rejected the launch. Resolve its requirements before preparing another draft.'});}
+        else throw new Error('UNKNOWN');
+      } else {
+        if (response.status !== 202 || data.project_id !== run.project_id || data.run_id !== run.id || !['starting', 'running'].includes(data.status)) throw new Error('UNKNOWN');
+        state.launchStates.set(key, data); rememberPending(run, false); announce('Launch requested. Keep the controller terminal open.');
+      }
+    } catch {state.launchStates.set(key, {status: 'uncertain', error: 'The launch response is unknown. Refresh run history and inspect the controller terminal. This request will not be sent again automatically.'});}
+    finally {clearTimeout(timeout); state.launchRequests.delete(key); if (state.projectId === run.project_id && state.runId === run.id) {updateLaunchStatus(run); checkLaunch(run); refreshHistory(); refresh();}}
   }
 
   function renderOverview(data) {
@@ -589,6 +726,9 @@
     finally {clearTimeout(timeout); if (version === state.requestVersion) {state.fetching = false; state.controller = null; byId('refresh-button').disabled = false;}}
   }
 
+  byId('connect-toggle').addEventListener('click', () => toggleConnect(byId('connect-repository').hidden));
+  byId('connect-cancel').addEventListener('click', () => toggleConnect(false, false));
+  byId('connect-form').addEventListener('submit', (event) => {event.preventDefault(); if (byId('connect-form').reportValidity()) connectRepository();});
   byId('project-select').addEventListener('change', () => chooseProject(byId('project-select').value, null));
   byId('run-select').addEventListener('change', () => {
     if (state.workspace) {selectRun(byId('run-select').value); return;}
@@ -621,7 +761,7 @@
   });
   for (const anchor of document.querySelectorAll('.nav-item')) anchor.addEventListener('click', () => {for (const item of document.querySelectorAll('.nav-item')) {item.classList.toggle('is-active', item === anchor); if (item === anchor) item.setAttribute('aria-current', 'location'); else item.removeAttribute('aria-current');}});
   document.querySelector('.nav-item')?.setAttribute('aria-current', 'location');
-  window.setInterval(() => {if (state.autoRefresh && !document.hidden) refresh();}, 10000);
+  window.setInterval(() => {if (state.autoRefresh && !document.hidden) refresh(); if (state.workspace && state.runDetail && !document.hidden) checkLaunch(state.runDetail);}, 10000);
   document.addEventListener('visibilitychange', () => {if (!document.hidden && state.autoRefresh) refresh();});
   loadCatalog();
 })();

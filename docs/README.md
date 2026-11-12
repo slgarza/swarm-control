@@ -9,7 +9,8 @@ accounts or knowledge of the development conversation.
 
 | Reader | Start here | Continue with |
 | --- | --- | --- |
-| First-time user | [Quickstart: a local two-task example](QUICKSTART.md) | [Architecture](ARCHITECTURE.md) |
+| First-time user | [Easy Run and a local two-task example](QUICKSTART.md) | [Repositories and runs](RUNS.md), [architecture](ARCHITECTURE.md) |
+| Principiante en español | [Descargar, abrir y conectar un proyecto](GETTING_STARTED.es.md) | [Ejemplo local](QUICKSTART.md), [configuración del proyecto](PROJECTS.md) |
 | Operator preparing deployment | [Deployment preflight](DEPLOYMENT_PREFLIGHT.md) | [Project settings](PROJECTS.md), [spend reporting](BILLING.md), [operations](OPERATIONS.md) |
 | Operator viewing a run | [Local evidence dashboard](DASHBOARD.md) | [Spend reporting](BILLING.md), [evidence requirements](contest/EVIDENCE.md) |
 | Operator configuring runs | [Repositories and runs](RUNS.md) | [Next-pilot protocol](NEXT_PILOT.md), [deployment preflight](DEPLOYMENT_PREFLIGHT.md) |
@@ -28,8 +29,10 @@ reruns combined checks, while actual conflicts require a separate repair attempt
 The target is a public GitHub repository with prepared tasks and validation commands.
 Review and integration still require an operator. The local dashboard presents
 curated evidence and links, with explicit project and run selection. Workspace
-mode adds configurable concurrent agents, local drafts and sealed history;
-backlog generation is not automated. The [dashboard gallery](DASHBOARD.md#screenshots)
+mode adds local repository connection, configurable concurrent agents, saved
+drafts, confirmed launch through the existing controller gates and sealed history.
+Easy Run installs and opens this interface; backlog generation and service-account
+setup are not automated. The [dashboard gallery](DASHBOARD.md#screenshots)
 contains actual English desktop, mobile, task, budget and empty-state captures.
 
 The original Afterimage pilot ran ten real workers and merged ten green PRs.

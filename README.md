@@ -6,11 +6,31 @@ enforces budgets and ownership, and integrates reviewed changes through passing
 GitHub Actions. OpenAI supplies the model; Modal supplies temporary machines.
 The coordinator currently runs on one host.
 
-The local dashboard supports repository selection, configurable parallel agents,
-saved run drafts and past evidence. Open it with `swarm-control dashboard --workspace`.
-The GUI prepares local runs; explicit CLI execution uses the ordinary budget and
-source gates. Start with [repositories and runs](docs/RUNS.md), then the
-[next-pilot protocol](docs/NEXT_PILOT.md) and [dashboard guide](docs/DASHBOARD.md).
+## Open the app
+
+With Git and Python 3.12 or newer installed, run these commands in a terminal
+on Linux, macOS or Windows through WSL:
+
+```sh
+git clone https://github.com/slgarza/swarm-control.git
+cd swarm-control
+./easy-run
+```
+
+Easy Run creates a local Python environment, installs the controller on first use
+and opens the browser. Keep the terminal open; press Ctrl+C there to stop the
+server. Next time, run `./easy-run` from the same folder. No cloud workers start
+when you open the app. Use `./easy-run --no-open` to print the URL without opening
+a browser, or `./easy-run --port 8788` if the default port is busy.
+
+**[Guía para principiantes en español](docs/GETTING_STARTED.es.md)** ·
+**[English quickstart with a local example](docs/QUICKSTART.md)**
+
+In the browser, connect a prepared local repository, choose tasks and concurrent
+agents, check the plan and save a draft. A separate, confirmed **Run agents** action uses
+the existing source, gateway and budget gates. The app does not configure service
+accounts or authorize a budget for you. Start with
+[repositories and runs](docs/RUNS.md) for the complete workflow.
 
 ![Repository selection and recorded run history](docs/images/dashboard-run-history-2026-11-11.png)
 
@@ -40,12 +60,13 @@ unknowns. The loopback viewer makes no provider calls or execution/accounting wr
 | Guide | What it explains |
 | --- | --- |
 | [Documentation index](docs/README.md) | Reading paths, terminology and current capabilities |
-| [Quickstart](docs/QUICKSTART.md) | Install, create a tiny target, test its baseline and inspect a local plan |
+| [Beginner guide in Spanish](docs/GETTING_STARTED.es.md) | Download, open, connect a repository, choose tasks and understand real execution |
+| [Quickstart](docs/QUICKSTART.md) | Easy Run, a tiny local target, baseline tests and a local plan |
 | [Architecture](docs/ARCHITECTURE.md) | Who writes code, where it runs, how patches reach GitHub and where state lives |
 | [Two-agent walkthrough](docs/TWO_AGENT_WALKTHROUGH.md) | Own-account setup, real issues, budget, execution, review, PRs, merge and cleanup |
 | [Project reference](docs/PROJECTS.md) | Every configuration field and the task format |
 | [Operations](docs/OPERATIONS.md) | Commands, side effects, flags and integration gates |
-| [Repositories and runs](docs/RUNS.md) | Register targets, choose concurrent agents, save drafts, inspect history and explicitly launch through the CLI |
+| [Repositories and runs](docs/RUNS.md) | Connect targets, choose concurrent agents, save drafts and explicitly launch through the browser or CLI |
 | [Next pilot](docs/NEXT_PILOT.md) | Small completion experiment, scoped context, CI scheduling and matched AFK gates |
 | [Operational feedback](docs/OPERATIONS_SAFETY.md) | Failure brakes, durable action reservations, CI diagnosis and conservative scaling advice |
 | [Deployment preflight](docs/DEPLOYMENT_PREFLIGHT.md) | Read-only source, ledger, GitHub and resource checks before a separately authorized deployment |
@@ -56,8 +77,9 @@ unknowns. The loopback viewer makes no provider calls or execution/accounting wr
 | [Target assessment](docs/contest/TARGET-ASSESSMENT.md) | Why Afterimage suits the next collision pilot and what the final benchmark target needs |
 | [Benchmark and evidence](docs/contest/BENCHMARK.md) | Fair AFK comparison; [reporting checklist and template](docs/contest/EVIDENCE.md) |
 
-All guides and the example are in English. The standalone extraction and tutorial
-are tested offline; their documentation does not imply a new paid cohort ran.
+The interface and example use English; the beginner guide is also available in
+Spanish. The standalone extraction and tutorial are tested offline; their
+documentation does not imply a new paid cohort ran.
 
 ## What lives where
 
@@ -105,8 +127,9 @@ false and budget/provider/authorization blockers remain explicit. See the
 
 Connect another repository using [project configuration](docs/PROJECTS.md).
 Read [operations](docs/OPERATIONS.md) before any paid run. Semantic review remains
-explicit. The local dashboard can prepare run drafts and inspect historical
-evidence; backlog generation and live execution still use the controller workflow.
+explicit. The local dashboard can prepare run drafts, explicitly request execution
+and inspect historical evidence. Backlog preparation, gateway deployment and
+reviewed integration still use the controller workflow.
 
 ## Capacity and remaining proof
 

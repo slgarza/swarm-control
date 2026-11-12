@@ -1,10 +1,18 @@
 # Local dashboard
 
-For repository registration, configurable concurrent agents and saved drafts,
-start with [repositories and run history](RUNS.md). Use
-`swarm-control dashboard --workspace` for local run preparation. Its bounded
-write endpoints create drafts only; deployment remains an explicit CLI action.
-The legacy evidence-only modes below remain read-only.
+For a first launch, run `./easy-run` from the downloaded controller folder. It
+installs the local environment and opens the workspace in your browser. Later
+starts use the same command. The installed CLI offers `swarm-control start`;
+`swarm-control dashboard --workspace` remains available for an existing workspace.
+
+Workspace mode connects prepared local repositories, checks plans, saves drafts
+and accepts an explicit, confirmed run request through the ordinary controller
+gates. Keep the server terminal open during a run. Setup of provider accounts,
+gateway deployment, budget authorization, code review and merging remain separate
+operator steps. See [repositories and run history](RUNS.md) or the
+[Spanish beginner guide](GETTING_STARTED.es.md).
+
+The legacy evidence-only modes described below remain read-only.
 
 The evidence viewer shows a selected, curated snapshot in a browser. It reads
 local JSON and serves local assets. It does not start workers, change a budget,
