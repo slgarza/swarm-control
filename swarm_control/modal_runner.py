@@ -4,6 +4,7 @@ import argparse
 import fcntl
 import hashlib
 import json
+import math
 import re
 import subprocess
 import time
@@ -15,8 +16,13 @@ from pathlib import Path
 from threading import Barrier
 from urllib.parse import urlparse
 
-from .context_packet import task_packet
-from .modal_worker import benchmark_bundle_summary, valid_path
+from .context_packet import build_context_readiness, task_packet
+from .modal_worker import (
+    acceptance_commands,
+    acceptance_files,
+    benchmark_bundle_summary,
+    valid_path,
+)
 from .pilot_state import batch_summary, common_state, verify_github_tasks
 from .progress import WorkerProgress
 from .project import load_project
@@ -44,6 +50,9 @@ ARTIFACTS = (
     "install.log",
     "versions.json",
     "last-message.txt",
+    "supervision.json",
+    "acceptance.json",
+    "acceptance.log",
 )
 
 
@@ -92,6 +101,8 @@ def load_task(task_id):
         for dep in dependencies
     ):
         raise ValueError(f"{task_id}: missing or invalid dependency metadata")
+    acceptance_commands(task)
+    acceptance_files(task)
     return task
 
 
@@ -305,6 +316,80 @@ def eligible_result(agent_exit, check_exit, changes):
     )
 
 
+def supervision_summary(value, task, base_sha, run_id, timeout, no_progress_timeout=None):
+    """Project a bounded worker observation without claiming a provider cause."""
+    reasons = {"child_exited", "coding_deadline_reached", "configured_no_source_progress",
+               "supervisor_interrupted", "spawn_failed"}
+    warning_codes = {"source_observation_unavailable", "no_source_change_observed", "closure_window"}
+    if (not isinstance(value, dict) or value.get("schema_version") != 1
+            or value.get("source") != "worker_supervisor_observed"
+            or value.get("task_id") != task["id"] or value.get("base_sha") != base_sha
+            or value.get("run_id") != run_id or value.get("coding_limit_seconds") != timeout
+            or value.get("no_progress_timeout_seconds") != no_progress_timeout
+            or value.get("terminal_reason") not in reasons or not value.get("finished_at_utc")
+            or type(value.get("automatic_retries")) is not int or value["automatic_retries"] != 0):
+        raise ValueError("Invalid or incomplete worker supervision receipt")
+    for field in ("started_at_utc", "finished_at_utc"):
+        if not isinstance(value.get(field), str) or len(value[field]) > 64:
+            raise ValueError("Invalid supervision timestamp")
+        if datetime.fromisoformat(value[field]).utcoffset() is None:
+            raise ValueError("Supervision timestamps must be timezone aware")
+    result = {key: value[key] for key in ("schema_version", "source", "terminal_reason",
+        "started_at_utc", "finished_at_utc", "coding_limit_seconds", "automatic_retries")}
+    for field in ("child_exit_code", "wrapper_exit_code"):
+        code = value.get(field)
+        if code is not None and (type(code) is not int or not -255 <= code <= 255):
+            raise ValueError("Invalid supervision process exit")
+        result[field] = code
+    if value["terminal_reason"] == "child_exited":
+        child = result["child_exit_code"]
+        if child is None or result["wrapper_exit_code"] != (child if child >= 0 else 128 - child):
+            raise ValueError("Inconsistent supervision child outcome")
+    for field in ("source_change_count", "source_observation_failures", "checkpoint_failures"):
+        number = value.get(field, 0)
+        if type(number) is not int or not 0 <= number <= 1000000:
+            raise ValueError("Invalid supervision observation count")
+        result[field] = number
+    for field in ("elapsed_seconds", "first_source_change_seconds", "last_source_change_seconds"):
+        number = value.get(field)
+        if number is not None and (type(number) not in (int, float) or not math.isfinite(number)
+                                   or not 0 <= number <= timeout + 60):
+            raise ValueError("Invalid supervision duration")
+        result[field] = number
+    warnings, signals = value.get("warnings", []), value.get("signals", [])
+    if (not isinstance(warnings, list) or len(warnings) > 8
+            or any(not isinstance(item, str) or item not in warning_codes for item in warnings)
+            or not isinstance(signals, list) or len(signals) > 2
+            or any(not isinstance(item, str) or item not in {"SIGTERM", "SIGKILL"} for item in signals)):
+        raise ValueError("Invalid supervision categories")
+    result.update(warnings=warnings, signals=signals, remote_provider_cause=None,
+                  useful_progress_verified=False, no_progress_timeout_seconds=no_progress_timeout)
+    return result
+
+
+def recovered_candidate(report):
+    """A failed original may yield reviewable bytes, never an accepted delivery."""
+    changes = report.get("changes", {})
+    if (report.get("status") not in {"needs_repair", "failed", "interrupted"}
+            or not isinstance(changes, dict) or type(changes.get("patch_bytes")) is not int
+            or changes["patch_bytes"] <= 0 or changes.get("head_unchanged") is not True
+            or changes.get("ownership_violations") != [] or changes.get("prohibited_files") != []
+            or report.get("recovery_errors") or report.get("patch_redacted")
+            or report.get("acceptance_inputs_unchanged") is False
+            or not isinstance(report.get("patch_sha256"), str)
+            or re.fullmatch(r"[a-f0-9]{64}", report["patch_sha256"]) is None):
+        return None
+    return {"schema_version": 1, "status": "candidate",
+            "original_worker_status": report["status"], "original_agent_exit": report.get("agent_exit"),
+            "patch_sha256": report["patch_sha256"], "base_sha": report["base_sha"],
+            "head_unchanged": True, "scope_clean": True,
+            "baseline_checks_passed": type(report.get("check_exit")) is int and report["check_exit"] == 0,
+            "configured_acceptance_passed": (type(report.get("acceptance_exit")) is int and report["acceptance_exit"] == 0
+                if report.get("acceptance_configured") else None),
+            "requires_independent_validation": True, "original_outcome_preserved": True,
+            "authorizes_publish": False}
+
+
 def prompt_for(task, *, context_mode="full", context_excerpts=(), timeout=None):
     if context_mode not in {"full", "task"}:
         raise ValueError("context mode must be full or task")
@@ -499,6 +584,11 @@ def execute_task(task, args, base_sha, batch, image, app, secret, barrier=None):
         ],
         **(PROJECT.worker_manifest() if PROJECT else {}),
     }
+    if args.command == "run":
+        manifest.update(agent_command=codex_command(args.model, args.gateway_url), supervision={
+            "coding_limit_seconds": args.timeout,
+            "no_progress_timeout_seconds": getattr(args, "no_progress_timeout", None),
+            "poll_seconds": 1.0, "termination_grace_seconds": 5.0})
     report = {
         "task_id": task["id"],
         "run_id": run_id,
@@ -511,6 +601,10 @@ def execute_task(task, args, base_sha, batch, image, app, secret, barrier=None):
         "sandbox_id": None,
         "agent_exit": None,
         "check_exit": None,
+        "acceptance_configured": acceptance_commands(task) is not None,
+        "acceptance_exit": None,
+        "acceptance_inputs_unchanged": None,
+        "independent_product_acceptance": False,
         "merged": False,
         "infra_cost_usd": None,
         "model_cost_usd": None,
@@ -572,9 +666,9 @@ def execute_task(task, args, base_sha, batch, image, app, secret, barrier=None):
             write_json(directory / "report.json", report)
             with progress.phase("agent") as measurement:
                 process = sandbox.exec(
-                    *codex_command(args.model, args.gateway_url),
+                    "python3", "/opt/swarm/modal_worker.py", "agent", "/tmp/task.json",
                     secrets=[secret],
-                    timeout=args.timeout,
+                    timeout=args.timeout + 12,
                 )
                 process.stdin.write(packet["prompt"] + "\n")
                 process.stdin.write_eof()
@@ -601,7 +695,14 @@ def execute_task(task, args, base_sha, batch, image, app, secret, barrier=None):
         else:
             report["status"] = "checking"
             write_json(directory / "report.json", report)
+            validation_started = time.monotonic()
             report["check_exit"] = helper_step("check", "check", 240)
+            if args.command == "run" and report["check_exit"] == 0 and report["acceptance_configured"]:
+                remaining = int(240 - (time.monotonic() - validation_started))
+                if remaining < 1:
+                    report["acceptance_not_run"] = "validation_budget_exhausted"
+                else:
+                    report["acceptance_exit"] = helper_step("acceptance", "acceptance", remaining)
             if args.command == "smoke":
                 report["status"] = (
                     "smoke_passed" if report["check_exit"] == 0 else "failed"
@@ -611,7 +712,8 @@ def execute_task(task, args, base_sha, batch, image, app, secret, barrier=None):
                     "validated"
                     if eligible_result(
                         report["agent_exit"], report["check_exit"], changes
-                    )
+                    ) and (not report["acceptance_configured"] or
+                           (type(report["acceptance_exit"]) is int and report["acceptance_exit"] == 0))
                     else "needs_repair"
                 )
     except Exception as error:  # noqa: BLE001 - provider failures must still recover and terminate
@@ -663,6 +765,21 @@ def execute_task(task, args, base_sha, batch, image, app, secret, barrier=None):
                     except Exception as error:  # noqa: BLE001 - record provider retrieval failures
                         recovery_errors.append(f"{name}: {type(error).__name__}")
             patch = directory / "changes.patch"
+            recovered_changes = directory / "changes.json"
+            if recovered_changes.is_file():
+                try:
+                    final_changes = json.loads(recovered_changes.read_text())
+                    if (not isinstance(final_changes, dict) or type(final_changes.get("patch_bytes")) is not int
+                            or final_changes["patch_bytes"] < 0):
+                        raise ValueError("invalid collected change metadata")
+                    report["changes"] = final_changes
+                    if (report["status"] in {"validated", "smoke_passed", "needs_repair"}
+                            and (final_changes.get("head_unchanged") is not True
+                                 or final_changes.get("ownership_violations") != []
+                                 or final_changes.get("prohibited_files") != [])):
+                        report["status"] = "rejected"
+                except (OSError, ValueError):
+                    recovery_errors.append("changes_metadata_unavailable")
             if patch.exists():
                 report["patch_sha256"] = hashlib.sha256(patch.read_bytes()).hexdigest()
                 if report["status"] in {"validated", "smoke_passed"} and (
@@ -675,6 +792,41 @@ def execute_task(task, args, base_sha, batch, image, app, secret, barrier=None):
             else:
                 report["status"] = "failed"
                 recovery_errors.append("patch_missing")
+            if args.command == "run":
+                try:
+                    raw_supervision = json.loads((directory / "supervision.json").read_text())
+                    report["supervision"] = supervision_summary(raw_supervision, task, base_sha, run_id,
+                        args.timeout, getattr(args, "no_progress_timeout", None))
+                    if (type(report["agent_exit"]) is int and report["agent_exit"] >= 0
+                            and report["supervision"]["wrapper_exit_code"] is not None
+                            and report["agent_exit"] != report["supervision"]["wrapper_exit_code"]):
+                        raise ValueError("Agent exit differs from the supervision receipt")
+                    progress.supervision(report["supervision"])
+                    if report["supervision"]["checkpoint_failures"]:
+                        report["supervision_error"] = "checkpoint_failed"
+                    if (report["status"] == "validated" and
+                            report["supervision"]["terminal_reason"] != "child_exited"):
+                        report["status"] = "needs_repair"
+                except (OSError, ValueError, TypeError, RecursionError):
+                    report["supervision_error"] = "unavailable_or_invalid"
+                if report.get("supervision_error") and report["status"] == "validated":
+                    report["status"] = "needs_recovery"
+            if report["acceptance_configured"] and args.command == "run" and report["acceptance_exit"] is not None:
+                try:
+                    accepted = json.loads((directory / "acceptance.json").read_text())
+                    if (not isinstance(accepted, dict) or accepted.get("configured") is not True
+                            or accepted.get("source") != "frozen_task_commands"
+                            or accepted.get("checks_sha256") != hashlib.sha256(
+                                json.dumps(acceptance_commands(task), sort_keys=True).encode()).hexdigest()
+                            or type(accepted.get("exit_code")) is not int
+                            or accepted.get("exit_code") != report["acceptance_exit"]
+                            or type(accepted.get("inputs_unchanged")) is not bool):
+                        raise ValueError("invalid task acceptance receipt")
+                    report["acceptance_inputs_unchanged"] = accepted["inputs_unchanged"]
+                    if not accepted["inputs_unchanged"]:
+                        report["status"] = "rejected"
+                except (OSError, ValueError, TypeError, RecursionError):
+                    recovery_errors.append("acceptance_evidence_unavailable")
             if report["status"] in {"validated", "smoke_passed"}:
                 for required in (
                     "changes.json",
@@ -702,6 +854,7 @@ def execute_task(task, args, base_sha, batch, image, app, secret, barrier=None):
             report.setdefault("recovery_errors", []).append("progress_checkpoint_failed")
             if report["status"] in {"validated", "smoke_passed"}:
                 report["status"] = "needs_recovery"
+        report["recovered_candidate"] = recovered_candidate(report)
         usage = []
         events = directory / "agent.jsonl"
         if events.exists():
@@ -739,6 +892,8 @@ def main():
     parser.add_argument(
         "--timeout", type=int, default=300, help="agent time limit in seconds, 30–1800; default 300"
     )
+    parser.add_argument("--no-progress-timeout", type=int,
+                        help="Explicitly stop after this many seconds without an observed owned-source change (30–coding limit); default warns only")
     parser.add_argument("--model", help="explicit OpenAI model ID for a real agent run")
     parser.add_argument("--environment")
     parser.add_argument(
@@ -773,6 +928,8 @@ def main():
         project.verify_origin()
     if not 30 <= args.timeout <= 1800:
         parser.error("pilot timeout must be between 30 and 1800 seconds")
+    if args.no_progress_timeout is not None and not 30 <= args.no_progress_timeout <= args.timeout:
+        parser.error("--no-progress-timeout must be between 30 seconds and the coding limit")
     if args.command == "run" and not args.model:
         parser.error("run requires --model")
     tasks = [load_task(task) for task in args.tasks]
@@ -814,12 +971,18 @@ def main():
         ["git", "rev-parse", "--verify", f"{args.base}^{{commit}}"], cwd=ROOT, text=True
     ).strip()
     args.context_packets = build_context_packets(tasks, base_sha, args.context_mode, timeout=args.timeout)
+    context_readiness = build_context_readiness(tasks, project, base_sha, args.context_mode,
+                                              packets=args.context_packets)
     plan = {
         "repository": project.repository,
         "base_sha": base_sha,
         "run_id": args.run_id,
         "context_mode": args.context_mode,
         "context_packets": {task_id: packet["metadata"] for task_id, packet in args.context_packets.items()},
+        "context_readiness": context_readiness,
+        "supervision_policy": {"coding_limit_seconds": args.timeout,
+                               "no_progress_timeout_seconds": args.no_progress_timeout,
+                               "automatic_retries": 0},
         "tasks": [task["id"] for task in tasks],
         "task_states": {task["id"]: task.get("status", "ready") for task in tasks},
         "live_execution_enabled": project.live_enabled,
