@@ -142,16 +142,20 @@ state are not yet a globally distributed control service.
 | [workspace.py](../swarm_control/workspace.py) | Private repository registry, frozen run drafts, sealed history and explicit CLI launch |
 | [dashboard.py](../swarm_control/dashboard.py) | Loopback evidence, CSRF-protected setup and explicit background controller operations |
 | [onboarding.py](../swarm_control/onboarding.py) | Durable setup jobs, provider/repository actions and exact CLI previews |
+| [planning.py](../swarm_control/planning.py) | Budget-reserved repository/goal model planning, bound human review and durable issue/task materialization |
+| [planning_context.py](../swarm_control/planning_context.py) | Bounded tracked-source selection, credential exclusion and source drift bindings |
 | [connections.py](../swarm_control/connections.py) | Personal local `.env`, session overrides and explicit provider verification |
 | [source_bundle.py](../swarm_control/source_bundle.py) | Frozen private source delivery without controller credentials in coding VMs |
 | [progress.py](../swarm_control/progress.py) | Safe worker phase/event observations, with unknown remote termination causes preserved |
 
 ## What remains outside this implementation
 
-Automatic backlog decomposition, peer-to-peer coordination, distributed leases,
+Peer-to-peer coordination, distributed leases,
 autonomous conflict repair and unattended semantic
 review remain future work. The local dashboard supports repository/run selection,
-draft preparation and historical evidence. Larger cohorts and clean shared-file
+draft preparation, budgeted AI backlog proposals and historical evidence. AI plans
+require human review and separate approval before issue/task creation; installation,
+deployment, launch and semantic integration remain explicit actions. Larger cohorts and clean shared-file
 integration have offline coverage; their real scale and throughput still need
 evidence. The [scaling roadmap](SCALING.md) and [benchmark protocol](contest/BENCHMARK.md)
 explain how to evaluate them.

@@ -7,9 +7,13 @@ starts use the same command. The installed CLI offers `swarm-control start`;
 
 Workspace mode connects prepared local repositories, checks plans, saves drafts
 and accepts an explicit, confirmed run request through the ordinary controller
-gates. Its **Setup** dialog adds personal `.env` and provider connections,
-clone/fork, project/task preparation, reviewed publication, authorized budget
-changes and explicit deployment. Keep the server terminal open during active
+gates. **Settings** holds personal `.env` and provider connections. **Projects**
+handles clone/fork and local folders. **Plan work** proposes reviewed AI tasks
+from a goal. **Project settings** holds preparation, publication, execution
+allowances and deployment. **New run** configures work; **Runs** lists history.
+Workers, changes, costs and evidence belong to the selected run's detail tabs.
+URLs preserve the selected project/run and support refresh and browser history.
+Navigation only reads local state. Keep the server terminal open during active
 operations. Code review and merge remain explicit operator decisions. See
 [browser setup](SETUP.md), [repositories and run history](RUNS.md) or the
 [local quickstart](QUICKSTART.md).
@@ -153,7 +157,7 @@ have distinct fields. An unconfirmed invoice is never displayed as billed cost.
 The backend accepts at most 8 MiB of JSON and 1,000 unique task rows. It projects
 an explicit field allowlist; raw logs, arbitrary input fields, secrets, account
 payloads and local paths are not forwarded. Links are restricted to the selected
-GitHub repository. The HTTP interface exposes the page, its two bundled assets,
+GitHub repository. The HTTP interface exposes the page, its bundled assets,
 an empty favicon response, `/api/catalog`, `/api/snapshot`, and `/api/health`. Write methods are
 rejected. Host and
 Origin checks, a restrictive Content Security Policy, no-store responses and no

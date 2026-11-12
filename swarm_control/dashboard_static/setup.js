@@ -4,13 +4,14 @@
   const dialog = byId('setup-dialog'), mount = byId('setup-root');
   if (!dialog || !mount) return;
   const state = {csrf: null, available: false, busy: false, step: 0, path: '', repository: '', projectId: null,
-    connections: {}, jobs: new Map(), publishBinding: null, publishPath: null,
+    connections: {}, jobs: new Map(), jobContexts: new Map(), selectionVersion: 0, applicationSelectionKey: '', bindingVersion: 0, routeVersion: 0, boundProjectId: null, bindingProjectId: null, bindingFlight: null, publishBinding: null, publishPath: null,
     cliBinding: null, cliCommand: null, drafts: [], polling: new Set(), runtimeOverrides: new Map()};
   const steps = ['Accounts', 'Repository', 'Project profile', 'Tasks', 'Check & publish', 'Budget & deploy', 'CLI controls'];
   const titles = {'github.configure': 'Connect GitHub', 'modal.configure': 'Connect Modal',
     'openai.configure': 'Create OpenAI secret', 'environment.configure': 'Save personal .env', 'connections.verify': 'Verify connection',
     'tools.install-github': 'Install GitHub CLI', 'repository.retarget': 'Retarget fork profile',
     'repository.inspect': 'Inspect local repository', 'repository.clone': 'Clone repository', 'repository.connect': 'Connect prepared project',
+    'planning.inspect': 'Inspect repository for planning', 'planning.generate': 'Generate AI work plan', 'planning.apply': 'Prepare approved AI plan', 'planning.get': 'Inspect retained plan', 'repository.select': 'Select project configuration',
     'project.initialize': 'Create project profile', 'tasks.import': 'Import issue drafts',
     'tasks.save': 'Save task', 'tasks.create-issue': 'Create GitHub issue', 'preparation.preview': 'Review preparation changes',
     'preparation.publish': 'Commit and push preparation', 'project.check': 'Run project checks',
@@ -28,7 +29,7 @@
   };
   const check = (id, label, required = false, checked = false) => `<label class="setup-check" for="setup-${id}"><input id="setup-${id}" type="checkbox" ${required ? 'required' : ''} ${checked ? 'checked' : ''}><span>${label}</span></label>`;
   const submit = (label, quiet = false) => `<button class="button ${quiet ? 'button-quiet' : 'button-primary'}" data-setup-submit type="submit">${label}</button>`;
-  const pathContext = '<p class="setup-path-context">Selected local project: <strong data-setup-path>No folder selected yet. Choose one in Repository.</strong></p>';
+  const pathContext = '<p class="setup-path-context">Selected local project: <strong data-setup-path>No folder selected yet. Add one in Projects.</strong></p>';
   const review = (id, label) => check(id, label, true);
   const persistent = (id) => check(id, 'Remember in a private plaintext file on this computer. Uncheck to keep it only for this server session.', false, true);
   mount.innerHTML = `
@@ -39,12 +40,12 @@
     <section id="setup-panel-0" role="tabpanel" aria-labelledby="setup-tab-0"><h3>Connect your own accounts</h3><p class="setup-lead">GitHub stores your code, Modal runs the workers, and OpenAI supplies the model. Existing terminal authentication can be checked without entering new keys.</p>
       <article class="setup-card"><div class="setup-card-title"><h4>GitHub</h4><span class="setup-provider-status" data-setup-provider="github">Not checked</span></div><p class="setup-copy">Use an account with access to your repository. Cloning reads code; forking and publishing write to GitHub.</p><button type="button" class="setup-secondary" data-setup-verify="github" data-setup-submit>Verify existing GitHub login</button><details class="setup-disclosure"><summary>Connect with a GitHub token</summary><form id="setup-github-form" class="setup-form">${field('github-token', 'GitHub token', {type: 'password'})}${persistent('github-persist')}<div class="setup-actions">${submit('Connect GitHub')}</div></form></details></article>
       <article class="setup-card"><div class="setup-card-title"><h4>Modal</h4><span class="setup-provider-status" data-setup-provider="modal">Not checked</span></div><p class="setup-copy">Connect the Modal workspace that will host your gateway and worker machines.</p><button type="button" class="setup-secondary" data-setup-verify="modal" data-setup-submit>Verify existing Modal login</button><details class="setup-disclosure"><summary>Connect with a Modal token pair</summary><form id="setup-modal-form" class="setup-form">${field('modal-id', 'Modal token ID', {type: 'password'})}${field('modal-secret', 'Modal token secret', {type: 'password'})}${persistent('modal-persist')}<div class="setup-actions">${submit('Connect Modal')}</div></form></details></article>
-      <article class="setup-card"><div class="setup-card-title"><h4>OpenAI model key</h4><span class="setup-provider-status" data-setup-provider="openai">Not checked</span></div><p class="setup-copy">The gateway reads your key from a named Modal Secret. Your project stores the secret name, never the key.</p><button type="button" class="setup-secondary" data-setup-verify="openai" data-setup-submit>Verify configured secret</button><details class="setup-disclosure"><summary>Create the Modal Secret from an OpenAI key</summary><form id="setup-openai-form" class="setup-form">${field('openai-key', 'OpenAI API key', {type: 'password'})}<div class="setup-grid">${field('secret-name', 'Modal Secret name', {value: 'swarm-control-openai'})}${field('secret-environment', 'Modal environment', {value: 'main'})}</div>${check('secret-replace', 'Replace an existing secret with this name. Leave unchecked to preserve it.')}${review('secret-confirm', 'I want to create this secret in my connected Modal workspace.')}<div class="setup-actions">${submit('Create Modal Secret')}</div></form></details></article>
+      <article class="setup-card"><div class="setup-card-title"><h4>Worker gateway secret</h4><span class="setup-provider-status" data-setup-provider="openai">Not checked</span></div><p class="setup-copy">Create the model secret used by this project’s worker gateway. Review the name and environment against its profile before deployment.</p><button type="button" class="setup-secondary" data-setup-verify="openai" data-setup-submit>Verify configured secret</button><details class="setup-disclosure"><summary>Create the Modal Secret from an OpenAI key</summary><form id="setup-openai-form" class="setup-form">${field('openai-key', 'OpenAI API key', {type: 'password'})}<div class="setup-grid">${field('secret-name', 'Modal Secret name', {value: 'swarm-control-openai'})}${field('secret-environment', 'Modal environment', {value: 'main'})}</div>${check('secret-replace', 'Replace an existing secret with this name. Leave unchecked to preserve it.')}${review('secret-confirm', 'I want to create this secret in my connected Modal workspace.')}<div class="setup-actions">${submit('Create Modal Secret')}</div></form></details></article>
       <p class="setup-help">Configured means credentials are present. Verified means an explicit connection check succeeded; it does not verify API quota, billing or permission for every future action. Password fields clear after submission.</p>
     </section>
     <section id="setup-panel-1" role="tabpanel" aria-labelledby="setup-tab-1" hidden><h3>Choose where your project lives</h3><p class="setup-lead">The folder is on the computer running Easy Run. Keep your application in its own folder, separate from Swarm Control.</p>
-      <article class="setup-card"><h4>I already have a local repository</h4><form id="setup-inspect-form" class="setup-form">${field('local-path', 'Full local folder path', {placeholder: '/home/you/projects/my-app', help: 'Use a Git checkout, not a ZIP folder or a GitHub URL. In WSL, use a Linux path such as /mnt/c/Users/you/my-app.'})}<div class="setup-actions">${submit('Inspect and select folder')}</div></form><dl id="setup-repository-facts" class="setup-facts" hidden></dl></article>
-      <article class="setup-card"><h4>Download a repository from GitHub</h4><form id="setup-clone-form" class="setup-form">${field('clone-repository', 'GitHub owner/repository', {placeholder: 'your-account/your-project'})}${field('clone-destination', 'New local folder', {placeholder: '/home/you/projects/my-app', help: 'Choose a new folder. An existing folder will not be overwritten.'})}${check('clone-fork', 'Create my own GitHub fork before cloning')}${field('fork-owner', 'Fork owner or organization', {required: false, placeholder: 'Optional: defaults to your account'})}${review('clone-confirm', 'I reviewed the repository and destination. If fork is selected, create that repository in my GitHub account.')}<div class="setup-actions">${submit('Clone selected repository')}</div></form></article>
+      <article class="setup-card"><h4>I already have a local repository</h4><form id="setup-inspect-form" class="setup-form">${field('local-path', 'Full local folder path', {placeholder: '/home/you/projects/my-app', help: 'Use a Git checkout with a GitHub origin, not a ZIP folder. In WSL, use a Linux path such as /mnt/c/Users/you/my-app.'})}<div class="setup-actions">${submit('Inspect and select folder')}</div></form><dl id="setup-repository-facts" class="setup-facts" hidden></dl></article>
+      <article class="setup-card"><h4>Download a repository from GitHub</h4><form id="setup-clone-form" class="setup-form">${field('clone-repository', 'GitHub URL or owner/repository', {placeholder: 'https://github.com/your-account/your-project'})}${field('clone-destination', 'New local folder', {placeholder: '/home/you/projects/my-app', help: 'Choose a new folder. An existing folder will not be overwritten.'})}${check('clone-fork', 'Create my own GitHub fork before cloning')}${field('fork-owner', 'Fork owner or organization', {required: false, placeholder: 'Optional: defaults to your account'})}${review('clone-confirm', 'I reviewed the repository and destination. If fork is selected, create that repository in my GitHub account.')}<div class="setup-actions">${submit('Clone selected repository')}</div></form></article>
     </section>
     <section id="setup-panel-2" role="tabpanel" aria-labelledby="setup-tab-2" hidden><h3>Tell the workers how your project works</h3><p class="setup-lead">Create a local <code>swarm.toml</code> profile with the actual install and test commands for your project. Existing configuration is preserved by the server.</p>${pathContext}
       <form id="setup-project-form" class="setup-form"><div class="setup-grid">${field('project-repository', 'GitHub owner/repository', {placeholder: 'your-account/your-project'})}${field('base-branch', 'Base branch', {value: 'main'})}</div><label class="setup-field" for="setup-command-preset"><span>Command starting point</span><select id="setup-command-preset"><option value="custom">Choose your actual commands</option><option value="node">Node · npm ci / npm run check</option><option value="python">Python · pip install / unittest</option></select><small>These are starting points. Review them against your own repository before running.</small></label>${field('install', 'Install commands · argument arrays', {textarea: true, value: '[["npm", "ci", "--no-audit", "--no-fund"]]', help: 'JSON list of argument lists. Each command runs directly, without a shell.'})}${field('checks', 'Check commands · argument arrays', {textarea: true, value: '[["npm", "run", "check"]]', help: 'Use your real tests, lint and type checks. A command returning nonzero fails validation.'})}<div class="setup-grid">${field('instructions', 'Instruction files · one path per line', {textarea: true, value: 'README.md\nAGENTS.md', help: 'Paths relative to your project. The server checks that they exist.'})}${field('required-checks', 'Required GitHub Actions check names', {textarea: true, value: 'checks', help: 'One exact check name per line.'})}</div><details class="setup-disclosure"><summary>Worker image and gateway settings</summary><div class="setup-form">${field('image', 'Worker image', {value: 'node:24.6.0-bookworm-slim'})}<div class="setup-grid">${field('project-secret', 'Modal Secret name', {value: 'swarm-control-openai'})}${field('project-environment', 'Modal environment', {value: 'main'})}${field('gateway-app', 'Gateway application', {value: 'swarm-control-gateway'})}${field('worker-app', 'Worker application', {value: 'swarm-control-workers'})}${field('gateway-concurrency', 'Gateway concurrent requests', {type: 'number', value: '20', attributes: 'min="1" max="100" step="1"'})}</div></div></details><p class="setup-warning">This creates a disabled local profile with zero allowance. Set an authorized cumulative allowance separately in Budget &amp; deploy.</p>${review('project-confirm', 'I reviewed these commands and instructions for this repository.')}<div class="setup-actions">${submit('Create local project profile')}</div></form>
@@ -66,7 +67,6 @@
       <article class="setup-card"><h4>Build a command</h4><div class="setup-form"><label class="setup-field" for="setup-cli-operation"><span>Operation</span><select id="setup-cli-operation"><option value="analyze">Analyze dependencies</option><option value="preflight">Check run preparation</option><option value="plan">Plan selected tasks</option><option value="ops status">Inspect operational status</option></select></label><div class="setup-grid">${field('cli-tasks', 'Task IDs · optional for analysis', {required: false, placeholder: 'T01, T02'})}${field('cli-workers', 'Concurrent agents', {type: 'number', value: '2', attributes: 'min="1" max="100" step="1"'})}</div>${field('cli-base', 'Base ref', {value: 'origin/main'})}<div class="setup-actions"><button id="setup-build-command" class="button button-quiet" type="button">Use this command</button><button id="setup-open-builder" class="button button-quiet" type="button">Open run builder</button></div></div></article>
       <form id="setup-cli-preview-form" class="setup-form">${field('cli-command', 'Swarm Control command', {textarea: true, rows: 3, placeholder: 'swarm-control analyze --project /path/to/project/swarm.toml', help: 'Enter a supported controller command. Configure tokens in Accounts, never in this field.'})}<div class="setup-actions">${submit('Preview command')}</div></form><div id="setup-cli-review" hidden><pre id="setup-cli-argv" class="setup-command" aria-label="Reviewed command arguments"></pre><form id="setup-cli-execute-form" class="setup-form">${review('cli-confirm', 'I reviewed these exact arguments and authorize their stated side effects and any configured cost.')}<div class="setup-actions">${submit('Execute reviewed command')}</div></form></div><pre id="setup-cli-output" class="setup-command" aria-live="polite" hidden></pre>
     </section>
-    <div class="setup-footer"><button id="setup-back" class="button button-quiet" type="button">Back</button><span id="setup-step-count">Step 1 of 7</span><button id="setup-next" class="button button-primary" type="button">Next step</button></div>
     </div></div>
     <details class="setup-history"><summary>Setup activity · local operation history</summary><ul id="setup-jobs" class="setup-job-list"><li class="setup-empty">No setup operations recorded yet.</li></ul><p class="setup-help">Mapped arguments and outcomes only. Credential values and private command logs are not shown here. An uncertain operation must be inspected before trying again.</p></details>`;
 
@@ -80,8 +80,9 @@
   createIssueCard.innerHTML = '<h4>Need a new GitHub issue?</h4><p class="setup-copy">Write the task title and implementation request above, then create its issue. This writes to the selected GitHub repository and fills the issue number below.</p>' + check('create-issue-confirm', 'Create a GitHub issue using the current task title and implementation request.') + '<div class="setup-actions"><button id="setup-create-issue" class="button button-quiet" data-setup-submit type="button">Create GitHub issue from this task</button></div>';
   byId('setup-task-prompt').closest('label').after(createIssueCard);
   const environmentCard = element('article', 'setup-card');
-  environmentCard.innerHTML = '<div class="setup-card-title"><h4>Your personal local .env</h4><span class="setup-provider-status">Private to this computer</span></div><p class="setup-copy">Each person uses their own accounts and keys. Import a local .env file, or enter keys below. The server saves it with private permissions outside every Git repository. It is never committed or pushed to GitHub.</p><p id="setup-env-location" class="setup-help">The private .env location will appear when the local server provides it.</p><form id="setup-env-form" class="setup-form">' + field('env-file', 'Choose your .env file', {type: 'file', required: false, attributes: 'accept=".env,text/plain" data-setup-secret'}) + '<details class="setup-disclosure"><summary>Or enter individual keys</summary><div class="setup-form">' + field('env-github', 'GH_TOKEN · optional', {type: 'password', required: false}) + field('env-modal-id', 'MODAL_TOKEN_ID · optional', {type: 'password', required: false}) + field('env-modal-secret', 'MODAL_TOKEN_SECRET · optional', {type: 'password', required: false}) + field('env-openai', 'CODEX_API_KEY · optional', {type: 'password', required: false}) + '</div></details><p class="setup-help">Supported keys: GH_TOKEN, MODAL_TOKEN_ID, MODAL_TOKEN_SECRET and CODEX_API_KEY (OPENAI_API_KEY is also accepted). Saving here does not upload a key to Modal; use Create Modal Secret below when you choose to deploy.</p>' + review('env-confirm', 'Save these credentials only in my private local .env file.') + '<div class="setup-actions">' + submit('Save my local .env') + '</div></form>';
+  environmentCard.innerHTML = '<div class="setup-card-title"><h4>Your personal local .env</h4><span class="setup-provider-status">Private to this computer</span></div><p class="setup-copy">Each person uses their own accounts and keys. Import a local .env file, or enter keys below. The server saves it with private permissions outside every Git repository. It is never committed or pushed to GitHub.</p><p id="setup-env-location" class="setup-help">The private .env location will appear when the local server provides it.</p><form id="setup-env-form" class="setup-form">' + field('env-file', 'Choose your .env file', {type: 'file', required: false, attributes: 'accept=".env,text/plain" data-setup-secret'}) + '<details class="setup-disclosure"><summary>Or enter individual keys</summary><div class="setup-form">' + field('env-github', 'GitHub token (GH_TOKEN) · optional', {type: 'password', required: false}) + field('env-modal-id', 'Modal token ID (MODAL_TOKEN_ID) · optional', {type: 'password', required: false}) + field('env-modal-secret', 'Modal token secret (MODAL_TOKEN_SECRET) · optional', {type: 'password', required: false}) + field('env-openai', 'OpenAI API key (CODEX_API_KEY) · optional', {type: 'password', required: false}) + '</div></details><p class="setup-help">Supported keys: GH_TOKEN, MODAL_TOKEN_ID, MODAL_TOKEN_SECRET and CODEX_API_KEY (OPENAI_API_KEY is also accepted). Saving here enables local planning without uploading the key to Modal. Create a worker secret separately in Project settings → Execution allowance.</p>' + review('env-confirm', 'Save these credentials only in my private local .env file.') + '<div class="setup-actions">' + submit('Save my local .env') + '</div></form>';
   byId('setup-panel-0').querySelector('.setup-lead').after(environmentCard);
+  const modelKeyHelp=element('p','setup-help');const modelKeyLink=element('a','','Create an OpenAI API key');modelKeyLink.href='https://platform.openai.com/api-keys';modelKeyLink.target='_blank';modelKeyLink.rel='noopener noreferrer';modelKeyHelp.append(modelKeyLink,document.createTextNode(' · Use your own account’s API key to generate work plans.'));environmentCard.querySelector('.setup-copy').after(modelKeyHelp);
   const toolsCard = element('article', 'setup-card');
   toolsCard.innerHTML = '<h4>Tools on this computer</h4><p id="setup-tools-status" class="setup-copy">Checking local Git, Python and GitHub CLI availability…</p><form id="setup-install-github-form" class="setup-form" hidden><p class="setup-copy">GitHub CLI is needed to verify your GitHub account, manage issues and publish changes. Install a private copy from the official release without administrator access.</p>' + review('install-github-confirm', 'Download and install the official GitHub CLI release for this computer. No sudo or system-wide change.') + '<div class="setup-actions">' + submit('Install GitHub CLI locally') + '</div></form>';
   environmentCard.before(toolsCard);
@@ -121,6 +122,7 @@
   }
   function feedback(message, error = false) {
     const target = byId('setup-feedback'); target.textContent = message; target.dataset.error = String(error);
+    const repositoryFeedback=byId('repository-feedback');if(repositoryFeedback){repositoryFeedback.textContent=message;repositoryFeedback.dataset.error=String(error);}
   }
   function value(id) {return byId('setup-' + id).value.trim();}
   function checked(id) {return byId('setup-' + id).checked;}
@@ -137,9 +139,9 @@
     return state.path;
   }
   function selectPath(path, repository, recommendations = {}, configuredRuntime = {}) {
-    if (typeof path === 'string' && path.length <= 4096) {if (state.path !== path) state.projectId = null; state.path = path;}
+    if (typeof path === 'string' && path.length <= 4096) {if (state.path !== path) {state.projectId = null;state.boundProjectId=null;} state.path = path;}
     if (typeof repository === 'string') state.repository = repository;
-    for (const node of document.querySelectorAll('[data-setup-path]')) node.textContent = state.path || 'No folder selected yet. Choose one in Repository.';
+    for (const node of document.querySelectorAll('[data-setup-path]')) node.textContent = state.path || 'No folder selected yet. Add one in Projects.';
     if (state.path) byId('setup-local-path').value = state.path;
     if (state.repository) {
       byId('setup-project-repository').value = state.repository;
@@ -159,21 +161,14 @@
     state.cliBinding = null; byId('setup-cli-review').hidden = true;
   }
   function updateButtons() {
-    for (const button of mount.querySelectorAll('[data-setup-submit]')) button.disabled = !state.available || !state.csrf || state.busy;
-    byId('setup-back').disabled = state.step === 0;
+    for(const button of document.querySelectorAll('[data-setup-submit]')) button.disabled=!state.available||!state.csrf||state.busy;
+    window.dispatchEvent(new CustomEvent('swarm:setup-status',{detail:{available:state.available,busy:state.busy,connections:state.connections}}));
   }
-  function showStep(index, focus = false) {
-    state.step = Math.max(0, Math.min(steps.length - 1, index));
-    steps.forEach((_, position) => {
-      const active = position === state.step, tab = byId('setup-tab-' + position);
-      tab.setAttribute('aria-selected', String(active)); tab.tabIndex = active ? 0 : -1;
-      byId('setup-panel-' + position).hidden = !active;
-    });
-    byId('setup-step-count').textContent = 'Step ' + (state.step + 1) + ' of ' + steps.length;
-    byId('setup-next').textContent = state.step === steps.length - 1 ? 'Return to workspace' : 'Next step →';
-    updateButtons();
-    dialog.scrollTop = 0;
-    if (focus) byId('setup-tab-' + state.step).focus();
+  function showStep(index,focus=false,fromRoute=false) {
+    state.step=Math.max(0,Math.min(steps.length-1,index));
+    steps.forEach((_,position)=>{const active=position===state.step,tab=byId('setup-tab-'+position);tab.setAttribute('aria-selected',String(active));tab.tabIndex=active?0:-1;byId('setup-panel-'+position).hidden=!active;});
+    if(!fromRoute){const route=state.step===0?'settings':state.step===1?'projects':'project-settings';window.SwarmNavigation?.navigate(route,{step:['','','profile','tasks','checks','budget','advanced'][state.step]});}
+    updateButtons();if(focus&&state.step>=2)byId('setup-tab-'+state.step).focus();
   }
   async function request(path, options = {}) {
     const controller = new AbortController(), timer = setTimeout(() => controller.abort(), 15000);
@@ -188,6 +183,7 @@
     state.connections = data && typeof data === 'object' ? data : {};
     for (const name of ['github', 'modal', 'openai']) {
       const source = state.connections[name] || {}, target = mount.querySelector('[data-setup-provider="' + name + '"]');
+      if(name==='openai'&&source.verified===true&&(source.secret_name!==value('secret-name')||source.environment!==value('secret-environment'))){target.dataset.state='unknown';target.textContent='Selected project secret not verified · last verified: '+redact(source.secret_name||'another secret');continue;}
       const status = source.verified === true ? 'verified' : source.configured === true ? 'configured' : 'unknown';
       target.dataset.state = status; target.textContent = status === 'verified' ? 'Verified' : status === 'configured' ? 'Configured · not verified' : 'Not verified';
       if (name === 'openai' && source.verified === true && source.api_key_verified === false) target.textContent = 'Modal Secret verified · model key not tested';
@@ -201,7 +197,7 @@
   }
   function errorMessage(error) {
     const code = typeof error === 'string' ? error : error && (error.code || error.message);
-    const mapped = {COMMAND_ARRAYS: 'Enter commands as JSON argument arrays, for example [["npm", "run", "check"]].', PROJECT_PATH: 'Select a local repository folder in the Repository step first.',
+    const mapped = {COMMAND_ARRAYS: 'Enter commands as JSON argument arrays, for example [["npm", "run", "check"]].', PROJECT_PATH: 'Select a local repository folder in Projects → Add repository first.',
       ISSUE_NUMBERS: 'Enter positive issue numbers separated by commas.', BUDGET: 'Enter exact dollar amounts with at most two decimal places.', CLI_CHANGED: 'The command changed after preview. Preview the new command before execution.',
       PUBLISH_PREVIEW: 'Preview the preparation changes for this selected folder before publishing.', HTTP_403: 'The local session expired or this request is unavailable. Refresh setup before trying again.',
       config_exists: 'This repository already has a project profile. It was preserved; inspect it rather than creating another.',
@@ -239,8 +235,13 @@
       facts: safeFacts(job.result), error: job.error ? errorMessage({code: job.error_code}) : null};
   }
   function renderJobs() {
-    const target = byId('setup-jobs'); target.replaceChildren();
-    const jobs = [...state.jobs.values()].slice(-20).reverse();
+    const jobs=[...state.jobs.values()].filter(job=>!job.action.startsWith('planning.')).slice(-20).reverse();
+    renderJobList(byId('setup-jobs'),jobs);
+    renderJobList(byId('repository-jobs'),jobs.filter(job=>job.action.startsWith('repository.')));
+  }
+  function renderJobList(target,jobs) {
+    if(!target)return;
+    target.replaceChildren();
     if (!jobs.length) {target.append(element('li', 'setup-empty', 'No setup operations recorded yet.')); return;}
     for (const job of jobs) {
       const item = element('li', 'setup-job'), heading = element('div', 'setup-job-heading');
@@ -278,23 +279,34 @@
     }
   }
   function uuid() {return crypto.randomUUID().replaceAll('-', '');}
-  async function action(name, options) {
-    if (state.busy || !state.csrf || !state.available) {feedback('Wait for the current operation or reopen setup to refresh the local session.', true); return;}
-    const requestId = uuid();
-    const body = JSON.stringify({action: name, options, confirmed: true, request_id: requestId});
-    for (const input of mount.querySelectorAll('[data-setup-secret]')) input.value = '';
-    state.busy = true; updateButtons(); feedback((titles[name] || 'Operation') + ' requested. Waiting for the local server…');
+  async function action(name,options) {
+    if(state.busy||!state.csrf||!state.available){const error=new Error('Wait for the active operation or refresh the controller session.');feedback(error.message,true);return {ok:false,error};}
+    const requestId=uuid(),selectionVersion=state.selectionVersion;
+    const body=JSON.stringify({action:name,options,confirmed:true,request_id:requestId});
+    for(const input of mount.querySelectorAll('[data-setup-secret]'))input.value='';
+    state.busy=true;updateButtons();feedback((titles[name]||'Operation')+' requested.');
+    let raw=null;
     try {
-      const data = await request('/api/setup/action', {method: 'POST', body});
-      const job = safeJob(data.job, name); state.jobs.set(job.id, job); renderJobs();
-      if (terminal.has(job.status)) await finishJob(data.job, name);
-      else {feedback((titles[name] || 'Operation') + ' is ' + job.status + '. You can inspect its progress in Setup activity.'); pollJob(job.id, name);}
-    } catch (error) {
-      const uncertain = !error.status;
-      state.jobs.set(requestId, {id: requestId, action: name, status: uncertain ? 'uncertain' : 'failed', requested_at: '', facts: [], error: uncertain ? 'The response was lost. Inspect local operation history before submitting this action again; it may already have started.' : errorMessage(error)});
-      renderJobs(); feedback(uncertain ? 'The request outcome is unknown. Reopen setup to inspect recorded history before trying again.' : errorMessage(error), true);
-      state.busy = false; updateButtons();
-    }
+      const data=await request('/api/setup/action',{method:'POST',body});raw=data.job;
+      let job=safeJob(raw,name);state.jobContexts.set(job.id,selectionVersion);state.jobs.set(job.id,job);state.polling.add(job.id);renderJobs();
+      let failures=0;
+      while(!terminal.has(job.status)){
+        await new Promise(resolve=>setTimeout(resolve,800));
+        try{const next=await request('/api/setup/job?id='+encodeURIComponent(job.id));raw=next.job||next;job=safeJob(raw,name);state.jobs.set(job.id,job);renderJobs();failures=0;}
+        catch(error){if(++failures>=5){const uncertain=new Error('The operation outcome is unknown. Inspect its recorded request before retrying.');uncertain.code='operation_uncertain';uncertain.result=raw?.result;uncertain.job_id=job.id;state.polling.delete(job.id);throw uncertain;}}
+      }
+      // The job may have become terminal just before its serving thread exits.
+      // Observe the read-only busy gate before enabling another explicit action.
+      let idle=false;
+      for(let index=0;index<25;index+=1){const status=await request('/api/setup');if(status.busy!==true){idle=true;break;}await new Promise(resolve=>setTimeout(resolve,200));}
+      if(!idle){const error=new Error('The operation is still finalizing. Inspect its recorded result before repeating it.');error.code='operation_uncertain';error.job_id=job.id;throw error;}
+      const final=await request('/api/setup/job?id='+encodeURIComponent(job.id));raw=final.job||final;job=safeJob(raw,name);state.jobs.set(job.id,job);
+      state.polling.delete(job.id);await finishJob(raw,name);
+      if(!['finished','succeeded','completed'].includes(job.status)){const error=new Error(errorMessage({code:raw.error_code}));error.code=raw.error_code;error.result=raw.result;error.job_id=job.id;return {ok:false,error,job:raw};}
+      return {ok:true,result:raw.result||{},job:raw};
+    }catch(error){
+      const uncertain=!error.status;state.jobs.set(requestId,{id:requestId,action:name,status:uncertain?'uncertain':'failed',requested_at:'',facts:[],error:uncertain?'The request may have started. Inspect operation history before repeating it.':errorMessage(error)});renderJobs();feedback(error.message||'Operation unavailable.',true);return {ok:false,error};
+    }finally{state.busy=false;updateButtons();}
   }
   function pollJob(id, name) {
     if (state.polling.has(id)) return;
@@ -316,6 +328,8 @@
     state.busy = false; updateButtons();
     if (!['finished', 'succeeded', 'completed'].includes(job.status)) {feedback(errorMessage({code: job.error_code}), true); return;}
     const result = job.result && typeof job.result === 'object' ? job.result : {};
+    if(name.startsWith('planning.')){feedback((titles[name]||'Planning operation')+' completed.');await refreshSetup(true);return;}
+    if(state.jobContexts.get(job.id)!==state.selectionVersion){feedback('A background operation completed. Its recorded result is available in activity.');return;}
     if (!['cli.preview'].includes(name)) {state.cliBinding = null; byId('setup-cli-review').hidden = true;}
     if (['tasks.save', 'project.configure-budget', 'project.check', 'repository.retarget', 'project.initialize'].includes(name)) {state.publishBinding = null; byId('setup-publish-review').hidden = true;}
     if (['repository.inspect', 'repository.clone', 'project.initialize', 'repository.retarget'].includes(name)) {
@@ -326,6 +340,7 @@
     }
     const connectedId = result.connection?.project_id || result.project_id;
     if (typeof connectedId === 'string') state.projectId = connectedId;
+    if(['repository.inspect','repository.clone','repository.connect','project.initialize','repository.retarget'].includes(name)){state.selectionVersion+=1;window.dispatchEvent(new CustomEvent('swarm:repository-selected',{detail:{path:state.path,repository:state.repository,project_id:state.projectId}}));}
     if (name === 'tasks.import') renderDrafts(result.drafts || result.tasks || []);
     if (name === 'tasks.create-issue' && Number.isInteger(result.number) && result.number > 0) {
       byId('setup-task-issue').value = String(result.number); byId('setup-create-issue-confirm').checked = false;
@@ -343,7 +358,7 @@
     if (name === 'preparation.publish') {state.publishBinding = null; byId('setup-publish-review').hidden = true;}
     const failed = result.checks_passed === false || Number.isInteger(result.exit_code) && result.exit_code !== 0;
     feedback((titles[name] || 'Operation') + (failed ? ' returned a failed check or nonzero exit code. Review its recorded outcome below.' : ' completed. Review its recorded outcome below.'), failed);
-    if (!['cli.preview', 'preparation.preview'].includes(name)) window.dispatchEvent(new CustomEvent('swarm:setup-changed', {detail: {project_id: state.projectId}}));
+    if(['repository.connect','project.initialize','repository.retarget','tasks.save','project.configure-budget','preparation.publish'].includes(name))window.dispatchEvent(new CustomEvent('swarm:setup-changed',{detail:{project_id:state.projectId}}));
     await refreshSetup(true);
   }
   function renderRepositoryFacts(result) {
@@ -503,25 +518,112 @@
     byId('setup-' + formId).addEventListener('input', (event) => {if (event.target.id !== 'setup-' + confirmation) byId('setup-' + confirmation).checked = false;});
   }
   byId('setup-clone-fork').addEventListener('change', () => {byId('setup-clone-form').querySelector('[type="submit"]').textContent = checked('clone-fork') ? 'Create fork and clone' : 'Clone selected repository'; byId('setup-clone-confirm').checked = false;});
-  byId('setup-open-builder').addEventListener('click', () => {closeSetup(); window.dispatchEvent(new CustomEvent('swarm:setup-run', {detail: {project_id: state.projectId}}));});
-  function closeSetup() {try {localStorage.setItem('swarm.setup.dismissed.v1', 'true');} catch { /* A blocked preference store does not block setup. */ } dialog.close();}
-  byId('setup-close').addEventListener('click', closeSetup);
-  dialog.addEventListener('close', () => document.body.classList.remove('setup-is-open'));
-  dialog.addEventListener('cancel', () => {try {localStorage.setItem('swarm.setup.dismissed.v1', 'true');} catch { /* Optional preference only. */ }});
-  byId('setup-back').addEventListener('click', () => showStep(state.step - 1, true));
-  byId('setup-next').addEventListener('click', () => state.step === steps.length - 1 ? closeSetup() : showStep(state.step + 1, true));
-  for (let index = 0; index < steps.length; index += 1) {
-    const tab = byId('setup-tab-' + index); tab.addEventListener('click', () => showStep(index));
-    tab.addEventListener('keydown', (event) => {
-      const movement = {ArrowDown: 1, ArrowRight: 1, ArrowUp: -1, ArrowLeft: -1};
-      if (event.key in movement) {event.preventDefault(); showStep((state.step + movement[event.key] + steps.length) % steps.length, true);}
-      else if (['Home', 'End'].includes(event.key)) {event.preventDefault(); showStep(event.key === 'Home' ? 0 : steps.length - 1, true);}
-    });
+
+  function clearSecrets() {for(const input of mount.querySelectorAll('[data-setup-secret]'))input.value='';}
+  function closeSetup(){clearSecrets();window.SwarmNavigation?.navigate('projects');}
+  byId('setup-close').addEventListener('click',closeSetup);
+  for(let index=2;index<steps.length;index+=1)byId('setup-tab-'+index).dataset.projectStep=['','','profile','tasks','checks','budget','advanced'][index];
+
+  const repositoryPanel=byId('setup-panel-1');repositoryPanel.removeAttribute('role');repositoryPanel.removeAttribute('aria-labelledby');
+  repositoryPanel.querySelector('h3')?.remove();repositoryPanel.querySelector('.setup-lead')?.remove();
+  const sourceTabs=element('div','screen-tabs');sourceTabs.setAttribute('role','tablist');sourceTabs.setAttribute('aria-label','Repository source');
+  const localForm=byId('setup-inspect-form'),localCard=localForm.closest('article'),githubCard=byId('setup-clone-form').closest('article');
+  const localPane=element('section','repository-source');localPane.id='repository-local-source';localPane.append(localForm);
+  githubCard.id='repository-github-source';githubCard.classList.add('repository-source');
+  for(const [name,label,pane] of [['github','GitHub URL',githubCard],['local','Local folder',localPane]]){
+    const button=element('button','button button-quiet',label);button.id='repository-source-'+name;button.type='button';button.setAttribute('role','tab');button.setAttribute('aria-controls',pane.id);pane.setAttribute('role','tabpanel');pane.setAttribute('aria-labelledby',button.id);
+    button.addEventListener('click',()=>{for(const candidate of [githubCard,localPane])candidate.hidden=candidate!==pane;for(const tab of sourceTabs.querySelectorAll('button'))tab.setAttribute('aria-selected',String(tab===button));});sourceTabs.append(button);
   }
-  function openSetup() {if (!dialog.open) dialog.showModal(); document.body.classList.add('setup-is-open'); refreshSetup();}
-  byId('setup-open')?.addEventListener('click', openSetup);
-  window.addEventListener('swarm:open-setup', openSetup);
-  showStep(0);
-  let dismissed = false; try {dismissed = localStorage.getItem('swarm.setup.dismissed.v1') === 'true';} catch { /* Setup remains available without storage. */ }
-  if (!dismissed) openSetup();
+  repositoryPanel.prepend(sourceTabs,githubCard,localPane);localPane.hidden=true;sourceTabs.firstElementChild.setAttribute('aria-selected','true');
+  const facts=byId('setup-repository-facts');if(localCard.contains(facts))repositoryPanel.append(facts,connectPrepared);localCard.remove();
+  byId('repository-source-host').append(repositoryPanel);
+  const repositoryFeedback=element('p','setup-feedback');repositoryFeedback.id='repository-feedback';repositoryFeedback.setAttribute('role','status');repositoryFeedback.setAttribute('aria-live','polite');repositoryPanel.prepend(repositoryFeedback);
+  const repositoryHistory=element('details','setup-history');repositoryHistory.innerHTML='<summary>Repository operation history</summary><ul id="repository-jobs" class="setup-job-list"></ul>';repositoryPanel.append(repositoryHistory);
+  sourceTabs.addEventListener('keydown',event=>{
+    if(!['ArrowLeft','ArrowRight','Home','End'].includes(event.key))return;
+    const tabs=[...sourceTabs.querySelectorAll('[role="tab"]')],index=tabs.indexOf(event.target);if(index<0)return;
+    event.preventDefault();const next=event.key==='Home'?0:event.key==='End'?tabs.length-1:(index+(event.key==='ArrowRight'?1:-1)+tabs.length)%tabs.length;
+    tabs[next].click();tabs[next].focus();
+  });
+  const selectedActions=element('div','screen-actions');
+  const planButton=element('button','button button-primary','Plan work for this repository');planButton.id='setup-start-planning';planButton.type='button';planButton.disabled=true;
+  planButton.addEventListener('click',()=>window.SwarmNavigation?.navigate('plan'));
+  const manual=element('button','button button-quiet','Configure manually');manual.type='button';manual.addEventListener('click',()=>showStep(2));selectedActions.append(planButton,manual);repositoryPanel.append(selectedActions);
+  const originalRenderFacts=renderRepositoryFacts;
+  renderRepositoryFacts=function(result){originalRenderFacts(result);planButton.disabled=!state.path;};
+  const gatewayCard=byId('setup-openai-form').closest('article');byId('setup-panel-5').querySelector('article').before(gatewayCard);
+  gatewayCard.querySelector('[data-setup-verify="openai"]').textContent='Verify last configured secret';
+  for(const id of ['secret-name','secret-environment'])byId('setup-'+id).addEventListener('input',()=>{byId('setup-secret-confirm').checked=false;connectionStatus(state.connections);});
+  byId('setup-panel-0').querySelector('h3').textContent='Accounts and local credentials';
+  byId('setup-panel-0').querySelector('.setup-lead').textContent='These accounts belong to this controller. The local OpenAI key powers planning; each project’s worker gateway secret is configured under its execution settings.';
+  byId('setup-github-form').closest('article').querySelector('.setup-copy').textContent='Use your own token with access to this repository. AI planning requires a saved or session token and verified identity so issue creation uses the account you reviewed. Existing terminal login remains available for manual operations.';
+  const tabLabels=['Accounts','Repository','Profile','Tasks','Checks & publish','Execution allowance','Advanced tools'];
+  mount.querySelector('.setup-steps').setAttribute('aria-orientation','horizontal');
+  steps.forEach((_,index)=>{const tab=byId('setup-tab-'+index);tab.replaceChildren(document.createTextNode(tabLabels[index]));if(index<2)tab.hidden=true;});
+  const blocked=element('div','screen-empty');blocked.id='setup-project-unavailable';blocked.hidden=true;blocked.innerHTML='<h2>Select a project to configure</h2><p>Choose a connected project in the header, or add a repository in Projects and generate its work plan.</p>';
+  mount.querySelector('.setup-layout').before(blocked);
+  byId('setup-close').textContent='Done';byId('setup-close').className='button button-quiet';byId('setup-close').setAttribute('aria-label','Return to Projects');
+
+  async function bindProject(projectId){
+    if(!projectId)return null;
+    if(state.boundProjectId===projectId&&state.path)return selectedRepository();
+    if(state.bindingProjectId===projectId&&state.bindingFlight)return state.bindingFlight;
+    state.bindingProjectId=projectId;
+    state.bindingFlight=loadSelectedProject(projectId);
+    try{return await state.bindingFlight;}finally{if(state.bindingProjectId===projectId){state.bindingProjectId=null;state.bindingFlight=null;}}
+  }
+  async function loadSelectedProject(projectId){
+    const version=++state.bindingVersion;state.selectionVersion+=1;state.boundProjectId=null;state.path='';state.projectId=null;
+    for(const node of document.querySelectorAll('[data-setup-path]'))node.textContent='Loading selected project…';
+    state.publishBinding=null;state.cliBinding=null;byId('setup-publish-review').hidden=true;byId('setup-cli-review').hidden=true;
+    try{
+      const result=await request('/api/setup/project?project='+encodeURIComponent(projectId));
+      if(version!==state.bindingVersion||window.SwarmApplication?.context().projectId!==projectId)throw new Error('Project selection changed.');
+      if(result.project_id!==projectId||typeof result.path!=='string')throw new Error('Selected project configuration is unavailable.');
+      selectPath(result.path,result.repository,result.recommended_runtime,result.configuration?.runtime);state.projectId=projectId;state.boundProjectId=projectId;
+      renderRepositoryFacts(result);
+      const runtime=result.configuration?.runtime;
+      if(runtime?.openai_secret)byId('setup-secret-name').value=runtime.openai_secret;
+      if(runtime?.environment)byId('setup-secret-environment').value=runtime.environment;
+      return selectedRepository();
+    }catch(error){if(version===state.bindingVersion){state.path='';state.projectId=null;feedback('The selected project could not be loaded. Select a usable project or reconnect its repository in Projects.',true);}throw error;}
+  }
+  function selectedRepository(){return {path:state.path,repository:state.repository,projectId:state.projectId};}
+  async function renderRoute(route){
+    if(!route)return;
+    const routeVersion=++state.routeVersion;
+    clearSecrets();
+    const context=window.SwarmApplication?.context();
+    blocked.hidden=true;
+    if(route.screen==='projects'){showStep(1,false,true);return;}
+    if(route.screen==='settings'){mount.querySelector('.setup-layout').hidden=false;byId('setup-title').textContent='Accounts and connections';showStep(0,false,true);await refreshSetup(true);return;}
+    if(route.screen==='project-settings'){
+      byId('setup-title').textContent='Project configuration';
+      if(context?.projectId){try{await bindProject(context.projectId);}catch{blocked.hidden=false;}}
+      else if(!context?.pendingRepository?.path||context.pendingRepository.path!==state.path)blocked.hidden=false;
+      const current=window.SwarmNavigation?.current();
+      if(routeVersion!==state.routeVersion||current?.screen!=='project-settings'||current.step!==route.step||window.SwarmApplication?.context().projectId!==context?.projectId)return;
+      mount.querySelector('.setup-layout').hidden=!blocked.hidden;
+      if(!blocked.hidden)return;
+      showStep({profile:2,tasks:3,checks:4,budget:5,advanced:6}[route.step]||2,false,true);await refreshSetup(true);
+    }
+  }
+  window.addEventListener('swarm:route',event=>renderRoute(event.detail));
+  window.addEventListener('swarm:context',event=>{
+    const context=event.detail;
+    const selectionKey=context.projectId||context.pendingRepository?.path||'';
+    if(selectionKey!==state.applicationSelectionKey){state.applicationSelectionKey=selectionKey;state.selectionVersion+=1;state.publishBinding=null;state.cliBinding=null;byId('setup-publish-review').hidden=true;byId('setup-cli-review').hidden=true;}
+    if(context.projectId&&context.projectId!==state.boundProjectId&&window.SwarmNavigation?.current().screen==='project-settings')renderRoute(window.SwarmNavigation.current());
+    else if(!context.projectId&&!context.pendingRepository?.path&&state.boundProjectId){state.bindingVersion+=1;state.boundProjectId=null;state.path='';state.projectId=null;}
+  });
+  window.addEventListener('swarm:repository-onboarding',()=>{showStep(1,false,true);byId('setup-clone-repository').focus();});
+  window.addEventListener('swarm:open-setup',()=>window.SwarmNavigation?.navigate('settings'));
+  byId('setup-open-builder').addEventListener('click',()=>window.dispatchEvent(new CustomEvent('swarm:setup-run',{detail:{project_id:state.projectId}})));
+  window.SwarmSetup={selectedRepository,bindProject,
+    status:()=>({available:state.available,busy:state.busy,connections:state.connections}),
+    refresh:()=>refreshSetup(true),
+    perform:async(name,options)=>{if(!state.csrf)await refreshSetup(true);const outcome=await action(name,options);if(!outcome.ok)throw outcome.error;return outcome.result;},
+    readJob:id=>request('/api/setup/job?id='+encodeURIComponent(id)),
+    history:()=>request('/api/setup')};
+  refreshSetup(true);renderRoute(window.SwarmNavigation?.current());
 })();
