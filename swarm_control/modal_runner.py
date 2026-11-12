@@ -106,6 +106,11 @@ def load_task(task_id):
     acceptance_commands(task)
     acceptance_files(task)
     validate_task_resources(task)
+    if PROJECT is not None and "issueUrl" in task:
+        issue = task.get("issue")
+        if (type(issue) is not int or issue <= 0
+                or task["issueUrl"] != f"https://github.com/{PROJECT.repository}/issues/{issue}"):
+            raise ValueError(f"{task_id}: issueUrl must name this project's exact issue; rebind foreign fork tasks explicitly")
     return task
 
 
@@ -587,6 +592,9 @@ def execute_task(task, args, base_sha, batch, image, app, secret, barrier=None):
         ],
         **(PROJECT.worker_manifest() if PROJECT else {}),
     }
+    source_bundle = getattr(args, "source_bundle", None)
+    if source_bundle is not None:
+        manifest["source_bundle"] = source_bundle.metadata()
     if args.command == "run":
         manifest.update(agent_command=codex_command(args.model, args.gateway_url), supervision={
             "coding_limit_seconds": args.timeout,
@@ -658,7 +666,11 @@ def execute_task(task, args, base_sha, batch, image, app, secret, barrier=None):
         report.update(sandbox_id=sandbox.object_id, status="preparing")
         write_json(directory / "report.json", report)
         sandbox.filesystem.write_text(json.dumps(manifest), "/tmp/task.json")
-        if helper_step("prepare", "prepare", 240) != 0:
+        preparation_started = time.monotonic()
+        if source_bundle is not None:
+            measured("prepare", source_bundle.upload, sandbox)
+        remaining = max(0, int(240 - (time.monotonic() - preparation_started))) if source_bundle is not None else 240
+        if remaining < 1 or helper_step("prepare", "prepare", remaining) != 0:
             raise RuntimeError("repository setup failed; see install/prepare logs")
         if args.command == "run":
             if barrier is not None:
@@ -892,6 +904,8 @@ def main():
     parser.add_argument("--run-id", help="optional local workspace run identity; not an authorization")
     parser.add_argument("--context-mode", choices=("full", "task"), default="full",
                         help="task mode uses explicit frozen context_files contract excerpts; global rules remain required")
+    parser.add_argument("--source-transport", choices=("github", "bundle"),
+                        help="bundle uploads one exact-base local Git bundle; no GitHub credential reaches workers")
     parser.add_argument(
         "--timeout", type=int, default=300, help="agent time limit in seconds, 30–1800; default 300"
     )
@@ -930,6 +944,7 @@ def main():
     configure(project)
     args.environment = args.environment or project.environment
     args.base = args.base or project.base_ref
+    args.source_transport = args.source_transport or getattr(project, "source_transport", "github")
     if args.command != "plan":
         project.require_live()
         project.verify_origin()
@@ -1019,11 +1034,18 @@ def main():
             "provider_quota_verified": False,
         },
         "mode": args.command,
+        "source_transport": args.source_transport,
     }
     if args.command == "plan":
         plan["local_admission"] = local_admission_summary(tasks, args.workers, project)
         print(json.dumps(plan, indent=2))
         return 0
+    args.source_bundle = None
+    if args.source_transport == "bundle":
+        from .source_bundle import build_source_bundle
+
+        args.source_bundle = build_source_bundle(ROOT, base_sha, common_state(ROOT))
+        plan["source_bundle"] = args.source_bundle.metadata()
     from .operations import OperationsJournal
 
     operations = OperationsJournal(common_state(ROOT) / "operations.sqlite3")
