@@ -69,7 +69,45 @@ while unfinished integration retains an unknown final T1.
 
 ## Screenshots
 
-### Run planning and history
+### Current workspace
+
+Captured on November 13, 2026, in the America/Mexico_City timezone. These are
+browser captures of the shipped interface at controller commit
+[`4a844bb`](https://github.com/slgarza/swarm-control/commit/4a844bba68a2e080ac8b84975cbf77b8c73a5e4b).
+The repository, task, planning and worker data are controlled examples supplied
+by an isolated local fixture. No personal credentials, customer source or local
+account details appear. No model call, deployment or live worker run was made
+to create this gallery. Worker tiles illustrate the layout rather than measured
+agent concurrency or accepted delivery.
+
+**Projects** selects a repository and provides GitHub clone/fork or local-folder
+setup without mixing it with run evidence.
+
+![Current Projects screen with repository selection and setup](images/swarm-projects-2026-11-13.png)
+
+**Plan work** reviews proposed commands, ownership, acceptance and dependencies
+before explicit approval of issue and task preparation.
+
+![Current work-plan review with independent task capacity and commands](images/swarm-plan-review-2026-11-13.png)
+
+**New run** selects ready tasks, concurrent agents and execution limits. Saving
+a reviewed draft is separate from starting workers.
+
+![Current New run screen with selected tasks and execution controls](images/swarm-new-run-2026-11-13.png)
+
+**Run details** keeps workers, changes, costs and evidence with the selected run.
+
+![Current run detail and worker cohort using illustrative records](images/swarm-run-workers-2026-11-13.png)
+
+The same navigation and forms adapt to a narrow browser viewport.
+
+![Current interface at a 390-pixel mobile viewport](images/swarm-mobile-2026-11-13.png)
+
+The [capture receipt](images/swarm-gallery-2026-11-13.json) records source hashes,
+image dimensions, timestamps and browser checks. Private fixtures and raw
+browser activity stay outside the repository.
+
+### Historical: run planning and history, November 11
 
 Captured on November 11, 2026, at 17:24 Mexico City time (23:24 UTC). The
 Afterimage view preserves the original censored pilot observation from 22:23 UTC.
@@ -93,7 +131,7 @@ five image hashes, dimensions, source times and 30 real-browser checks. Earlier
 failed or superseded QA attempts remain accounted for in that receipt; raw
 browser activity and private runtime files remain outside the repository.
 
-### Earlier evidence-only viewer
+### Historical: earlier evidence-only viewer
 
 The following English captures use actual configured data from November 11,
 2026, at 16:11 Mexico City time (22:11 UTC). They are historical views of an
