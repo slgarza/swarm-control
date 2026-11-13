@@ -11,13 +11,19 @@ From an installed controller:
 swarm-control analyze D01 D02 --project /path/to/swarm-demo/swarm.toml --workers 2 --base HEAD
 ```
 
-Pass the prepared cohort's actual task IDs. Omitting IDs inspects the complete
-inventory. To require a frontier for one hundred workers, use a reviewed workload
-with sufficient independent ready tasks:
+Pass the prepared cohort's actual task IDs, or use `--manifest` with a reviewed
+JSON object containing a nonempty `taskIds` array. Do not combine a manifest with
+positional IDs. Omitting both inspects the complete inventory; it does not select
+the entire backlog for a paid run. To require a frontier for one hundred workers,
+use a reviewed workload with sufficient independent ready tasks:
 
 ```sh
 swarm-control analyze --project /path/to/target/swarm.toml --workers 100 --require-parallel 100 --base HEAD
 ```
+
+For a frozen cohort, add `--manifest /path/to/target/swarm/cohort.json` to that
+command. Backlog analysis can succeed while later tasks remain blocked on valid
+prerequisites; an explicit cohort reports those selected-task holds as blockers.
 
 This strict check is preparation evidence. Ordinary source, actual merged
 dependency, issue, budget and provider-capacity gates still apply to execution.
@@ -66,8 +72,18 @@ Examples of workload shapes:
   assume that unmerged prerequisite code exists.
 
 The offline graph supports up to 10,000 definitions, including inventories larger
-than one live cohort. It does not raise the deployed controller/gateway's
-100-worker per-cohort limit, account quota or spending authorization.
+than one live cohort. Task files are limited to 256 KiB each and 32 MiB in total.
+Analysis defaults to 100 requested workers and suggests no more than the requested
+count; the graph can analyze larger hypothetical widths. This does not raise the
+deployed controller/gateway's 100-worker per-cohort limit, account quota or spending
+authorization. `--require-parallel` accepts 1–100 and is an explicit exit-status
+gate for this command. Live runs default that minimum to 100 when 100 workers
+are requested; choosing 100 workers alone does not make this analyzer strict.
+
+The browser's AI planner reuses this analysis on its proposed tasks. Generating a
+proposal requires separate planning authorization, and applying it requires
+reviewed approval to create issues/files. Neither a model proposal nor a passing
+graph is a worker launch. See [AI planning](AI_PLANNING.md).
 
 ## Declare dependencies and resources
 
@@ -151,3 +167,5 @@ cycles and ownership conflicts. Unrelated historical tasks do not invalidate an
 explicitly selected independent cohort. Artifact ambiguity and missing-import
 provider hints can reference inventory tasks outside that selection because those
 relationships are relevant to the selected consumer.
+The inventory still must be readable: malformed JSON, unsafe files or global
+size-limit violations stop inventory loading before graph selection.

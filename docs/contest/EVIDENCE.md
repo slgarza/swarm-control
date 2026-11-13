@@ -5,6 +5,10 @@ aggregates with `swarm-control evidence collect`. Acceptance review, billing
 reconciliation and baseline approval remain external evidence. The exporter does
 not issue a 100-agent certificate.
 
+Workflow reviewed: November 13, 2026. Use [Runs](../RUNS.md) for current screens
+and commands. The historical pilot reports below retain their original dates
+and outcomes; newer product features and offline tests do not update those runs.
+
 ## Capture before dispatch
 
 - Controller commit, model ID, Codex/Modal versions and runtime image identity.
@@ -13,6 +17,12 @@ not issue a 100-agent certificate.
 - Baseline CI result, test/check names and independently reviewed quality criteria.
 - Authorized cumulative budget, prior allocations, run allowance and cost rules.
 - Benchmark start/stop definition, deadline, repetition ID and comparison pairing.
+- If AI planning was used: source/account review binding, explicit model-call
+  authorization, retained planning reservation, apply outcome and actual created
+  issue/task identities. Preserve failed or uncertain preparation attempts too.
+- Independent-frontier analysis, context/instruction hashes and source transport;
+  configured task acceptance commands remain separate from independent product
+  acceptance.
 
 Keep the original target ledger. Cloning a target for an experiment does not
 implicitly authorize a new allowance or erase the prior spending history.
@@ -39,6 +49,12 @@ replace the originals. Timestamps should include timezone and clock source.
 
 ## Where the current controller writes evidence
 
+Planning and worker execution use different private stores. AI planning keeps a
+durable journal beside the workspace registry, outside Git, with its own retained
+reservation and review/apply history. It does not fund workers. Saved run drafts
+and launch-attempt history also belong to the private workspace. See
+[AI planning](../AI_PLANNING.md) and [Runs](../RUNS.md); do not publish either store.
+
 Under the target's ignored `.swarm/` directory:
 
 ```text
@@ -53,6 +69,9 @@ modal-runs/batch-.../
     changes.patch               original recovered code patch
     changes.json                patch hash and scope checks
     checks.log                  final configured checks
+    acceptance.json             configured task-check evidence when present
+    acceptance.log              private configured task-check output
+    supervision.json            observed process stop/checkpoint evidence
     install.log                 dependency preparation
     agent.jsonl                 private agent events
     last-message.txt            worker handoff
@@ -66,6 +85,14 @@ Some files appear only after their stage runs successfully; early failures can
 leave partial evidence. Other budget/probe/integration logs are also written.
 Inspect actual outputs rather than treating this abbreviated tree as a completeness
 guarantee. Git worktrees use the original checkout's common state directory.
+
+The report also records controller-observed phases, original worker outcome and
+any separately attributed recovery candidate. A nonempty interrupted patch is
+not a validated original result. Review of a recovered candidate and independent
+current-base checks remain required. The offline exporter uses its explicit
+artifact allowlist; it does not automatically export every newer receipt listed
+here or certify their completeness. See [supervision](../WORKER_SUPERVISION.md)
+and the [integration pipeline](../INTEGRATION_PIPELINE.md).
 
 The trusted helper bundles only regular JSON files from the worker's
 `.swarm/benchmarks/`: at most 100 receipts, 1 MB each and 5 MB total. Symlinks,

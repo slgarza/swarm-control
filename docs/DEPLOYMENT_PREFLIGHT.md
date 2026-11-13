@@ -27,6 +27,13 @@ ledger's retained/unreserved allowance and cached spend provenance. It also
 reports resource requests/caps and bounded runtime requirements. It does not
 run target install/tests or verify actual provider credentials/quota.
 
+Dependency analysis includes explicit prerequisites, declared artifact relationships
+and bounded source hints. A 100-worker preflight defaults to a required frontier
+of 100; smaller stages can explicitly select `--require-parallel N`. With a
+required minimum, a shortfall or an incomplete existing-source scan fails
+preparation. Future waves still need prerequisite merges and a newly frozen base. See
+[dependency analysis](DEPENDENCIES.md).
+
 For a deliberately longer candidate, add `--timeout 1800`. The unchanged default
 is 300 seconds; the accepted range is 30–1800. The report shows the selected
 coding limit, sandbox lifecycle (`timeout + 900`) and gateway TTL

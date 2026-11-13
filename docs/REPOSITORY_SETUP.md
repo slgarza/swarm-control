@@ -7,8 +7,14 @@ or authorize model spending.
 
 ## Choose a repository
 
+Open **Projects → Add repository**. The **GitHub URL** tab handles clone/fork;
+**Local folder** inspects an existing checkout. After inspection, connect an
+existing profile with **Connect this prepared project to workspace**, use
+**Plan work for this repository**, or choose **Configure manually**.
+
 Use a GitHub `owner/repository` or its exact `https://github.com/owner/repository`
-URL. Choose a destination folder that does not exist yet, inside an existing local
+URL, optionally ending in `.git`. Extra URL paths, queries and fragments are not
+accepted. Choose a destination folder that does not exist yet, inside an existing local
 folder. Other hosts, credential-bearing URLs and Git command options are refused.
 
 Cloning keeps the repository's history, tracked configuration and task bytes.
@@ -79,8 +85,11 @@ before choosing the runtime image or enabling execution.
 Explicit profile updates can change only runtime identity/capacity and the budget
 policy fields. They preserve other sections semantically, while formatting and
 comments may change. The caller must perform any required durable ledger migration
-before updating an existing policy. The setup service never clears or migrates a
-ledger, verifies available account credit or grants runtime admission.
+before updating an existing policy. `RepositorySetup.update_profile` itself never
+migrates a ledger. The browser's **Execution allowance** operation first performs
+any explicitly authorized policy migration through the budget service, then
+writes the reviewed profile. Neither path clears allocations, verifies available
+provider credit or grants runtime admission by itself.
 
 ## Write and review tasks
 
@@ -125,7 +134,9 @@ the repository and a fresh preview; a confirmed retry reuses that commit instead
 of creating another. No automatic retry or force push occurs.
 
 Before profile/task writes, private receipts preserve original hashes and bytes
-outside the target repository. Individual files are replaced atomically. A partial
+under `repository-preparation/` beside the workspace registry. Keep the registry
+and these companion folders outside every Git checkout; the default location
+already does this. Individual files are replaced atomically. A partial
 multi-file write remains held for inspection with its original evidence; another
 action cannot silently overwrite it. These private records and controller
 credentials never enter the preparation publication allowlist.

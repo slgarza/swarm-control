@@ -1,8 +1,8 @@
 # Reviewing a cumulative budget increase
 
-`swarm-control budget` inspects an existing target ledger and prepares a proposed
-policy increase without allocating money or creating resources. Applying an
-increase is a separate, explicit offline operation requiring a reviewed plan and
+`swarm-control budget inspect` reads an existing target ledger; `budget plan`
+prepares a proposed policy increase without allocating money or creating resources.
+Applying an increase is a separate, explicit offline operation requiring a reviewed plan and
 a private receipt of the owner's actual authorization. A plan is not authorization.
 This guide does not approve any increase for Afterimage or another project.
 
@@ -15,7 +15,14 @@ a policy increase on the assumption that reserved amounts were actual bills.
 All operations select the target's root `swarm.toml`. Git worktrees use the
 original checkout's `.swarm/control.sqlite3` and the same dispatcher/integration
 locks. There are no provider calls, gateway deployments, probes, worker launches,
-GitHub writes, allocation refunds or model requests in these commands.
+GitHub writes, allocation refunds or model requests in these migration commands.
+Browser **Project settings → Execution allowance** can coordinate this same
+reviewed migration when an existing policy requires an increase; it does not
+discard past allocations. Its explicit execution-enable checkbox can enable the
+final profile after migration; review that selection separately. The CLI workflow
+below keeps execution disabled. Initial authorized limits can be configured
+directly when no ledger exists. AI planning request reservations are separate from
+this target execution ledger; see [AI planning](AI_PLANNING.md).
 
 ## Inspect and propose without changing the ledger
 

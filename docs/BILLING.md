@@ -5,6 +5,13 @@ The status command is offline: it reads the local policy and previously saved
 provider evidence. It does not query a provider, start a worker, change limits,
 release reservations or enable execution.
 
+This guide covers target execution admission and cached provider cost evidence.
+The browser's **Plan work** records its separate model-request reservation in the
+private workspace planning journal, outside Git. `budget status` does not combine
+those planning records with the target's worker ledger. Preserve both when
+reconciling the full experiment; planning reservations and token usage are not
+provider invoices. See [AI planning](AI_PLANNING.md).
+
 ```sh
 swarm-control budget status --project /path/to/target/swarm.toml
 swarm-control budget status --project /path/to/target/swarm.toml --json

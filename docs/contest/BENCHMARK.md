@@ -7,12 +7,26 @@ The [November 11 real hundred-worker pilot](https://github.com/slgarza/Afterimag
 is an assisted execution/recovery experiment, with all original failures retained;
 it is not the paired AFK comparison specified here.
 
+Reviewed against the controller workflow on November 13, 2026. The 100-worker
+target and paired delivery rates are project benchmark objectives. Organizer
+eligibility, deadlines and cost exemptions need separately verified current
+rules; this protocol does not establish them. Current operation is documented in
+[Runs](../RUNS.md); [Next pilot](../NEXT_PILOT.md) proposes the next experiment.
+
 ## 1. Define the experiment before running it
 
 Freeze a target repository commit, a useful backlog, acceptance criteria, allowed
 tools, required checks and a quality observation window. Give each backlog item
 a stable identity and a reviewed size/scope. Agree on when a change counts as an
 accepted delivery before seeing either system's output.
+
+If using [Plan work](../AI_PLANNING.md), record its explicit source-upload/model
+authorization and retained planning reservation as preparation. Review and apply
+the exact plan, validate and publish the resulting profile/tasks, then freeze the
+new clean source base. Generated ownership, commands and acceptance text require
+review; the model's proposed graph is not proof of semantic independence. Use
+the same finalized task objects for both pipelines, without regenerating the
+baseline's backlog after seeing the swarm result.
 
 Use independent target copies/branches starting at the same commit. Keep the
 language/toolchain, test fixtures, dependency locks, API access, CI capacity and
@@ -32,7 +46,7 @@ small tasks merely to fill a 100-agent launch.
 The baseline is the best practical AFK workflow available at evaluation time,
 selected or accepted by the organizers. It may itself use multiple workers,
 queues, retries and automated review. A deliberately weak single-agent loop does
-not establish superiority over the announcement's baseline.
+not establish superiority over a strong agreed baseline.
 
 Record baseline software/model versions, configuration, resource limits, prompts
 and tuning effort. Give both systems comparable preparation and permitted
@@ -103,8 +117,8 @@ amortization explicitly; show gross usage cost as well as the amount actually
 billed where they differ. Budget reservations and gateway ceilings remain separate
 fields and must not be substituted for invoices.
 
-The announcement's internal-token exemption belongs in a separate cost treatment:
-record which charges qualify, who confirmed that classification and the excluded
+Any organizer-confirmed internal-token exemption belongs in a separate cost
+treatment: record which charges qualify, who confirmed that classification and the excluded
 amount. Report both total economic cost and contest-eligible cost. Do not classify
 all OpenAI usage as exempt simply because the pipeline calls OpenAI.
 
@@ -122,8 +136,9 @@ useful contributions. A worker can legitimately wait on a model or tool during
 active work; an idle container with no task activity does not prove a coding
 agent. Report sampled useful activity separately from process lifetime overlap.
 
-At least 100 agents must perform meaningful work during an overlapping interval
-on the same repository. Hundreds of sequential tasks, idle VMs or three real
+For this project's scale objective, at least 100 agents must perform meaningful
+work during an overlapping interval on the same repository. Hundreds of
+sequential tasks, idle VMs or three real
 agents surrounded by placeholders do not meet that requirement. Preserve missing
 events as evidence gaps and use conservative bounds rather than inventing times.
 
@@ -150,8 +165,8 @@ both rates, interventions, regressions and observed concurrency. Include every
 attempt and the exact versions used. Report uncertainty and exclusions alongside
 the numbers, with links to the underlying sanitized evidence.
 
-An efficiency win requires improvement on **both** announcement metrics while
-meeting scale and quality requirements. If either metric is unknown or the
+An efficiency win under this protocol requires improvement in **both** delivery
+rates while meeting scale and quality requirements. If either metric is unknown or the
 baseline is not comparable, the conclusion remains unproven. Use the
 [evidence template](EVIDENCE.md) and keep projections separate from measurements.
 

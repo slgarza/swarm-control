@@ -48,6 +48,11 @@ out of browser storage, operation history and preparation commits. Uploading an
 OpenAI key to a named Modal Secret is a separate explicit action. Saving settings
 starts no coding agents.
 
+GitHub API/CLI authentication and native Git authentication are separate. Before
+integrating patches, configure authenticated Git on the controller for pushes
+and private fetches. Saving a token in Settings does not install a Git credential
+helper for the integrator. See [source and Git authentication](docs/PRIVATE_REPOSITORIES.md).
+
 ## Interface
 
 **Projects** keeps repository selection and GitHub/local setup together.
@@ -69,15 +74,18 @@ without credentials or cloud resources. Then follow the
 [two-agent walkthrough](docs/TWO_AGENT_WALKTHROUGH.md) to run real workers using
 your own GitHub, Modal and OpenAI accounts and an authorized budget.
 
-This project is being developed toward the Telnyx X Prize: at least 100 useful
-agents working on one real repository, beating a strong AFK pipeline on merged
-green PRs per hour and per dollar. The [first ten-agent pilot](https://github.com/slgarza/Afterimage/blob/main/docs/swarm/pilot10-2026-11-10.md)
-delivered ten reviewed, merged PRs, including one coordinator code repair.
-**The 100-agent requirement and AFK efficiency comparison remain unproven.**
+The scalability objective is at least 100 useful agents working on one real
+repository. Static 100-task planning and the configurable worker cap are shipped;
+useful live concurrency and an efficiency advantage over a strong AFK baseline
+still require measured evidence. See [capacity and remaining proof](#capacity-and-remaining-proof).
 
 ## Documentation
 
-Open a [local evidence dashboard](docs/DASHBOARD.md) with
+Start with the [documentation index](docs/README.md) for the current browser
+and CLI workflows. Dated validation reports and interface history live in the
+[archive](docs/archive/README.md).
+
+For read-only evidence viewing, open the [local dashboard](docs/DASHBOARD.md) with
 `swarm-control dashboard --snapshot /path/to/curated-evidence.json`.
 It shows worker outcomes, separately attributed recovery, PR/CI links and financial
 unknowns. The loopback viewer makes no provider calls or execution/accounting writes.
@@ -104,8 +112,8 @@ unknowns. The loopback viewer makes no provider calls or execution/accounting wr
 | [Spend reporting](docs/BILLING.md) | Provider cost evidence, source freshness and local reservations without invented account balances |
 | [Budget migration](docs/BUDGET_MIGRATION.md) | Read-only proposals and separately authorized cumulative increases preserving every allocation |
 | [Troubleshooting](docs/TROUBLESHOOTING.md) | Setup, budget, worker and integration failures |
-| [Presentation](docs/contest/PRESENTATION.md) | Seven-minute outline, real pilot results and remaining contest requirements |
-| [Target assessment](docs/contest/TARGET-ASSESSMENT.md) | Why Afterimage suits the next collision pilot and what the final benchmark target needs |
+| [Presentation](docs/contest/PRESENTATION.md) | Current capabilities, historical pilot results and benchmark objectives |
+| [Target assessment](docs/contest/TARGET-ASSESSMENT.md) | Dated Afterimage assessment and criteria for a future benchmark target |
 | [Benchmark and evidence](docs/contest/BENCHMARK.md) | Fair AFK comparison; [reporting checklist and template](docs/contest/EVIDENCE.md) |
 
 The interface, guides and example use English. The standalone extraction and
@@ -171,8 +179,9 @@ swarm-control analyze --project /path/to/target/swarm.toml --manifest /path/to/t
 ```
 
 The explicit cohort manifest contains a `taskIds` array. Without task IDs or a
-manifest, analysis inspects the whole backlog (up to 10,000 definitions) and
-suggests at most 100 ready tasks for a separate reviewed run. A chain of 100 tasks
+manifest, analysis inspects the whole backlog (up to 10,000 definitions). With
+the default `--workers 100`, it suggests at most 100 ready tasks for a separate
+reviewed run. A larger analysis request does not raise the live 100-worker cap. A chain of 100 tasks
 has only one initially ready slot; a graph with 100 independent leaves can fill
 100 slots. The report explains cycles, prerequisites, resource/import review
 hints, theoretical waves and scan limits. Static preparation does not establish
@@ -187,8 +196,11 @@ integration preparation can proceed in separate lanes. See the guides above for
 the exact contracts and remaining review gates.
 
 The runner accepts cohorts of up to 100 workers when the target explicitly sets
-that capacity and has an authorized allowance. Defaults remain ten workers and
-disabled live execution. Dispatch is bounded and checkpoints each completed task.
+that capacity and has an authorized allowance. The loader and manual profile
+initializer default to ten agent slots and twenty gateway slots. An AI-created
+profile uses the reviewed worker count for both capacities; new initialized
+profiles have zero allowance and live execution disabled. Existing profiles are
+preserved. Dispatch is bounded and checkpoints each completed task.
 `--allow-overlap` permits declared shared-file work in isolated checkouts; the
 integrator applies patches on the current base, uses three-way application when
 needed, and validates the combined tree. Actual conflicts produce a durable repair
@@ -207,7 +219,7 @@ Profiles can use frozen [source bundles](docs/PRIVATE_REPOSITORIES.md) for priva
 targets without forwarding GitHub credentials to coding workers. Review,
 publication and merge remain explicit; the preparation pipeline does not merge PRs.
 
-Offline tests cover the new capacity, backpressure and collision paths. Real provider
+Offline tests cover capacity, backpressure and collision paths. Real provider
 capacity, useful 100-agent overlap and efficiency remain unproven. The next steps
 are a second real target, measured 25 → 50 → 100 cohorts and the strong AFK comparison
 with separately authorized budgets. See [scaling](docs/SCALING.md).
@@ -234,9 +246,9 @@ isolation and configuration. CI also creates the documented demo in a temporary
 directory, runs its baseline and planner, and verifies disabled execution.
 These checks make no paid model or Modal calls.
 
-## Origin
+## Project history
 
-The controller was extracted from [Afterimage commit 2217882](https://github.com/slgarza/Afterimage/commit/2217882c3d5597bbb92a4ae28bc8a2e02ccedb0b).
-Afterimage remains a separate client project with its original completed tasks,
-private runtime evidence and cumulative budget. The tutorial contains original,
-small Python examples rather than copied application code.
+[Project lineage and dated pilot records](docs/archive/README.md#project-lineage-and-pilot-evidence)
+are preserved separately from current operating instructions. Afterimage is a
+separate client repository; its private source, credentials and runtime evidence
+are not included in this controller.

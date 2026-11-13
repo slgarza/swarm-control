@@ -36,7 +36,7 @@ controller accounts, not an arbitrary application environment inside workers.
 
 **Save my local .env** writes a private `0600` file in the workspace's sibling
 `.connections` directory, outside all Git repositories. The exact location is
-shown in Accounts. With the default workspace it is
+shown in **Settings**. With the default workspace it is
 `~/.config/swarm-control/workspace.json.connections/.env`. It is a plaintext local
 secret file protected by filesystem permissions, not an encrypted vault. Values
 are not returned to HTTP, browser storage, command previews, operation history or
@@ -66,7 +66,8 @@ prove the key's model access, quota or billing status.
 Open **Projects → Add repository**. Choose **GitHub URL** to clone or fork, or
 **Local folder** for an existing Git checkout. Use **Inspect and select folder**
 for that folder. An existing valid
-profile can be registered with **Connect prepared project**. Otherwise enter a
+profile can be registered with **Connect this prepared project to workspace**.
+Otherwise enter a
 GitHub URL or `owner/repository` and an unused local destination to clone it. Selecting
 **Create my own GitHub fork before cloning** creates or verifies your own fork,
 clones that fork as `origin`, and retains the source repository as `upstream`.
@@ -104,18 +105,20 @@ Then open **Review checks and publish**. See [AI planning](AI_PLANNING.md).
 
 ## 4. Manual project profile and task preparation
 
-The following controls are available under **Project settings** if you prefer to
+After inspecting a new repository, choose **Configure manually** to open
+**Project settings → Profile**. The following controls are available if you prefer to
 prepare the profile and tasks yourself. AI-prepared work uses the same profile,
 task, issue and publication contracts.
 
 Select your language's command starting point and review the actual install and
-check commands. Commands are JSON argument arrays, executed directly without a
-shell. Select instruction files, exact GitHub Actions check names, and the same
+check commands. Commands are JSON argument arrays; execution does not add an
+implicit shell. An explicitly listed interpreter can still run scripts, so trust
+the commands before executing them. Select instruction files, exact GitHub Actions check names, and the same
 Modal Secret name/environment selected for this project. Create the local profile; it
 starts with live operations disabled and zero allowance.
 
-Initialization preserves an existing profile and existing instruction files.
-Existing profiles show their actual configured commands for review. New profiles
+Initialization refuses an existing `swarm.toml` and preserves existing instruction
+files. Existing profiles show their actual configured commands for review. New profiles
 use the source-bundle transport so private source can reach workers without
 GitHub credentials. See [private repositories](PRIVATE_REPOSITORIES.md).
 
@@ -132,6 +135,9 @@ where appropriate. Saving a ready task verifies that its real issue is open.
 The editor updates only its own unpublished drafts; published/frozen task files
 stay preserved. Cloned ready tasks with another repository's issue URL remain
 blocked in the run picker until separately reviewed/rebound work is prepared.
+
+Readiness is metadata admission, not proof that the requested behavior has been
+implemented. Coding workers, independent review and CI still have to deliver it.
 
 ## 5. Project settings: checks and publication
 
@@ -156,6 +162,11 @@ worker capacity, up to 100. Existing allocations remain preserved. An increase
 uses the controller's recorded migration workflow; it never resets or refunds a
 ledger. Enabling live operations needs positive allowances and explicit consent.
 Review and publish the resulting profile before preparing a run.
+
+Confirm that the profile's gateway app, Secret name and Modal environment match
+the deployment you intend to use. AI-created profiles size their initial worker
+and gateway limits to the requested agent count; existing profiles keep their
+limits. Those settings do not verify upstream quota or available funds.
 
 Deploy the gateway only through its explicit potentially billed action. The
 returned gateway URL can be used for the separately authorized compatibility
@@ -183,3 +194,5 @@ outcome before reporting completion. Reloading a page does not repeat the action
 Interrupted or unrecorded outcomes remain uncertain after a server restart. Use
 the account/project operation activity and its recorded result before issuing another remote write.
 Keep the terminal open until active setup or agent operations finish.
+Keep a custom `--workspace` registry and its companion private folders outside
+every Git checkout. The default registry location already does this.

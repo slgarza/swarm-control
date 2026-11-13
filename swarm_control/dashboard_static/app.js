@@ -182,7 +182,7 @@
       if (data.project_id !== projectId || !Array.isArray(data.tasks)) throw new Error('PROJECT');
       state.context = data;
       if (!data.configurable) {
-        setText('history-note', 'This repository has historical evidence only. Use Connect repository to add its project configuration and prepare new runs.');
+        setText('history-note', 'This project has recorded history only. Open Projects → Add repository, inspect its local folder and connect the prepared profile before creating a run.');
         return;
       }
       const cap = data.limits?.max_workers;
