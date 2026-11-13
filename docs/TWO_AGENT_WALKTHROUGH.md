@@ -9,6 +9,8 @@ approved allowance. Nothing in this document authorizes spending from someone
 else's account. The checked-in example remains disabled; this walkthrough was
 validated through the local example and offline controller tests, not a new paid
 cohort. The original ten-worker run is documented separately.
+This page uses the CLI path. For the same account, preparation and execution
+boundaries in the browser, follow [browser setup](SETUP.md).
 
 ## 1. Prepare your accounts and target
 
@@ -16,10 +18,13 @@ Requirements: the installed controller with its virtual environment active, Git,
 GitHub CLI, a public target repository you can push to, a Modal workspace, and an
 OpenAI API project with access to `gpt-6.1-sol` and sufficient quota. A ChatGPT
 session is not the credential used by this controller.
+The tutorial deliberately uses direct public GitHub source transport. Private
+repositories use the separately reviewed [bundle transport](PRIVATE_REPOSITORIES.md);
+they still require actual GitHub issues and the ordinary PR/CI gates.
 
 ```sh
-gh auth login
-gh auth setup-git
+gh auth login --hostname github.com
+gh auth setup-git --hostname github.com
 modal setup
 modal profile current
 ```
@@ -27,6 +32,11 @@ modal profile current
 Confirm the workspace in Modal's dashboard, especially if you have multiple
 profiles. The selected workspace and API key determine whose resources are used.
 The controller does not connect to the author's workspace by downloading the code.
+The Git helper is needed for the integrator's native fetch/push operations.
+Saving a GUI GitHub token alone does not install it; browser clone/preparation
+publication use their own per-command helper. Keep the controller CLI account,
+target permissions and any saved/session GUI token aligned. Never put a token
+in a remote URL or copy it into a worker.
 
 Create an empty public GitHub repository, such as `YOUR_USER/swarm-demo`. In the
 local demo folder, set `project.repository` in `swarm.toml` to that exact owner/name
@@ -66,7 +76,8 @@ In your Modal workspace's Secrets panel, create `swarm-demo-openai` in environme
 This variable name is required by the current gateway. The profile's
 `runtime.openai_secret` refers to the secret name, not the key value.
 
-Use the dashboard for this step so the key does not enter the project files or a
+Use Modal's Secrets page, or **Project settings → Execution allowance → Create
+Modal Secret**, so the key does not enter project files or a
 copyable shell command. The gateway receives the real key; workers receive only
 expiring per-task gateway credentials.
 
@@ -111,8 +122,11 @@ git fetch origin main:refs/remotes/origin/main
 swarm-control plan D01 D02 --project swarm.toml --workers 2 --synchronized
 ```
 
-Workers clone the selected remote commit. Unpushed code or instructions are not
-available to them. Planning shows the requested shape; paid admission separately
+The template omits `source_transport`, so it uses the parser's `github` default.
+Workers in this tutorial clone the selected remote commit; unpushed code or
+instructions are not available through that transport. Browser-created profiles
+instead default to `bundle`, which can deliver an exact local commit.
+Local CLI planning shows the requested shape; paid admission separately
 checks issue readiness, dependencies, ownership and remaining allowance.
 
 ## 5. Deploy your gateway and verify compatibility
@@ -197,6 +211,11 @@ patch hash, after D01 has merged. This makes the second candidate include the
 first delivery. Do not have another client merge concurrently. If the base,
 patch or tested tree changes, preserve the original attempt and revalidate; do
 not edit the saved hash or status to make it appear successful.
+If a prepared base advances, use a new private copy of the original worker
+artifacts, without the old `integration.json`, for the fresh preparation attempt.
+Preserve the original candidate and all receipts. Publish/merge also require
+review of the actual applied patch when three-way application was used; see
+[integration preparation](INTEGRATION_PIPELINE.md).
 
 ## 8. Verify the actual requested behavior
 

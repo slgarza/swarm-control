@@ -1,100 +1,88 @@
 # Documentation
 
-Swarm Control is a project-configured controller for coding agents. This guide
-explains the current implementation, how to operate it, and how to evaluate it
-against the Telnyx X Prize requirements. It does not assume access to the author's
-accounts or knowledge of the development conversation.
+These guides describe the shipped Swarm Control dashboard, CLI and controller.
+The documentation audit on November 13, 2026 checked instructions against runtime
+source at `491d09e`. This audit updates guides and inline help without changing
+controller behavior.
+Historical screenshots and validation totals are kept in the [archive](archive/README.md)
+and are not current operating instructions.
 
-## Choose a reading path
+## Start with your project
+
+Run `./easy-run` from the controller checkout, then use **Settings → Projects →
+Plan work → Project settings → New run → Runs**. A saved run has Summary, Workers,
+Changes, Costs and Evidence tabs. Opening a page or selecting a repository does
+not start a model request or coding workers.
 
 | Reader | Start here | Continue with |
 | --- | --- | --- |
-| First-time user | [Easy Run and a local two-task example](QUICKSTART.md) | [Browser setup](SETUP.md), [repositories and runs](RUNS.md), [architecture](ARCHITECTURE.md) |
-| Operator preparing deployment | [Deployment preflight](DEPLOYMENT_PREFLIGHT.md) | [Project settings](PROJECTS.md), [spend reporting](BILLING.md), [operations](OPERATIONS.md) |
-| Operator viewing a run | [Local evidence dashboard](DASHBOARD.md) | [Spend reporting](BILLING.md), [evidence requirements](contest/EVIDENCE.md) |
-| Operator configuring runs | [Repositories and runs](RUNS.md) | [Next-pilot protocol](NEXT_PILOT.md), [deployment preflight](DEPLOYMENT_PREFLIGHT.md) |
-| Operator preparing 100 workers | [Dependencies and independent frontiers](DEPENDENCIES.md) | [Worker supervision](WORKER_SUPERVISION.md), [integration preparation lanes](INTEGRATION_PIPELINE.md) |
-| Operator investigating failures | [Operational feedback](OPERATIONS_SAFETY.md) | [Operations](OPERATIONS.md), [troubleshooting](TROUBLESHOOTING.md) |
-| Operator launching real agents | [Two-agent walkthrough](TWO_AGENT_WALKTHROUGH.md) | [Deployment preflight](DEPLOYMENT_PREFLIGHT.md), [operations](OPERATIONS.md), [troubleshooting](TROUBLESHOOTING.md) |
-| Competition reviewer | [Presentation and current evidence](contest/PRESENTATION.md) | [Target assessment](contest/TARGET-ASSESSMENT.md), [benchmark protocol](contest/BENCHMARK.md), [evidence requirements](contest/EVIDENCE.md) |
-| Contributor | [Architecture](ARCHITECTURE.md) | [Repository contract](../AGENTS.md), [scaling roadmap](SCALING.md), [gateway policy](GATEWAY.md) |
-| GUI contributor | [GUI design](GUI_DESIGN.md) | [Local dashboard](DASHBOARD.md), [browser setup](SETUP.md) |
+| First-time user with a real repository | [Browser setup](SETUP.md) | [AI planning and approval](AI_PLANNING.md), [run configuration](RUNS.md) |
+| User learning without service accounts | [Local quickstart](QUICKSTART.md) | [Architecture](ARCHITECTURE.md), [browser setup](SETUP.md) |
+| User connecting GitHub or personal keys | [Connections](CONNECTIONS.md) | [Repository clone/fork and preparation](REPOSITORY_SETUP.md), [private source](PRIVATE_REPOSITORIES.md) |
+| Operator preparing a profile | [Project reference](PROJECTS.md) | [Preflight](DEPLOYMENT_PREFLIGHT.md), [budgets and billing](BILLING.md) |
+| Operator launching workers | [Run configuration](RUNS.md) | [Two-agent walkthrough](TWO_AGENT_WALKTHROUGH.md), [operations](OPERATIONS.md) |
+| Operator reviewing dependencies or capacity | [Dependencies and independent frontiers](DEPENDENCIES.md) | [Scaling limits](SCALING.md), [worker supervision](WORKER_SUPERVISION.md) |
+| Operator reviewing returned patches | [Integration preparation](INTEGRATION_PIPELINE.md) | [Operations](OPERATIONS.md), [operational holds](OPERATIONS_SAFETY.md) |
+| Operator investigating a failure | [Troubleshooting](TROUBLESHOOTING.md) | [Operational holds](OPERATIONS_SAFETY.md), [budget migration](BUDGET_MIGRATION.md) |
+| Benchmark reviewer | [Current capability and evidence overview](contest/PRESENTATION.md) | [Benchmark protocol](contest/BENCHMARK.md), [evidence schema](contest/EVIDENCE.md), [target assessment](contest/TARGET-ASSESSMENT.md) |
+| Contributor | [Architecture](ARCHITECTURE.md) | [Repository contract](../AGENTS.md), [gateway policy](GATEWAY.md), [GUI design](GUI_DESIGN.md) |
+| Reader viewing the interface | [Current screenshot gallery](DASHBOARD.md#screenshots) | [Dashboard and read-only viewer](DASHBOARD.md) |
 
-## What is available today
+## Current capabilities and boundaries
 
-The controller can plan work, dispatch up to 100 independent Codex workers in Modal
-under an explicitly configured project capacity, retrieve patches, enforce a budget,
-and integrate reviewed changes through GitHub Actions. Defaults remain ten workers
-and disabled execution. Shared ownership is opt-in; clean three-way integration
-reruns combined checks, while actual conflicts require a separate repair attempt.
-The target is a GitHub repository with prepared tasks and validation commands.
-Private source can use a frozen [bundle transport](PRIVATE_REPOSITORIES.md)
-without forwarding GitHub credentials to coding workers.
-Review and integration still require an operator. The local dashboard presents
-curated evidence and links, with explicit project and run selection. Workspace
-mode adds local repository connection, configurable concurrent agents, saved
-drafts, confirmed launch through the existing controller gates and sealed history.
-Easy Run installs and opens this interface. [Browser setup](SETUP.md) configures personal
-accounts and `.env`, clones/forks repositories, prepares task drafts, publishes
-reviewed preparation and exposes CLI operations. [AI planning](AI_PLANNING.md)
-generates dependency-validated work proposals from a repository and goal, with
-explicit model budget and human approval before creating real issues and files.
-Semantic review still requires operator judgment. The [dashboard gallery](DASHBOARD.md#screenshots)
-contains actual English desktop, mobile, task, budget and empty-state captures.
+| Work | Shipped behavior | Separate requirement |
+| --- | --- | --- |
+| Acquire source | Clone/fork a GitHub repository or inspect a local Git checkout | Own GitHub access; an existing local checkout needs a matching GitHub origin |
+| Prepare a work plan | Inspect bounded tracked source, send one explicitly budgeted OpenAI request, validate tasks and dependencies | Review the selected context, commands, ownership, acceptance and plan |
+| Materialize a plan | Explicit approval creates real issues and local task/profile files | Captured verified GitHub account, unchanged source and exact review binding |
+| Execute tasks | Save a draft, then explicitly launch up to 100 workers within the project and gateway limits | Published source where required, own provider setup, authorized model/infrastructure allowance and current capacity |
+| Integrate patches | Prepare reviewed candidates, run checks and publish/integrate through GitHub | Authenticated native Git on the controller, independent semantic review and passing checks on the actual candidate/base |
+| Inspect outcomes | Selected-run configuration, curated evidence, separate cost/reservation fields and private attempt history | Real source observations; missing activity, invoices and acceptance stay unknown |
 
-Read-only dependency analysis handles larger backlogs while preserving the
-100-worker cohort capacity. It reports a conservative ready frontier instead of
-equating total task count with concurrent work. Worker supervision preserves
-observed stop reasons, and configured task acceptance runs beside baseline
-validation. The explicit local integration pipeline can prepare independent
-reviewed candidates concurrently; publication and merge remain separate gates.
+Static dependency analysis can reject cycles, ownership conflicts and an
+insufficient independent frontier. It cannot prove semantic independence or
+useful live concurrency. Supporting 100-task plans is not a measurement of 100
+useful live agents. The controller does not implement an unattended semantic
+reviewer or an AFK comparison product.
 
-The original Afterimage pilot ran ten real workers and merged ten green PRs.
-One delivery needed a coordinator code repair. It did not run 100 agents, test
-shared-file conflict repair, or compare against the strongest AFK pipeline.
-The November 11 hundred-worker pilot observed 100 distinct machines, but its
-original reports were all failures: zero validated deliveries. The screenshot
-gallery records 56 provisional product recoveries and two separate support
-recoveries after operator assistance. Final acceptance, attributable invoices
-and the AFK comparison remain unknown. Machine concurrency does not establish
-100 useful agents or an efficiency advantage.
+The project loader and manual profile initializer default to ten live-agent
+slots; their gateway concurrency default is twenty. The AI planner sets a new
+profile's two capacity fields to the reviewed worker count. New initialized
+profiles have zero execution allowance and live execution disabled. Existing
+profiles and cumulative accounting are preserved. See [project configuration](PROJECTS.md)
+for the exact defaults and required explicit changes.
 
-Persistent operational brakes now hold new admission after shared failures;
-already admitted workers drain normally. Merge actions have durable attempt
-reservations, and CI diagnosis and scaling advice are read-only. These controls
-have offline coverage and were added after that worker cohort; they receive no
-delivery credit in its benchmark and authorize no additional spending.
+## Where state lives
 
-Read-only `preflight` separates checked source preparation from local admission,
-current provider capacity and actual authorization. Its successful exit never
-grants a launch. Optional paired gateway token/request pacing and opt-in longer
-coding sessions have bounded queues/expiry; the default session remains 300
-seconds. Pacing waits and retained reservations are reported separately from
-actual provider spend and useful concurrent contribution.
-
-## Terminology
-
-| Term | Meaning here |
+| Location | Responsibility |
 | --- | --- |
-| Agent | A Codex process using a model, instructions, context and tools to complete one task |
-| Worker / sandbox | The temporary Modal machine hosting that process and its project checkout |
-| Controller | The local program assigning tasks, reserving budget and collecting results |
-| Gateway | The trusted Modal service holding the real OpenAI key and enforcing worker model quotas |
-| Task / ticket | A bounded change with ownership, acceptance criteria and a GitHub issue |
-| Batch / cohort | A set of tasks dispatched together from one base commit |
-| Patch | The exact source changes returned by a worker, before integration |
-| PR | A GitHub pull request proposing those changes |
-| Green | The required checks passed on the exact commit being reviewed |
-| Merged green PR | An accepted delivery incorporated into the target branch after checks |
-| AFK pipeline | A competing workflow that completes the defined workload without ongoing operator help |
+| Controller checkout | Program, interface, CLI, examples and these guides |
+| Target Git checkout | Application code, `swarm.toml`, instructions and task JSON |
+| Personal workspace registry | Connected projects and saved runs; default `~/.config/swarm-control/workspace.json` |
+| Registry companion folders | Connection settings, planning reservations, setup jobs and preparation records |
+| Target's ignored `.swarm/` | Worker accounting, claims, returned patches and private run evidence |
+| Modal | Worker machines and the trusted model gateway |
+| GitHub | Issues, source history, PRs and CI |
 
-## Where information lives
+Keep the registry and its companion folders outside Git; the default location
+does so. Personal credential storage and AI planning enforce their private
+storage checks. A custom registry location does not make every companion file
+safe to commit. Each operator supplies their own keys on their own computer;
+downloading this repository grants no access to the author's accounts. See
+[credential boundaries](CONNECTIONS.md) and [private source transport](PRIVATE_REPOSITORIES.md).
 
-Controller code is in `swarm_control/`. A target repository contains its own
-`swarm.toml`, instructions and task JSON. Its ignored `.swarm/` directory retains
-private runtime evidence and the cumulative SQLite ledger. Git worktrees share
-that original checkout's state. Modal and OpenAI use credentials configured by
-the operator; downloading this repository grants no access to the author's accounts.
+Git worktrees share the original checkout's durable accounting and controller
+locks. Separate clones or hosts do not share those locks automatically.
 
-The tutorials label local-only commands and paid operations separately. The
-checked-in demo always starts with live execution disabled and zero allowance.
+## Maintaining these guides
+
+All current prose, interface instructions, examples and templates use English.
+Proper names, Unicode test inputs and recorded external identifiers are data,
+not translated instructions. Check documented commands against the CLI help and
+actual source before changing them. Match browser control names to the shipped
+interface. Keep examples visibly separate from real run evidence and provider
+invoices.
+
+Use the root [validation commands](../README.md#validation) before publication.
+The [archive](archive/README.md) preserves dated observations and source hashes;
+its earlier workflows must not be copied into a current setup guide.

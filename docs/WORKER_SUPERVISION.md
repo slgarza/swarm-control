@@ -37,9 +37,9 @@ Failures still recover artifacts and terminate the sandbox.
 
 ## Frozen context readiness
 
-Plans and preflight expose the size and digest of required instruction documents,
-prompt sizes, excerpt coverage and configured task acceptance. Documents are read
-once per readiness call from regular Git objects at the exact selected base;
+CLI task plans and preflight expose the size and digest of required instruction
+documents, prompt sizes, excerpt coverage and configured task acceptance.
+Documents are read once per readiness call from regular Git objects at the exact selected base;
 lazy fetching and replacement objects are disabled. Source text and absolute
 paths are excluded from the public readiness metadata. Token counts remain
 unknown until actually measured. Large payloads and missing task selectors are

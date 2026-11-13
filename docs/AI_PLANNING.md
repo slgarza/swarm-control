@@ -10,7 +10,8 @@ coding agents, deploy infrastructure or integrate patches.
 
 1. Select a local Git checkout, or a registered project with an available profile.
    Inspection reads bounded local metadata and source. It makes no provider call,
-   runs no repository code and creates no planning records.
+   runs no repository code and creates no planning budget reservation or target
+   files. The browser action still records its local setup job.
 2. Save a personal OpenAI key in Settings and explicitly verify the intended
    GitHub account with a controller-captured token (saved, session or supplied in
    `GH_TOKEN`/`GITHUB_TOKEN`). Token-less ambient GitHub CLI login remains
@@ -20,6 +21,7 @@ coding agents, deploy infrastructure or integrate patches.
 3. Enter a goal, an upper limit of 1–100 tasks, 1–100 desired concurrent workers
    and a separate planning allowance. Explicit generation confirmation authorizes
    uploading the selected, scrubbed source context and one bounded model call.
+   Desired concurrent agents should not exceed the maximum task count.
 4. Review the complete plan, proposed command argument arrays, ownership,
    acceptance criteria, dependencies and reported limitations. A graph error or
    insufficient independent frontier blocks application. A serial chain is not
@@ -28,6 +30,9 @@ coding agents, deploy infrastructure or integrate patches.
    disabled, zero-budget profile, actual GitHub issues and new ready task files.
    Existing profiles, their limits and commands, and existing/frozen task files
    are preserved. Prerequisites are saved before their consumers.
+   New profiles set worker and gateway capacity to the requested agent count,
+   while existing profiles keep their limits and may need a separate capacity
+   review before launch.
 6. Check the preparation through the existing local validation action, review
    and publish its exact file binding, then use New run. Agent launch, authorized
    worker budgets, deployment, independent integration checks and GitHub review
@@ -50,8 +55,9 @@ credential-looking assignments are scrubbed. Untracked regular source is hashed
 for local drift detection but is not uploaded as model context. Large lock files
 can bind the source identity without being selected as excerpts.
 Credential-bearing filenames are excluded from both the public inventory and
-outbound paths. This filter preserves the existing local source binding. A repository
-identity containing credential-looking text is rejected before any model call.
+outbound paths. This filter preserves the existing local source binding. A
+repository identity containing credential-looking text is rejected before any
+model call.
 
 Repository text is treated as untrusted data in the fixed controller prompt.
 No repository instructions become model tools or controller permissions. Git
@@ -83,6 +89,12 @@ at most 32,768 output tokens, the existing conservative `gpt-6.1-sol` rates
 ($2.50 input and $10 output per million) and 10% margin. The requested allowance
 must cover this bound. Inspection advertises a worst-case goal-size bound;
 generation calculates the actual request's bound.
+
+This is a per-request planning allowance, not a shared worker balance or provider
+account cap. For a registry named `workspace.json`, the journal is stored in the
+sibling `workspace.planning/` directory. Keep it and its binding key: a missing
+journal or key with remaining records fails closed rather than resetting spend
+authorization.
 
 The endpoint is `https://api.openai.com/v1/responses`, with strict JSON-schema
 output, `store: false` and `service_tier: default`. Connect/write/pool timeouts

@@ -18,7 +18,7 @@ operations. Code review and merge remain explicit operator decisions. See
 [browser setup](SETUP.md), [repositories and run history](RUNS.md) or the
 [local quickstart](QUICKSTART.md).
 
-The legacy evidence-only modes described below remain read-only.
+The `--snapshot` and `--catalog` modes described below are read-only viewers. Workspace mode supports the explicit operations described above.
 
 The evidence viewer shows a selected, curated snapshot in a browser. It reads
 local JSON and serves local assets. It does not start workers, change a budget,
@@ -30,7 +30,15 @@ identifies a recorded execution or evidence source for it. Selecting either
 changes the view. Launching workers remains an explicit controller operation with
 its own budget and authorization gates.
 
-## Project selection
+## Workspace selection and read-only catalogs
+
+In workspace mode, choose **Projects → Add repository** to clone/fork a GitHub
+repository or inspect a local Git folder. The project selector applies to Plan
+work, New run and Project settings. Open **Runs**, then a run, to inspect its
+Summary, Workers, Changes, Costs or Evidence. Historical-only projects require a
+matching local profile before they can prepare new work.
+
+### Read-only catalog
 
 Use an explicit catalog to register several local projects:
 
@@ -56,9 +64,10 @@ swarm-control dashboard --catalog /path/to/local-catalog.json --port 8787
 }
 ```
 
-Relative snapshot paths resolve against the catalog directory. Paths stay on the
-server and are never sent to the browser. The catalog is loaded at startup;
-snapshot contents are reread on refresh. Restart to change registered projects.
+Relative snapshot paths resolve against the catalog directory. Snapshot paths stay on the
+server and are not returned by the evidence API. The catalog is loaded at startup;
+snapshot contents are reread on refresh. Restart this read-only catalog viewer to load a different catalog. Workspace
+registration uses the separate live registry and its Projects controls.
 The legacy `--snapshot` option still exposes one selected project/run.
 
 Projects without evidence show an empty state, with no previous project's metrics
@@ -107,50 +116,9 @@ The [capture receipt](images/swarm-gallery-2026-11-13.json) records source hashe
 image dimensions, timestamps and browser checks. Private fixtures and raw
 browser activity stay outside the repository.
 
-### Historical: run planning and history, November 11
+Earlier interface captures are preserved in the [historical gallery](archive/DASHBOARD_HISTORY.md). They are not current operating instructions.
 
-Captured on November 11, 2026, at 17:24 Mexico City time (23:24 UTC). The
-Afterimage view preserves the original censored pilot observation from 22:23 UTC.
-The planner and draft views use the actual local two-task example repository;
-three distinct planning drafts were saved and no agents were deployed. Its
-remote is an example address, not a verified live benchmark target. Missing
-cost, execution and acceptance fields remain unknown.
-
-![Repository selector and historical observation](images/dashboard-run-history-2026-11-11.png)
-
-![Configurable concurrent agents, tasks and plan](images/dashboard-run-planner-2026-11-11.png)
-
-![Saved run configuration and separate history entries](images/dashboard-run-saved-2026-11-11.png)
-
-![Run planning at 390 pixels](images/dashboard-run-mobile390-2026-11-11.png)
-
-![Run planning at 320 pixels](images/dashboard-run-mobile320-2026-11-11.png)
-
-The [capture receipt](images/dashboard-run-gallery-2026-11-11.json) includes all
-five image hashes, dimensions, source times and 30 real-browser checks. Earlier
-failed or superseded QA attempts remain accounted for in that receipt; raw
-browser activity and private runtime files remain outside the repository.
-
-### Historical: earlier evidence-only viewer
-
-The following English captures use actual configured data from November 11,
-2026, at 16:11 Mexico City time (22:11 UTC). They are historical views of an
-incomplete pilot, with 100 original failed workers, 56 provisional product
-recoveries and two separate supporting recoveries. Actual invoices and final
-quality remain unknown. The empty view uses this public controller repository;
-private project names, local paths, credentials and raw logs are excluded.
-The [capture receipt](images/dashboard-gallery-2026-11-11.json) records image
-dimensions, SHA-256 hashes, the source timestamp and seven browser checks.
-
-![Project and run selection](images/dashboard-workspace-overview-2026-11-11.png)
-
-![Original outcome, review and repair evidence](images/dashboard-task-detail-2026-11-11.png)
-
-![Reserved budget and unknown actual cost](images/dashboard-budget-evidence-2026-11-11.png)
-
-![English mobile project selector](images/dashboard-workspace-mobile-2026-11-11.png)
-
-![Registered project with no run evidence](images/dashboard-workspace-empty-2026-11-11.png)
+## Read-only snapshot viewer
 
 From an installed checkout:
 
@@ -163,15 +131,6 @@ to stop the server. The default port is 8787. The server binds to loopback; it
 has no command-line option to expose it on another interface. Choose a curated
 snapshot explicitly rather than a worker log, ledger, report directory, or
 credentials file.
-
-![Local dashboard showing the recorded hundred-worker pilot](images/dashboard-pilot100-2026-11-11.png)
-
-English view from November 11, 2026, at 20:53 UTC: 100 original failed
-reports, 56 provisional product recoveries, two separate support recoveries and
-unknown actual billing. This is a
-historical capture while integration was still running, rather than a final
-result or a hosted dashboard. The panel was built separately after the worker
-cohort; it receives no feature credit in that cohort.
 
 The page rereads the selected file through `/api/snapshot`; it does not collect
 new run evidence. Its source timestamp and stale indicator describe the
@@ -195,12 +154,12 @@ have distinct fields. An unconfirmed invoice is never displayed as billed cost.
 The backend accepts at most 8 MiB of JSON and 1,000 unique task rows. It projects
 an explicit field allowlist; raw logs, arbitrary input fields, secrets, account
 payloads and local paths are not forwarded. Links are restricted to the selected
-GitHub repository. The HTTP interface exposes the page, its bundled assets,
-an empty favicon response, `/api/catalog`, `/api/snapshot`, and `/api/health`. Write methods are
-rejected. Host and
-Origin checks, a restrictive Content Security Policy, no-store responses and no
+GitHub repository. In these read-only modes, the interface exposes the page, bundled assets,
+`/api/catalog`, `/api/snapshot`, `/api/session` and `/api/health`, plus an empty
+favicon response. Write methods are rejected. Workspace mode adds the guarded
+setup, project, run and launch APIs. Host and Origin checks, a restrictive Content Security Policy, no-store responses and no
 CORS support keep the viewer local and read-only.
-Top-level navigation to the public page works when following a link from another
+Top-level navigation to the viewer page works when following a link from another
 site; that exception does not expose the snapshot API to cross-site requests.
 
 ## Curated input
@@ -233,9 +192,11 @@ the source file is the adapter's responsibility, outside this controller viewer.
 Run the focused checks from the controller checkout:
 
 ```sh
-python -m unittest tests.test_dashboard tests.test_dashboard_catalog tests.test_dashboard_selection -v
+python -m unittest tests.test_dashboard tests.test_dashboard_catalog tests.test_dashboard_selection tests.test_dashboard_workspace tests.test_gui_setup tests.test_planning_http tests.test_navigation -v
 ```
 
 These tests use synthetic curated data and temporary local HTTP servers. They
 exercise projection, qualification, unknown costs, malformed input, source
-read-only behavior, route limits and HTTP protections without paid resources.
+read-only behavior, explicit workspace mutations, source/account bindings, route
+limits and HTTP protections without paid resources. Node.js 24 is needed for
+the routing contract tests. See the root [validation instructions](../README.md#validation).

@@ -114,6 +114,9 @@ unqualified dependencies and overlapping in-flight ownership, and recommends
 quarantine after an explicitly observed wait limit. It does not rerun workflows,
 repair code or mutate GitHub. Every changed base still needs validation before
 integration. See [the next-pilot protocol](NEXT_PILOT.md) for the input schema.
+To explicitly execute independent local preparation lanes, use
+[`integrate-queue --execute`](INTEGRATION_PIPELINE.md). The advisory `ops queue-plan`
+command itself runs no target checks and prepares no candidate worktree.
 
 ## Offline verification
 
@@ -126,7 +129,8 @@ python -m unittest tests.test_health tests.test_ci_health tests.test_operations 
 ```
 
 These tests make no paid model, cloud or GitHub calls.
-The [November 11 validation receipt](evidence/controller-operations-2026-11-11.json)
-records the full 332-test controller run, Ruff, Python compilation, JavaScript
-syntax validation and source hashes. Local results do not replace GitHub checks
-on the published commit.
+The historical [November 11 validation receipt](evidence/controller-operations-2026-11-11.json)
+records 332 tests, Ruff, Python compilation, JavaScript syntax validation and
+source hashes for that earlier revision. It is not the current suite total or
+validation of later changes. Local results do not replace GitHub checks on the
+published commit.

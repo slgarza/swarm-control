@@ -8,6 +8,12 @@ Live commands require an explicitly enabled, funded policy and existing provider
 authentication. Project secret names reference Modal secrets containing CODEX_API_KEY;
 real model/GitHub credentials never reach the coding workers.
 
+The browser's **Plan work** is a separate workflow: repository inspection is
+local, **Generate work plan** makes an explicitly budgeted model request, and
+**Approve and prepare tasks** creates reviewed issues and local preparation.
+It does not launch coding workers. The CLI `plan` command below inspects existing
+task definitions without calling a model. See [AI planning](AI_PLANNING.md).
+
 Inspect preparation before paid operations:
 
 ```sh
@@ -32,7 +38,8 @@ swarm-control run A1 A2 --project /path/to/target/swarm.toml --workers 2 --synch
 ```
 
 Obtain the gateway origin from Modal's deployed application or
-`modal.Function.from_name(GATEWAY_APP, "gateway").get_web_url()`.
+`modal.Function.from_name(GATEWAY_APP, "gateway", environment_name=ENVIRONMENT).get_web_url()`.
+Use the app and environment from the selected project profile.
 Deploy uses the configured app, durable gateway ledger, secret name and environment;
 keep the app, ledger, secret and environment identifiers unchanged when migrating
 an existing deployment. Extraction deploys nothing.
@@ -60,8 +67,11 @@ completion to the task ledger before submitting another. A checkpoint failure
 stops new submissions while submitted workers complete their recovery paths.
 There is no automatic worker replacement or budget replenishment.
 
-Profiles may opt into up to 100 workers; the default remains ten. Gateway provider
-slots default to 20 and are configured independently with
+Profiles may opt into up to 100 workers; omitted profile fields and manual
+initialization default to ten. An approved AI plan for a new project explicitly
+sets both capacities to the reviewed desired concurrency, leaving execution
+disabled and allowances zero. Gateway provider slots default to 20 and are
+configured independently with
 `runtime.gateway_concurrency` (1–100). A synchronized 100-worker run requires
 capacity 100, verified API/VM quota and gateway redeployment. Synchronized live
 runs exceeding the profile's gateway capacity are rejected before allocation;
@@ -86,7 +96,16 @@ verify actual provider quota and other traffic independently. The HTTP handler
 and worker stream idle timeout are 900 seconds (`900000` ms for Codex). Include
 all waits/throttles in elapsed time and compute cost. See [gateway policy](GATEWAY.md).
 
-Review each full patch and acceptance tests, then use one integrator:
+Review each full patch and acceptance tests. Keep one integrator per target.
+
+The trusted controller's native Git must authenticate publication `push` operations,
+including for public repositories; private targets also need authenticated `fetch`.
+Browser clone/publication configures a credential helper
+only for those individual commands; bare integration Git does not gain a helper
+from `GH_TOKEN` alone. After authenticating the intended GitHub CLI account,
+`gh auth setup-git --hostname github.com` explicitly configures the controller's
+helper. See [private repository prerequisites](PRIVATE_REPOSITORIES.md#controller-git-authentication).
+Never place account tokens in Git URLs or worker environments.
 
 ```sh
 swarm-control integrate plan ARTIFACT_DIR --project /path/to/target/swarm.toml
@@ -142,6 +161,9 @@ These commands do not automatically move through every stage for you.
 | `runs plan/create/list/show` | Configure agents/tasks and inspect saved run settings and history | Read-only preview, or explicit local draft creation; no cloud calls |
 | `runs launch PROJECT RUN` | Inspect a saved draft; `--execute` explicitly invokes the existing runner | Inspection by default; paid resources possible only with `--execute` and ordinary gates |
 | `plan TASK...` | Validate local task structure/ownership, resolve a local base ref and print potential concurrency | No cloud calls, budget reservation or GitHub writes |
+| `budget status/inspect/plan` | Read local accounting/cached spend or propose a reviewed cumulative increase | Offline inspection; no allowance change or model/provider calls |
+| `budget apply` | Apply a separately owner-authorized cumulative increase while execution remains disabled | Local accounting/audit writes; preserves allocations and creates no resources |
+| `budget sync-openai` / `budget import-spend` | Explicitly fetch administrative cost evidence or import a private observation | Provider GETs for sync, local evidence writes for either; no spending approval |
 | `preflight TASK...` | Inspect prepared source, existing claims/allowance, cached spend and configured resource/runtime requirements | Offline by default; `--online` adds GitHub GETs only; no admission/deployment or launch approval |
 | `analyze [TASK...]` | Inspect explicit/inferred dependencies, cycles, source hints and a conservative ready frontier; up to 10,000 backlog definitions | Local metadata and frozen Git source reads only; `--require-parallel 100` fails an insufficient frontier |
 | `smoke TASK...` | Create worker environments, clone/install/check the unchanged target and recover artifacts | Paid Modal resources and infrastructure allocation; no coding model calls or delivered feature |
@@ -200,7 +222,8 @@ These flags apply to `plan`, `smoke` and `run` unless stated otherwise:
 | `--context-mode full\|task` | Preserve full instructions, or additionally provide reviewed task contract excerpts from the frozen base; global rules remain mandatory |
 | `--require-parallel N` | Require N conservatively independent ready tasks before admission; 100-agent run/preflight/workspace defaults to 100 |
 | `--no-progress-timeout SECONDS` | Explicitly stop after 30–coding-limit seconds without an observed owned-source change; default warnings only |
-| `--base REF` | Local commit/ref, default `origin/<base_branch>`; workers need that exact commit available remotely |
+| `--base REF` | Local commit/ref, default `origin/<base_branch>`; freezes the exact source commit for the selected transport |
+| `--source-transport github\|bundle` | Use the profile's transport unless explicitly overridden; `github` clones public source, `bundle` uploads one bounded local frozen-history bundle without account tokens |
 | `--timeout SECONDS` | Agent coding time from 30 to 1800, default 300; longer sessions require explicit selection and do not include all setup/recovery time |
 | `--synchronized` | Require exactly one task per requested worker; real agents start after all worker preparations reach the barrier |
 | `--allow-overlap` | `plan`/`preflight`/`run` only: inspect or permit declared shared ownership in isolated checkouts; worker scope checks remain enforced |
@@ -212,10 +235,18 @@ These flags apply to `plan`, `smoke` and `run` unless stated otherwise:
 
 The gateway's administrative default remains USD18; `run` requires its own explicit
 allowance. Raising a capacity field does not migrate the cumulative budget policy.
+The CLI `plan` reports dependency/frontier blockers; it does not reject a reported
+shortfall as live admission would. Use `analyze --require-parallel N` or
+`preflight --require-parallel N` for an explicit preparation exit-status gate.
 The model allowance is divided equally among task credentials. For example,
 `--model-budget 2.00` for two tasks allocates USD1 per task, not USD2 each.
 If there are fewer workers than tasks without synchronization, tasks are queued
 locally. The whole live batch still cannot exceed the project's task-count cap.
+The `github` transport needs the frozen commit available to its public clone.
+The `bundle` transport uses complete local committed history, including private
+targets; it excludes dirty and untracked files. Neither transport publishes
+preparation or bypasses issue, dependency, source or budget gates. See
+[private repositories](PRIVATE_REPOSITORIES.md).
 
 The probe accepts `--project`, `--gateway-url` and an optional `--environment`;
 its amount and task are fixed. Deployment accepts only `--project` and uses the

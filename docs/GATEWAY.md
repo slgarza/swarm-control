@@ -1,6 +1,6 @@
 # Budgeted model gateway
 
-The pilot gateway holds the OpenAI credential in the trusted Modal function.
+The worker gateway holds the OpenAI credential in the trusted Modal function.
 Each coding worker receives a random credential scoped to one task, one run,
 and an expiry. The hard limit is USD180 for a run of at most 100 tasks, divided
 equally between task credentials. `create_run` still defaults to USD18; the runner
@@ -9,6 +9,12 @@ Larger limits do not authorize spending or migrate existing budgets. Infrastruct
 admission is accounted for separately; this module does not enforce or measure
 Modal billing. Inspect [preflight](DEPLOYMENT_PREFLIGHT.md) and actual authorization
 before deploying this paid service.
+
+The browser's [AI planning request](AI_PLANNING.md) uses the controller's private
+local model credential and its own retained planning reservation. It does not
+create a worker gateway run. Configuring a local planning key, creating the named
+Modal worker secret, deploying this service and launching coding workers remain
+separate explicit actions.
 
 ## Deployment and controller interface
 
@@ -29,8 +35,11 @@ swarm-control deploy-gateway --project /path/to/target/swarm.toml
 ```
 
 The deployed app is selected by `runtime.gateway_app`; the ASGI function is `gateway`.
-Obtain its URL with `modal.Function.from_name(APP_NAME, "gateway").get_web_url()` and
-append `/v1` for the Codex provider base URL. The only public route is
+Obtain its URL with
+`modal.Function.from_name(GATEWAY_APP, "gateway", environment_name=ENVIRONMENT).get_web_url()`
+using the selected profile's app and environment. Append `/v1` only for the Codex
+provider base URL; `run --gateway-url` and `probe --gateway-url` take the origin
+without `/v1`. The only public route is
 `POST /v1/responses`, authenticated with `Authorization: Bearer <task token>`.
 No health request makes a model call. Unknown paths return 404.
 
@@ -38,9 +47,9 @@ The following functions require normal Modal workspace authentication; there
 are no public HTTP administration endpoints:
 
 ```python
-create = modal.Function.from_name(GATEWAY_APP, "create_run")
-status = modal.Function.from_name(GATEWAY_APP, "run_status")
-stop = modal.Function.from_name(GATEWAY_APP, "stop_run")
+create = modal.Function.from_name(GATEWAY_APP, "create_run", environment_name=ENVIRONMENT)
+status = modal.Function.from_name(GATEWAY_APP, "run_status", environment_name=ENVIRONMENT)
+stop = modal.Function.from_name(GATEWAY_APP, "stop_run", environment_name=ENVIRONMENT)
 issued = create.remote(run_id, task_ids, model_budget_usd=18, ttl_seconds=1800)
 # issued["tokens"][task_id] is passed directly to that worker in memory.
 # Do not print issued or persist the token map in manifests/logs.
@@ -98,13 +107,14 @@ OpenAI's `/v1/responses/input_tokens` with the same input, tools, instructions,
 reasoning, and text configuration. The exact count must fit the reservation;
 otherwise no generation is sent. The estimate alone never authorizes inference.
 
-Rates checked on 2026-11-10 are USD2 input, USD0.10 cached input, USD2.50 cache
-write, and USD10 output per million tokens. The gateway charges **all** input
-tokens at USD2.50 and adds a 10% allowance to both rates. Cache writes replace
-the uncached-input rate; they are not an additional fee. The allowance also
-covers the documented 10% regional premium. Fast/pro/ultrafast overrides,
-paid built-in tools, and long-context requests are not admitted. These rates
-must be reviewed before a later pilot; this is not provider invoice reporting.
+The implemented admission policy rates **all** input tokens, including cached
+input, at USD2.50 per million and output at USD10 per million, then adds a 10%
+margin to both rates. These are fixed gateway accounting rules, not a live
+provider quote or an invoice. Verify the
+[official model pricing](https://developers.openai.com/api/docs/models/gpt-6.1-sol)
+before authorizing live work; provider price changes do not automatically update
+this policy. Fast/pro/ultrafast overrides, paid built-in tools and long-context
+requests are not admitted.
 
 A smaller charge is committed only after a valid `response.completed` event
 with coherent provider token usage inside the reserved bounds. The streamed

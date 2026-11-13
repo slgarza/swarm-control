@@ -2,7 +2,7 @@
 
 The ten-agent pilot exercised small useful tasks on one repository with disjoint
 ownership. Large existing codebases need their own baseline, architecture map,
-useful backlog and acceptance criteria. The extraction is not evidence of 100-agent
+useful backlog and acceptance criteria. Controller capacity is not evidence of 100-agent
 operation or autonomous end-to-end review. The runner and gateway now accept up to
 100 tasks per cohort, with offline tests for bounded dispatch, shared ownership,
 three-way integration and accounting at that size. This is implementation capacity;
@@ -30,7 +30,7 @@ provider capacity or spending authority. See [dependency analysis](DEPENDENCIES.
 
 | Control | Behavior |
 | --- | --- |
-| Cohort admission | `budget.max_live_agents` accepts 1–100, defaults to ten; disabled/funding gates still apply |
+| Cohort admission | `budget.max_live_agents` accepts 1–100; parser/manual initialization defaults to ten, while a new AI-prepared profile uses reviewed desired concurrency; disabled/funding gates still apply |
 | Dispatch | At most the requested number of submitted workers; completion checkpoints happen before replacement submissions |
 | Shared ownership | `--allow-overlap` on `plan`/`run` records overlapping pairs; each worker still edits only its declared paths |
 | Integration | Strict application first; opted-in candidates can use three-way application, full combined validation and an additional applied-diff review hash |
@@ -44,9 +44,10 @@ provider capacity or spending authority. See [dependency analysis](DEPENDENCIES.
 | Integration preparation | Up to eight local preparation lanes with durable candidate reservations, bounded pending work and independent advancement around CI holds |
 | Pagination | Open PRs and exact-head checks are read across bounded pages; incomplete/inconsistent responses stop admission/merge |
 
-An exhausted gateway queue returns `429 gateway_busy` before reserving budget or
-calling the provider. The Codex retry bounds still apply. For a synchronized cohort
-of 100, configure `runtime.gateway_concurrency = 100` only after confirming actual
+A gateway-slot wait timeout returns `429 gateway_busy` before reserving budget or
+calling the provider. The separate optional pacing queue operates after money
+reservation, as described below. The Codex retry bounds still apply. For a
+synchronized cohort of 100, configure `runtime.gateway_concurrency = 100` only after confirming actual
 API capacity, then redeploy. Synchronized live runs exceeding the profile's gateway
 capacity are rejected before allocation; plans report capacity insufficiency.
 Before sandbox launch the runner also checks the capacity returned by authenticated
@@ -85,8 +86,10 @@ readiness or provider admission.
 
 ## Remaining operational work
 
-1. Validate a small cohort on a second real public repository. Private targets
-   first need a scoped authentication/clone adapter. The
+1. Validate a small cohort on a second real repository. Private targets can use
+   the shipped [frozen source bundle transport](PRIVATE_REPOSITORIES.md), with
+   account credentials confined to the trusted controller. Offline bundle tests
+   do not establish a live private-repository delivery. The
    [target assessment](contest/TARGET-ASSESSMENT.md) keeps Afterimage for the next
    collision pilot and defines the gate for a more mature final benchmark target.
 2. Add distributed leases and heartbeats before multiple controller hosts. Existing
@@ -111,7 +114,10 @@ coordinator. The local dashboard shows selected curated evidence for original
 worker outcomes, attributed recovery, PR/check links and separate
 admission/estimate/billing fields. Its workspace also prepares run drafts and
 supports explicit browser launch through the existing source and budget gates.
-The persistent shared control service remains future work.
+The persistent shared control service remains future work. The current browser
+also supports repository acquisition and an explicitly budgeted AI work-plan
+proposal; reviewed task/issue creation is separate from coding-worker execution.
+See [AI planning](AI_PLANNING.md) for those boundaries.
 
 ## Gates for each stage
 

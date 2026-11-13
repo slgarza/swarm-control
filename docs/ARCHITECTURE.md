@@ -11,6 +11,7 @@ while preserving each worker's scope checks and isolated checkout.
 | Component | Runs where | Responsibility |
 | --- | --- | --- |
 | Controller and integrator | Operator's computer or one controlled server | Select target/tasks, reserve budget, provision workers, validate and publish reviewed changes |
+| AI planning controller | Operator's computer, with one explicitly authorized OpenAI call | Inspect bounded source, propose tasks, validate dependencies and await approval before issue/task creation |
 | Codex worker process | One isolated Modal VM per task | Read code, call the model, edit files, execute commands and tests |
 | Model | OpenAI's service | Interpret context and select the worker's next response/tool action |
 | Budget gateway | Trusted Modal application | Authenticate temporary worker tokens, reserve/settle model usage, hold the real API key |
@@ -27,10 +28,13 @@ identifiers, not credentials or access to the author's infrastructure.
 
 ```mermaid
 flowchart TD
+    P[Repository and goal] --> Q[Inspect context and authorize one planning call]
+    Q --> R[Review proposal and approve issue/task preparation]
+    R --> A
     A[Target config and reviewed tasks] --> B[Validate base, issues, dependencies and ownership]
     B --> C[Claim tasks and reserve cumulative budget]
     C --> D[Create isolated Modal workers]
-    D --> E[Clone the same exact base and install dependencies]
+    D --> E[Restore or clone the same exact Git base and install dependencies]
     E --> F[Synchronized start if requested]
     F --> G[Codex reads, edits and tests]
     G --> H[Recover patches, hashes, logs and final checks]
@@ -44,6 +48,11 @@ flowchart TD
 A successful `run` ends with validated patches, not merged PRs. `integrate`
 implements the later review/publish/merge steps. The current operator chooses
 when to invoke them and handles repairs that require further judgment.
+
+Existing reviewed task files can enter at the target-configuration stage without
+an AI planning call. Local `plan`/`runs plan` inspect those task files; **Plan work**
+is the separately budgeted proposal workflow. Neither operation launches coding
+workers. See [AI planning](AI_PLANNING.md).
 
 ## Inside a worker
 
@@ -71,7 +80,10 @@ or authorize new spending. A profile may opt into up to 100 workers; its default
 
 ## Model credentials and budget
 
-The real OpenAI key is injected only into the gateway. A worker receives an
+For worker execution, the real OpenAI key is injected only into the gateway.
+The optional local AI planner separately uses the operator's saved/session key
+for its confirmed request to OpenAI; that key never enters a worker manifest or
+controller subprocess environment. A worker receives an
 expiring token for one task/run. The gateway admits only its supported Responses
 requests and tracks reservations in a durable Modal ledger. The local SQLite
 ledger separately reserves cumulative model and infrastructure allowances across
@@ -95,8 +107,9 @@ reviewed GUI budget form. Existing pilot allocations survive every migration.
 
 ## State and integration boundaries
 
-Worker states include `preparing`, `ready`, `working`, `checking`, `validated`,
-`failed`, `rejected`, `needs_repair` and `needs_recovery`. The task ledger records
+Progress distinguishes preparation, readiness, coding and checking phases. Final
+worker outcomes include `validated`, `failed`, `rejected`, `needs_repair` and
+`needs_recovery`. The task ledger records
 `running`, then `awaiting_integration` for a validated delivery, and `merged` only
 after GitHub confirms integration. These represent different layers, not one
 universal state machine.
@@ -126,6 +139,19 @@ head check does not lock the base.
 The dispatcher lock coordinates Git worktrees sharing one Git common directory.
 It does not coordinate other clones or hosts. Scheduling, budget and gateway
 state are not yet a globally distributed control service.
+
+Browser-created profiles default to frozen Git bundle transport, supporting
+public and private repositories without GitHub credentials in worker VMs. Direct
+`github` worker transport supports public source. A bundle can carry the selected
+local commit, but live issue/dependency and reviewed GitHub PR/CI gates still
+apply. See [private repositories](PRIVATE_REPOSITORIES.md).
+
+The target's ignored `.swarm/` holds worker/integration evidence and shared local
+accounting. Browser credentials, planning reservations, setup jobs and preparation
+originals instead live beside the private workspace registry. Keep that registry
+and its companion folders outside Git; planning and credential storage enforce
+that boundary. Saving a profile or planning allowance never replenishes the
+target's worker ledger.
 
 ## Source map
 

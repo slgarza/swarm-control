@@ -1,6 +1,11 @@
-# Target assessment: Afterimage
+# Historical target assessment: Afterimage
 
-Assessment date: 2026-11-10; updated after the November 11 hundred-worker pilot.
+Assessment date: November 10, 2026; pilot update: November 11, 2026.
+This is a dated target-selection record, not an inventory of today's Afterimage
+checkout or permission to reuse completed tasks. For the current controller,
+start with [run configuration](../RUNS.md), [dependency analysis](../DEPENDENCIES.md)
+and the proposed [next pilot](../NEXT_PILOT.md).
+
 Afterimage supported a real source-based implementation cohort with 100 worker
 VMs, distinct coding threads and per-task command/model activity. Its qualifying
 useful concurrency, collision handling and comparative efficiency remain unproven.
@@ -33,15 +38,15 @@ evidence at its original commit, rather than a description of today's repository
 The original checkout audit below did not include the design documents stored in
 the owner's separate OpenClaw project. That source was subsequently retrieved:
 eleven documents covering canonical Rules v1, screen flows, visual design, audio,
-City Moments, achievements and monetization. The prepared
-[Afterimage PR33](https://github.com/slgarza/Afterimage/pull/33) imports unchanged
-source snapshots with hashes and defines exactly 100 new implementation tasks.
+City Moments, achievements and monetization. The historical preparation in
+[Afterimage PR33](https://github.com/slgarza/Afterimage/pull/33) imported unchanged
+source snapshots with hashes and defined exactly 100 implementation tasks.
 
-The initial graph has 11 tasks without unmet prerequisites and 89 waiting on code
-dependencies or specific edge decisions/delivery gates. A001/A004/A026 form the
-first disjoint three-worker candidate cohort. This is enough to prepare useful
-staged product work; it is not 100 useful simultaneous coding sessions. Reassess
-the final target using observed overlap, quality and throughput after the early
+At that preparation stage, the graph had 11 tasks without unmet prerequisites
+and 89 waiting on code dependencies or specific decisions/delivery gates.
+A001/A004/A026 formed the first disjoint three-worker candidate cohort. That was
+preparation for useful staged product work, not 100 useful simultaneous coding
+sessions. Reassess the final target using observed overlap, quality and throughput after the early
 cohorts rather than assuming that either repository size or total task count
 establishes scale. No new paid cohort accompanied the backlog preparation.
 

@@ -38,12 +38,17 @@ infra_limit_cents = 0
 ```
 
 The disabled flag and zero budgets are intentional. Specify an allowance only
-when authorized. Recorded limits are immutable without an explicit budget
-migration; never delete a ledger to obtain new allowance. Preserve every prior
+when authorized. Once a ledger records its policy, increasing those limits
+requires an explicit budget migration; never delete a ledger to obtain new allowance. Preserve every prior
 allocation when reviewing a cumulative increase.
 The gateway hard ceiling is USD180 and 100 tasks per run. Its administrative
 default remains USD18, and the profile's default capacity remains ten. Larger
 capacity does not increase an existing durable allowance or authorize spending.
+Ten workers and 20 gateway slots are parser/manual-initialization defaults.
+For a new profile, an approved [AI work plan](AI_PLANNING.md) explicitly sets both worker and gateway
+capacity to the plan's reviewed desired concurrency. It still creates disabled
+execution and zero model/infrastructure allowances. Existing profiles and their
+limits are preserved rather than silently enlarged.
 
 Install/check commands are argument arrays executed in order, without shell
 interpolation. Choose the actual project's language and tests. A Python target
@@ -197,6 +202,7 @@ dependency domains and local integration tools.
 | `dependsOn` | List of existing task IDs, or omitted/empty for independent work |
 | `status` | Explicitly use `ready` before dispatch and `merged` after delivery; live admission accepts only `ready` (also the default if omitted) |
 | `issue` | Positive integer naming a real open issue in this target; unique within the cohort |
+| `issueUrl` | Optional exact `https://github.com/OWNER/REPO/issues/NUMBER` matching the configured repository and `issue`; inherited fork links need explicit review/rebinding |
 | `pullRequest` | Actual merged PR number for a completed dependency |
 | `produces` | Optional unique stable artifact IDs or owned file paths provided by this task |
 | `consumes` | Optional artifact IDs which require a unique producing task; the analyzer derives prerequisite edges |
@@ -236,8 +242,15 @@ selected base. Open PR admission reads up to 100 pages of 100 entries and stops
 on invalid/repeated data or an exhausted page bound instead of assuming the first
 page is complete.
 
-The controller does not generate a backlog, open issues or update task JSON to
-`merged`. Its ledger records integration, and the PR closes the linked issue.
+The browser's **Plan work** can generate a proposed backlog through an explicitly
+authorized model request. A separate reviewed approval creates real GitHub issues
+and local task definitions. Manual issue import creates blocked drafts; complete
+their ownership and acceptance before marking them ready. See
+[AI planning](AI_PLANNING.md) and [repository setup](REPOSITORY_SETUP.md).
+The CLI `plan` command instead inspects existing tasks without a model request.
+
+Integration does not automatically update task JSON to `merged`. Its ledger
+records integration, and the PR closes the linked issue.
 Update `status` and `pullRequest` in a reviewed bookkeeping change afterward so
 later tasks can resolve dependencies. Do not count that change as a feature
 delivery. Use new task IDs and real issues for new work instead of recycling

@@ -23,10 +23,16 @@ python3 -m compileall -q demo
 ```
 
 The task JSON initially uses placeholder issue numbers 1 and 2. Before any real
-run, create the matching issues in your own public GitHub repository, put the
+run, create the matching issues in your own GitHub repository, put the
 actual numbers in those files, configure your own accounts/budget, and push the
 reviewed baseline. The default profile disables remote execution and has zero
 allowance. The checked-in CI workflow uses only local Python tests.
+
+The template uses the default `github` source transport, which requires a
+public, pushed worker base. Private repositories or an unpublished frozen base
+need the separately configured
+[bundle transport](https://github.com/slgarza/swarm-control/blob/main/docs/PRIVATE_REPOSITORIES.md).
+The issue/account and execution-budget gates still apply.
 
 Tutorial instructions: [Swarm Control quickstart](https://github.com/slgarza/swarm-control/blob/main/docs/QUICKSTART.md)
 and [real two-agent execution](https://github.com/slgarza/swarm-control/blob/main/docs/TWO_AGENT_WALKTHROUGH.md).

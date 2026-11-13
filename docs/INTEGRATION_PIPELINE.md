@@ -1,9 +1,9 @@
 # Bounded integration preparation lanes
 
-The coding dispatcher can run 100 workers when its existing capacity, source,
-provider and budget gates pass. Integration preparation is a separate local
-resource. This pipeline accepts up to 1,000 candidate artifacts and runs one to
-eight local preparation lanes; its lane count does not reduce worker capacity.
+The coding dispatcher can run 100 workers when its required independent ready
+frontier, capacity, source, provider and budget gates pass. Integration preparation
+is a separate local resource. This pipeline accepts up to 1,000 candidate
+artifacts and runs one to eight local preparation lanes; its lane count does not reduce worker capacity.
 
 Use it to keep independent work moving while another candidate waits for review
 or CI. It prepares local worktrees and checks. Publishing, CI retries, review

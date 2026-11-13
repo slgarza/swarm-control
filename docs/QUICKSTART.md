@@ -45,7 +45,7 @@ For the separate local example below, stop the server with Ctrl+C and activate
 the environment it created:
 
 ```sh
-source .venv/bin/activate
+. .venv/bin/activate
 swarm-control --help
 ```
 
@@ -70,7 +70,7 @@ creates a baseline commit with a local demo identity, and records a placeholder
 cloud resources. It refuses to overwrite an existing destination; use a different
 folder name if `../swarm-demo` already exists.
 
-Do not run the planner directly inside `examples/demo-target`: that directory
+Do not run the CLI plan directly inside `examples/demo-target`: that directory
 belongs to the controller's repository. The helper makes the separate Git root
 required by the project configuration.
 
@@ -123,24 +123,34 @@ From the demo folder, open the controller and connect this target:
 
 In the browser:
 
-1. Choose **swarm-demo** in **Repository**. The connection uses the demo's local
+1. Choose **swarm-demo** in **Project**. The connection uses the demo's local
    `swarm.toml`; its placeholder origin does not need to exist for planning.
 2. Click **New run** and select **D01** and **D02**.
 3. Set **Concurrent agents** to **2**, then click **Check plan**.
-4. Review the plan, then click **Save draft**. Open the saved run in **Run history**.
+4. Review the plan, then click **Save and review run**. Open the saved run in **Runs**.
 
 Expected: the draft contains two tasks and two agents, and execution remains
 disabled. Saving does not change that policy, contact a model or create a VM.
 The draft's **Run agents** control is unavailable until the real-execution setup
 is complete. Use Ctrl+C in the server terminal to stop the demo dashboard.
 
-For another prepared repository, click **Connect repository** and enter its local
-folder or `swarm.toml` path on the computer running the server. Keep spaces in
+For another prepared repository, open **Projects → Add repository → Local folder**,
+enter its folder or `swarm.toml` path, click **Inspect and select folder**, then
+**Connect this prepared project to workspace**. The folder is on the computer
+running the server. Keep spaces in
 the field without adding quotes; use `pwd` in the target's terminal to find its
 path. In WSL, use a Linux path such as `/mnt/c/Users/YourUser/my-repo` rather than
-`C:\Users\YourUser\my-repo`. A GitHub URL and a ZIP folder without Git metadata
-are not ready targets. A new target needs its own reviewed profile, task files,
-instructions and checks; follow [project configuration](PROJECTS.md).
+`C:\Users\YourUser\my-repo`. A GitHub URL belongs in the separate **GitHub URL**
+tab, which can clone or fork into a new local folder. A ZIP folder without Git
+metadata is not a prepared target. A new target needs its own reviewed profile,
+task files, instructions and checks; use [browser setup](SETUP.md) or
+[project configuration](PROJECTS.md).
+
+This demo uses existing task files and the local **Check plan** operation.
+**Plan work → Generate work plan** is a different feature: it sends reviewed
+source context to OpenAI under an explicit planning allowance. That feature needs
+your own local model key and verified GitHub token; it is not part of this
+credential-free example.
 
 ## 6. Inspect the same kind of plan from the CLI
 
@@ -168,7 +178,7 @@ The output contains these fields; the commit hash varies:
 ```
 
 `maximum_active_agents` describes potential concurrency for that task list.
-It is not evidence that agents ran. The planner does not query remote issue
+It is not evidence that agents ran. This CLI `plan` does not query remote issue
 readiness or allocate budget. `--base HEAD` lets this local example use its own
 baseline without needing a fetched remote branch.
 

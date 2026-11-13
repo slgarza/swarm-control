@@ -1,6 +1,7 @@
 # Connect your service accounts
 
-The local browser's account setup belongs to the computer running Easy Run.
+Open **Settings** in the local browser. Account setup belongs to the computer
+running Easy Run.
 Connecting a repository and authenticating a service are separate steps. Opening
 the panel and reading connection status make no provider requests.
 
@@ -66,16 +67,31 @@ explicit verification. Provider error messages and secret values are excluded
 from public status. Editing a saved `.env` outside the running application needs
 a server restart; its changed digest invalidates previous cached authentication.
 
+GitHub API authentication and Git fetch/push authentication are separate.
+Browser clone and preparation publication install a credential helper for those
+commands only. The integrator uses the controller's normal Git fetch/push path;
+a GUI token alone does not configure its HTTPS helper. On your own trusted
+controller, authenticate the intended GitHub account in the CLI and configure
+its Git helper, for example with `gh auth setup-git --hostname github.com`.
+Verify that this is the account intended for the target. Never put a token in a
+remote URL, worker manifest or source bundle. See [private repositories](PRIVATE_REPOSITORIES.md).
+Public fetches may work anonymously, but publishing an integration branch still
+needs push authentication even when the repository is public.
+
 ## Store the gateway's OpenAI key
 
-First verify the intended Modal workspace. Choose the exact Secret name and Modal
+Open **Project settings → Execution allowance** and first verify the intended
+Modal workspace in **Settings**. Choose the exact Secret name and Modal
 environment used by the target's `runtime.openai_secret` and `runtime.environment`,
 enter the OpenAI API key and explicitly create the Secret. The controller sends
 the key to a separate Modal SDK process over stdin and stores it remotely as
 `CODEX_API_KEY`. It puts the key in no subprocess arguments or HTTP status.
-The Secret form does not retain the key locally unless you explicitly select
-local persistence. A key already saved in the private `.env` can be used without
+The browser's Secret form does not save the entered key locally. The backend
+supports the separate explicit `persist_key` option, but this form does not send
+it. A key already saved in the private `.env` can be used without
 typing it again. Saving that local key alone never creates a Modal Secret.
+Changing a local key also does not replace an existing remote Secret; replacing
+the gateway's key remains a separately confirmed operation.
 
 Creating an existing name fails without overwriting it. An explicit replacement
 updates `CODEX_API_KEY` in the named existing Secret, preserving unrelated keys;
@@ -91,6 +107,28 @@ model access, quotas, billing or account credit. The gateway still needs its own
 explicit deployment and the existing policy/source/budget gates before execution.
 Changing the authenticated Modal workspace invalidates the old Secret's verified
 status. The backend rechecks the workspace immediately before a Secret operation.
+**Verify last configured secret** checks the recorded Secret name/environment,
+not every selected project's configuration. Compare that observation with the
+profile's `runtime.openai_secret` and `runtime.environment` before deployment.
+
+## Local AI planning uses a separate key path
+
+Save the OpenAI key under **Settings → Your personal local .env**, or retain it in a
+controller session through the supported connection API. **Plan work** uses that
+local key directly for its explicitly authorized Responses request. It does not
+read the key back from Modal, use a ChatGPT login or accept an ambient
+`OPENAI_API_KEY` as a substitute for this local saved/session choice.
+
+Before generation, verify a GitHub account whose token the controller captured
+from the saved/session connection or its `GH_TOKEN`/`GITHUB_TOKEN` environment.
+Token-less ambient GitHub CLI login remains available for manual operations but
+cannot bind a planner's issue writes to the reviewed account. Changing the key
+or GitHub identity invalidates that plan's account binding.
+
+Planning has a separate retained reservation beside the workspace registry.
+Saving a key grants no allowance; generating a plan requires explicit source
+upload and cost authorization. Creating issues/tasks, creating a Modal Secret,
+deploying and launching workers are separate actions. See [AI planning](AI_PLANNING.md).
 
 ## Implementation boundaries
 
@@ -121,7 +159,7 @@ locally saved model key, and recognized token/assignment patterns from bounded
 controller output before it is retained or returned. It exposes no credential
 inventory. Arbitrary customer secrets remain outside this credential inventory.
 
-The backend creates no workers, gateway deployment or allowance, and does not
+The connection service creates no workers, gateway deployment or allowance, and does not
 change the 100-worker capacity. Offline tests use temporary fixtures and mocked
 provider operations; they do not establish a live account connection.
 

@@ -5,6 +5,32 @@ GitHub account credentials to coding workers. The controller first needs the
 authorized repository checked out locally and its complete selected history.
 The existing issue, source, dependency, policy and budget gates still apply.
 
+## Controller Git authentication
+
+Source bundles solve worker checkout access. Credentialed controller integration
+still uses the host's ordinary Git configuration for private `fetch` and
+authenticated `push` operations. Public-repository publication also needs Git
+push authentication. Browser
+clone and preparation publication use a per-command GitHub CLI credential helper;
+they do not configure that helper globally for the integrator. `GH_TOKEN` in an
+environment alone does not configure Git HTTPS authentication.
+
+Before integrating a private target, authenticate GitHub CLI as the intended
+authorized account on the trusted controller, then explicitly configure its Git
+helper:
+
+```sh
+gh auth setup-git --hostname github.com
+```
+
+This changes controller Git configuration. Confirm that this account can fetch
+and push the selected private target before using integration commands. Keep
+tokens out of remote URLs, task definitions and bundles; no GitHub account
+credential belongs in a worker. GUI-only credential entry and a successful
+private clone do not establish this separate integration prerequisite.
+
+## Select frozen worker source
+
 Configure the reviewed target profile:
 
 ```toml
@@ -13,12 +39,16 @@ source_transport = "bundle"
 ```
 
 The runner's `--source-transport bundle` explicitly selects the same transport.
-The default `github` preserves the public-repository clone workflow. Planning is
-read-only; it selects the transport without constructing a bundle or starting
-workers. Repository privacy alone does not change the default for older profiles.
+Omitted transport in an existing or hand-written profile defaults to `github`,
+preserving public-repository clones. New browser-created profiles use `bundle`.
+The CLI `plan` command is read-only; it reports the transport without constructing
+a bundle or starting workers. The browser's [Plan work](AI_PLANNING.md) instead
+has an explicitly authorized model request and a separately approved issue/file
+preparation action. Neither launches workers. Repository privacy alone does not
+change the default for older profiles.
 
-Before opening a budget ledger or contacting Modal, an explicit run constructs
-one self-contained Git v2 bundle in an isolated local bare repository. Its only
+Before opening a budget ledger or contacting Modal, an explicit `run` or `smoke`
+constructs one self-contained Git v2 bundle in an isolated local bare repository. Its only
 advertised ref points at the exact frozen commit. Building is limited to 120
 seconds and a final 64 MiB bundle, with bounded temporary object storage. Missing
 history, shallow clones, unsafe private storage and oversized bundles fail before

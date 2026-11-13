@@ -65,6 +65,13 @@ select a different registry. Evidence/run responses omit its filesystem paths,
 raw reports, worker commands, customer source and credentials. Setup separately
 shows the paths and task drafts the operator explicitly selects; credential values
 are never returned. Setup operation results remain in private local history.
+Keep the registry and its companion state folders outside Git. The default
+location does this; a custom workspace path is not an application source file.
+
+AI planning and existing-task run planning are separate: **Plan work** can send
+bounded source context to OpenAI under its own confirmed allowance, then create
+issues/tasks after approval. **New run → Check plan**, `plan` and `runs plan`
+inspect existing task definitions without a model call.
 
 ## Configure and inspect from the CLI
 
@@ -192,14 +199,14 @@ commit; missing selectors, symlinks or invalid ranges fail before worker
 admission. Plans retain prompt/context hashes and sizes, without publishing
 contract text. Context mode is an experiment setting, not a demonstrated speedup.
 
-Worker reports now record controller-observed phase timings, bounded event
+Worker reports record controller-observed phase timings, bounded event
 counters, receipt times and explicit process outcomes. A `-1` or `137` exit alone
 never establishes a timeout or OOM cause. Coding runs with empty patches skip the
 full helper benchmark after scope/head inspection and remain unvalidated; smoke
 checks are unchanged. Recovery and termination still run after failures. A
 progress-receipt failure cannot turn partial work into a validated delivery.
 
-Future deployments of the trusted gateway also emit bounded private request
+The shipped trusted gateway code emits bounded private request
 timing receipts for authentication, capacity, reservation, token counting,
 pacing, HTTP send, first response byte, streaming and cleanup/settlement.
 They contain fixed categories, generated observation IDs and authenticated
@@ -208,10 +215,14 @@ hashes. This adds observations to existing calls and never adds provider calls,
 retries or monetary changes. Observer/sink failures remain separate from request
 outcomes. The in-process window is bounded and resets on restart; its aggregates
 are not a complete run, invoices, inference CPU time or useful-agent overlap.
-Durations can overlap and are not additive. These are new instruments for future
-runs; original unknown timings remain unknown. Raw timing logs remain private.
+Durations can overlap and are not additive. Older gateway deployments need an
+explicit reviewed redeployment to use this instrumentation; reading history
+does not retrofit it. Original unknown timings remain unknown. Raw timing logs
+remain private.
 
 See [the next-pilot protocol](NEXT_PILOT.md), [operational feedback](OPERATIONS_SAFETY.md)
 and [the dashboard gallery](DASHBOARD.md#screenshots).
-The [validation receipt](evidence/run-workspace-validation-v2-2026-11-11.json)
-records full offline checks, source hashes, measured durations and their limits.
+The dated [November 11 workspace validation receipt](evidence/run-workspace-validation-v2-2026-11-11.json)
+records that revision's offline checks, hashes, durations and limitations. It is
+historical evidence, not validation of every later change; see the
+[evidence archive](archive/README.md).

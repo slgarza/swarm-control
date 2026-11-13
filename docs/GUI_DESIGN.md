@@ -53,7 +53,8 @@ when changing its appearance. Keep authorization, credential storage, budgets an
 provider actions under the existing controller gates. Consent and verification
 copy must remain explicit.
 
-Review empty, loading, error and populated views, plus all Setup steps. Use
+Review empty, loading, error and populated views across Projects, Plan work,
+New run, Runs, selected-run tabs, Settings and every Project settings tab. Use
 synthetic fixtures for screenshots and preserve the distinction between test
 data and actual execution evidence. Check mobile and desktop layouts, keyboard
 navigation, long repository/task names and the recorded run state.

@@ -1,8 +1,14 @@
-# Budget reporting correction — 2026-11-11
+# Archived budget reporting correction — November 11, 2026
+
+This is a historical implementation and validation record. Its test counts and
+measurements describe that attempt, not the current release. For current
+accounting behavior and operator commands, use [Billing](../BILLING.md); for
+archived evidence, see the [archive index](../archive/README.md). The companion
+[JSON receipt](BUDGET-REPORTING.json) remains unchanged.
 
 Local admission reservations could be mistaken for actual provider charges or
-account funds. `budget status` now presents local policy and source-scoped
-provider-reported spend separately, leaving account credit and attributed run
+account funds. This correction made `budget status` present local policy and
+source-scoped provider-reported spend separately, leaving account credit and attributed run
 cost unknown when the evidence cannot establish them. See [the operator guide](../BILLING.md).
 
 The explicit OpenAI synchronizer reads the official Costs API with an
@@ -28,7 +34,7 @@ time and no repository attribution. No financial value, account identifier or
 raw observation is published here. Provider credit remains unknown; no balance is
 invented from a monthly reference minus reported costs. No reservation was freed.
 
-The 198tests include actual CLI import/status operations on synthetic ledgers,
+The 198 tests included actual CLI import/status operations on synthetic ledgers,
 private-cache sharing across worktrees, source and normalized-receipt corruption,
 permission/HTTP failures, pagination and exact decimal costs. Additional tests
 prove the administrative credential is removed from coding and validation
