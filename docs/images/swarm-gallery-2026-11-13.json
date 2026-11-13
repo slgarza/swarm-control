@@ -1,0 +1,115 @@
+{
+  "schema_version": 1,
+  "capture_date": "2026-11-13",
+  "client_timezone": "America/Mexico_City",
+  "source_commit": "4a844bba68a2e080ac8b84975cbf77b8c73a5e4b",
+  "source_kind": "real_browser_render_with_controlled_synthetic_data",
+  "scope": "Isolated screenshot preparation only. Repository, plan, task, issue, run, status and reservation records are controlled examples.",
+  "sample_data_notice": "Current interface using controlled example data. No live model requests, GitHub issue writes or coding agents were started during capture.",
+  "static_asset_sha256": {
+    "swarm_control/dashboard_static/app.js": "b55ce423100ceb84e8b01f1971bf4a3a4f72f037160daa3fa173d4b1f988ebd8",
+    "swarm_control/dashboard_static/index.html": "7b76ff69acec03a4ef6249c0f6901ac64c84c1e7fe16a3abe8c3e6dca5c7bfa4",
+    "swarm_control/dashboard_static/navigation.css": "eb72d7a818d0a354df7e29748405d76ab8d8060f686e4b2754536b3387623841",
+    "swarm_control/dashboard_static/navigation.js": "c59a463a4d92cbc19430933ee8a34e2e24b6d5c2e00d7973872cd141d25443e6",
+    "swarm_control/dashboard_static/planner.css": "9dd88f1753b0ff14c6059fde729e8d9461fa4a2d5ae1dcd2123e5884d720b8bb",
+    "swarm_control/dashboard_static/planner.js": "ddf46304a22a7e06bd5f34d39c5af478aefe9274804e926c1875b04cfe6c3f39",
+    "swarm_control/dashboard_static/setup.css": "f54a35fd59b8f393895e682a032037dabc1ef531652cb33ee862a66e67f5f392",
+    "swarm_control/dashboard_static/setup.js": "6c51ca9adbb793646f461140184e26a40c50992aad04e1416271ff5e7f37528e",
+    "swarm_control/dashboard_static/styles.css": "d0606564ad1d380a2a8648df596f2de77a2423b197093368d9b529916a381676"
+  },
+  "capture_started_at_utc": "2026-11-13T14:32:55.502Z",
+  "capture_finished_at_utc": "2026-11-13T14:37:03.759Z",
+  "browser_capture_execution_seconds": 7.392471322,
+  "execution_clock_scope": "Measured browser capture execution only; preparation and visual-review time are excluded.",
+  "overall_preparation_elapsed_seconds": null,
+  "overall_preparation_elapsed_reason": "Capture scripts measure browser execution only; complete preparation and review are recorded separately in private attempt evidence.",
+  "attempts": {
+    "capture_passes": 3,
+    "captured_images": 9,
+    "published_images": 5,
+    "superseded_camera_frames": 4,
+    "failed_capture_passes": 0,
+    "camera_refinements": "Native disclosures and page scrolling; no product styling changes, compositing or image edits."
+  },
+  "checks": {
+    "browser_assertions": 29,
+    "failed_assertions": 0,
+    "uncaught_browser_errors": 0,
+    "outside_fixture_requests": 0,
+    "published_images_visually_reviewed": 5,
+    "privacy_reviewed": true
+  },
+  "example_records": {
+    "proposed_tasks": 3,
+    "selected_concurrent_agents": 3,
+    "illustrative_worker_records": 100,
+    "planning_reservation_and_status_data_are_synthetic": true
+  },
+  "actual_operations_during_capture": {
+    "openai_requests": 0,
+    "github_requests": 0,
+    "modal_requests": 0,
+    "coding_agents_started": 0,
+    "target_repository_commands_executed": 0,
+    "actual_billed_cost_usd": null,
+    "actual_billed_cost_reason": "No runtime provider calls were made; local capture and review billing were not measured."
+  },
+  "limitations": "These captures demonstrate interface behavior and layout, not a live model result, issue publication, 100 simultaneously useful agents, accepted deliveries or reconciled billing.",
+  "images": [
+    {
+      "file": "swarm-projects-2026-11-13.png",
+      "screen": "Projects",
+      "caption": "Connected example repositories and the next planning action.",
+      "sha256": "d07f74afdeeb11cf095424026f41da1a3b7ff84e8082ef86906bc92dc7aafefc",
+      "width": 1440,
+      "height": 1000,
+      "captured_at_utc": "2026-11-13T14:32:56.650Z",
+      "captured_at_client": "2026-11-13T08:32:56.650000-06:00",
+      "source_kind": "real_browser_render_with_controlled_synthetic_data"
+    },
+    {
+      "file": "swarm-plan-review-2026-11-13.png",
+      "screen": "Plan work",
+      "caption": "Controlled plan proposal with ownership, acceptance criteria, dependency frontier and explicit approval.",
+      "sha256": "f29a0ac630dda3b2fea89364242e3f73b769936cadd02c7e18fae47acb7a545a",
+      "width": 1440,
+      "height": 1000,
+      "captured_at_utc": "2026-11-13T14:37:03.599Z",
+      "captured_at_client": "2026-11-13T08:37:03.599000-06:00",
+      "source_kind": "real_browser_render_with_controlled_synthetic_data"
+    },
+    {
+      "file": "swarm-new-run-2026-11-13.png",
+      "screen": "New run",
+      "caption": "Three sample tasks selected for three concurrent agents; planning starts no agents.",
+      "sha256": "2164e4dbb264f0d06938b0b77184cba9c6d7c492498ec5620cd02e216fe8c46c",
+      "width": 1440,
+      "height": 1000,
+      "captured_at_utc": "2026-11-13T14:34:40.636Z",
+      "captured_at_client": "2026-11-13T08:34:40.636000-06:00",
+      "source_kind": "real_browser_render_with_controlled_synthetic_data"
+    },
+    {
+      "file": "swarm-run-workers-2026-11-13.png",
+      "screen": "Run details / Workers",
+      "caption": "One hundred illustrative task records, explicitly labeled as not a live run.",
+      "sha256": "0631768e227ac7f8ba43d63802c94a6116061a674a79d00f87679662570d6c30",
+      "width": 1440,
+      "height": 1000,
+      "captured_at_utc": "2026-11-13T14:32:58.361Z",
+      "captured_at_client": "2026-11-13T08:32:58.361000-06:00",
+      "source_kind": "real_browser_render_with_controlled_synthetic_data"
+    },
+    {
+      "file": "swarm-mobile-2026-11-13.png",
+      "screen": "Projects / mobile",
+      "caption": "Example repository selection on a 390px viewport.",
+      "sha256": "61e8145c0fda79f21c976b8c65533f911179bfaab6cab84d7104116054ecf5ae",
+      "width": 390,
+      "height": 1000,
+      "captured_at_utc": "2026-11-13T14:34:40.800Z",
+      "captured_at_client": "2026-11-13T08:34:40.800000-06:00",
+      "source_kind": "real_browser_render_with_controlled_synthetic_data"
+    }
+  ]
+}

@@ -1,10 +1,12 @@
 # Swarm Control
 
-A controller for coding agents working on independent GitHub repositories.
-It assigns tasks, starts isolated Codex workers in Modal, retrieves patches,
-enforces budgets and ownership, and integrates reviewed changes through passing
-GitHub Actions. OpenAI supplies the model; Modal supplies temporary machines.
-The coordinator currently runs on one host.
+Swarm Control is a local dashboard and CLI for AI coding work on GitHub
+repositories. Start with a repository and a goal, review the proposed tasks and
+dependencies, then launch isolated Codex workers with explicit budgets.
+
+Review and integrate their patches through GitHub pull requests and CI. OpenAI
+supplies the model; Modal runs the workers. The coordinator currently runs on one
+host.
 
 ## Open the app
 
@@ -46,12 +48,21 @@ out of browser storage, operation history and preparation commits. Uploading an
 OpenAI key to a named Modal Secret is a separate explicit action. Saving settings
 starts no coding agents.
 
-![Repository selection and recorded run history](docs/images/dashboard-run-history-2026-11-11.png)
+## Interface
 
-Workspace captured on November 11, 2026, at 17:24 Mexico City time (23:24 UTC),
-showing sealed historical evidence from 16:23 Mexico City time (22:23 UTC):
-100 original failed workers, 56 provisional product recoveries and two separate
-support recoveries. Final quality, billed cost and AFK comparison remain unknown.
+**Projects** keeps repository selection and GitHub/local setup together.
+
+![Connected projects and repository setup in the current interface](docs/images/swarm-projects-2026-11-13.png)
+
+**Plan work** turns a goal into a proposal with commands, task ownership,
+acceptance criteria and dependency analysis for review before issue creation.
+
+![Reviewing an AI work plan, independent task capacity and project commands](docs/images/swarm-plan-review-2026-11-13.png)
+
+Captured on November 13, 2026, using the shipped interface with controlled
+example repository/task data. These illustrate the UI; they are not evidence of
+a new model call or live worker run. See the [full desktop/mobile gallery and
+capture receipt](docs/DASHBOARD.md#screenshots), including New run and run details.
 
 **Start with the [local quickstart](docs/QUICKSTART.md)** to understand the system
 without credentials or cloud resources. Then follow the
