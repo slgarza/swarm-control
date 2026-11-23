@@ -192,6 +192,9 @@ inputs, synthetic results and the research behind the design.
 The [November 23 local validation](docs/SWARM_SCALE_REHEARSAL.md#november-23-local-validation)
 records a frozen 100-task preflight, repeatable queue comparisons and preparation
 of 100 synthetic candidates in real local Git worktrees.
+The [November 23 live pilot](docs/SWARM_SCALE_REHEARSAL.md#november-23-live-pilot)
+records the 1 → 2 rollout on three tutorial tasks, exact-head CI and combined
+post-merge checks, and a gateway usage-settlement gap.
 
 Validate an independent frontier before planning a 100-worker cohort:
 

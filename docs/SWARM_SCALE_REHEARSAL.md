@@ -217,6 +217,41 @@ for section in ("controller_fixture_tests", "local_git_integration_fixture_tests
 PY
 ```
 
+## November 23 live pilot
+
+The live pilot used [controller commit `c1bd293`](https://github.com/slgarza/swarm-control/commit/c1bd293ba02e53c831a825ff1cb27848fc56339f)
+and a fresh private tutorial repository. Three tasks covered whitespace
+normalization, inverted clamp bounds and stable label deduplication. The operator
+froze the baseline and acceptance commands, bound the tasks to open issues,
+verified GitHub CI, and selected bundle transport. A compatibility probe passed
+before the coding run. [Public evidence receipt](evidence/live-progressive-pilot-2026-11-23.json)
+
+| Observation | Result |
+| --- | --- |
+| Dispatch | D01 validated in the first wave. The controller checkpointed it and released D02 and D03 together. |
+| Concurrency | Peak two live agent sessions and peak two sampled command/model spans. The second-wave session intervals overlapped for 37.221 seconds. |
+| Early integration | Independent preparation and frozen acceptance for D01 passed within both second-wave coding intervals. The operator reviewed and published D01 from the trusted controller. |
+| Delivery | Three validated patches and three independently reviewed private PRs merged after exact-head CI. On the final combined commit, GitHub CI, 16 local tests and all three frozen behavior checks passed. |
+| Timing | 100 seconds from workload release to runner completion. 265.877 seconds from release to immediate verification of the combined merge, including review and CI. Setup and probe preceded workload release. |
+| Cleanup | The probe and all three coding sandboxes terminated. Both isolated Modal apps stopped with zero active containers observed, and the local execution profile was disabled after delivery. |
+
+The USD 100 authorization covered one probe and one coding cohort.
+The local ledger retained USD 8.50 for model admission
+and USD 3.25 for infrastructure admission. These amounts describe the
+controller's reservations. The Modal hourly usage report attributed a provisional
+USD 0.00583657 subtotal to the two test apps.
+
+The gateway accepted zero usage settlements across 14 requests from the probe
+and cohort. It retained USD 3.260728 across those requests, and each task's last
+settlement category was `completed`. Worker events separately recorded command
+completion and model token usage. The gateway records leave OpenAI billed cost
+and reconciled total cost unknown. Diagnosing the usage validation rejection is
+a prerequisite for a cost-efficiency comparison. [Gateway accounting](GATEWAY.md)
+
+The receipt provides immediate behavior and integration verification for the
+three teaching tasks. The longer quality observation, 100-agent overlap and
+matched AFK comparison still need their own evidence. [Benchmark protocol](contest/BENCHMARK.md)
+
 ## Research behind the design
 
 | Finding | Applied to Swarm Control |
