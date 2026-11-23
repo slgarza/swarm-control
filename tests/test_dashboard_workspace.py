@@ -96,12 +96,13 @@ class WorkspaceHTTPTests(SnapshotFixture):
         self.assertTrue(self.request("GET", "/api/snapshot?project=first&run=past")[1]["available"])
 
     def test_preview_and_save_have_distinct_mutation_scope(self):
-        self.assertEqual(self.post()[0], 200)
-        code, saved = self.post(path="/api/runs")
+        data = {"project_id": "first", "options": {"task_ids": ["A1", "A2"], "workers": 2, "ramp_start": 1}}
+        self.assertEqual(self.post(data=data)[0], 200)
+        code, saved = self.post(path="/api/runs", data=data)
         self.assertEqual(code, 201)
         self.assertEqual(saved["status"], "draft")
         self.assertFalse(saved["authorizes_spend"])
-        self.assertEqual([call[2] for call in self.workspace.calls], [False, True])
+        self.assertEqual(self.workspace.calls, [("first", data["options"], False), ("first", data["options"], True)])
 
     def test_wrong_origin_or_token_and_cross_site_are_rejected_before_preparation(self):
         for changes in ({"Origin": "https://foreign.invalid"}, {"Origin": "null"},

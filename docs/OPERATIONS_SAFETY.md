@@ -34,6 +34,18 @@ recovery paths. Tasks that were not dispatched are recorded as `not_dispatched`,
 not failed worker attempts. A synchronized cohort's barrier is aborted if
 admission closes before every worker can enter.
 
+The batch summary and browser worker reports show why dispatch was held:
+
+| Reason | Meaning |
+| --- | --- |
+| `operations_hold` | The durable operations brake closed admission |
+| `rollout_validation_hold` | Fewer than 80% of the completed wave validated |
+| `rollout_gateway_window_hold` | The remaining gateway window could not cover a full worker lifecycle |
+
+Both rollout holds end dispatch for that attempt and retain its allocations.
+`ops clear-hold` clears the durable operations brake. A held rollout can be
+reviewed for a separately authorized attempt. [Scale rehearsal and rollout](SWARM_SCALE_REHEARSAL.md)
+
 The hold persists across restarts and beyond the detection window. Inspect and,
 after addressing the cause, explicitly clear it:
 

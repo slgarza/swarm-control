@@ -18,6 +18,17 @@ The disjoint leaf workload did not exercise live shared-file conflicts. These
 results justify diagnosing worker completion and integration throughput before
 another large run; they do not justify expansion from VM counts alone.
 
+## Rehearse and choose a dispatch policy
+
+`swarm-control rehearse --synthetic-tasks 100 --workers 25 50 100` compares fixed
+dispatch with a progressive rollout on the same simulated task outcomes. Run it
+against a project manifest to check the selected ready frontier before comparing
+provider, review and CI constraints. `plan` and `run` also accept `--ramp-start`
+for an opt-in live policy that advances only after a sufficiently successful
+wave. A capped wave is a deliberate exposure limit. For measured 100-way overlap,
+plan a separately authorized fixed cohort of 100 with capacity and useful work
+available. [Scale rehearsal and staged rollout](SWARM_SCALE_REHEARSAL.md)
+
 ## Implemented controls
 
 The 100-worker target now has an explicit workload-readiness validator:
@@ -32,12 +43,13 @@ provider capacity or spending authority. See [dependency analysis](DEPENDENCIES.
 | --- | --- |
 | Cohort admission | `budget.max_live_agents` accepts 1–100; parser/manual initialization defaults to ten, while a new AI-prepared profile uses reviewed desired concurrency; disabled/funding gates still apply |
 | Dispatch | At most the requested number of submitted workers; completion checkpoints happen before replacement submissions |
+| Progressive rollout | Optional bounded waves, with at least 80% validated in the preceding wave and enough remaining gateway lifetime before more dispatch |
 | Shared ownership | `--allow-overlap` on `plan`/`run` records overlapping pairs; each worker still edits only its declared paths |
 | Integration | Strict application first; opted-in candidates can use three-way application, full combined validation and an additional applied-diff review hash |
 | Conflicts | Durable `needs_repair` receipt and cleaned partial application; no automatic repair or replacement spend |
 | Gateway capacity | One serving container, 120 HTTP inputs; configurable 1–100 provider slots, default 20, with at most 15 seconds of capacity waiting |
 | Provider pacing | Optional paired token/request rolling-minute permits, verified input plus maximum output weight, FIFO queue of at most 100 waiters and one shared 300-second deadline |
-| Coding duration | Default 300 seconds; explicit 30–1800 seconds, lifecycle `timeout + 900`, gateway TTL `max(1800, timeout + 900)` within the 3600-second ceiling |
+| Coding duration | Default 300 seconds, configurable from 30 to 1800 seconds. Lifecycle `timeout + 900`. Fixed dispatch uses gateway TTL `max(1800, timeout + 900)`. Ramp uses a single 3600-second gateway window. |
 | Preparation inspection | Read-only `preflight`; optional GitHub GETs, separate source/admission/live blockers and no launch approval |
 | Useful-work observations | Worker-owned process supervision, source-change checkpoints and explicit observed stop reasons; no automatic paid retries |
 | Task acceptance | Optional frozen argv checks and protected base inputs, sharing the existing validation allowance with the baseline |
@@ -68,9 +80,9 @@ coordinate other account traffic or prove provider quota. See
 [gateway policy](GATEWAY.md).
 
 Choose a longer session only with its actual allowed budget and expected request
-profile. Explicit `--timeout 1800` uses a 2700-second sandbox lifecycle/gateway
-TTL, while default 300 keeps lifecycle 1200 and TTL 1800. The HTTP handler and
-worker stream idle timeout are 900 seconds. Longer coding sessions and queued
+profile. With fixed dispatch, `--timeout 1800` uses a 2700-second sandbox lifecycle
+and gateway TTL, while default 300 keeps lifecycle 1200 and TTL 1800. The HTTP
+handler and worker stream idle timeout are 900 seconds. Longer coding sessions and queued
 requests increase occupied compute and can still time out or exhaust allowance;
 they do not authorize refunds, replacement workers or automatic replenishment.
 Record all waits, failures and the review/integration tail in time and cost.

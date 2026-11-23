@@ -283,7 +283,7 @@ def batch_summary(batch):
         ),
         "sessions_after_first_command_peak": peak_intervals(productive_intervals),
         "all_sandboxes_terminated": all(
-            r.get("sandbox_terminated") is True for r in reports
+            r["status"] == "not_dispatched" or r.get("sandbox_terminated") is True for r in reports
         ),
         "merged_green_prs": 0,
         "tasks": [

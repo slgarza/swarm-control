@@ -61,12 +61,15 @@ final_report = stop.remote(run_id)
 single-use, 1–64 ASCII letters/digits/underscore/hyphen, starting with a letter
 or digit. Duplicate IDs fail, including stopped, expired, or partially created
 runs. Use one run for the whole pilot; creating a new run is a new budget,
-not recovery of the previous allowance. TTL is 60–3600 seconds, with an unchanged
-1800-second administrative default. The runner uses `max(1800, agent_timeout +
-900)`: its default 300-second session keeps TTL 1800, while explicit `--timeout
-1800` uses TTL 2700. These longer limits do not enlarge any allowance. Maximum 60
-accepted requests per task. Credentials contain 256 bits of randomness and are
-stored only as SHA-256 digests in the durable ledger.
+not recovery of the previous allowance. TTL is 60–3600 seconds, with an
+1800-second administrative default. Fixed dispatch uses
+`max(1800, agent_timeout + 900)`. Its default 300-second session uses TTL 1800,
+and an explicit `--timeout 1800` uses TTL 2700. Progressive rollout requests
+one 3600-second window for the cohort. Each staged worker starts only when the
+remaining window covers its coding timeout plus 900 seconds for the full
+lifecycle. The maximum is 60 accepted requests per task. Credentials contain
+256 bits of randomness and are stored as SHA-256 digests in the durable ledger.
+[Staged launch](SWARM_SCALE_REHEARSAL.md#use-a-staged-launch)
 
 `run_status` and `stop_run` return `run_id`, `model`, `state`, `created_at`,
 `expires_at`, `budget_usd`, `maximum_charged_usd`, `committed_usd`,

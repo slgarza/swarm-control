@@ -78,6 +78,13 @@ The VM caps remain 2 CPU/2 GiB. Agent time defaults to 300 seconds with a
 coding and a 2700-second lifecycle. Longer sessions do not increase any allowance
 or authorize new spending. A profile may opt into up to 100 workers; its default is ten.
 
+With `--ramp-start N`, the controller dispatches a reviewed cohort in successive
+waves. It claims the cohort and reserves its budget before starting, then
+checkpoints every result in a wave before evaluating expansion. At least 80%
+of that wave must be validated, and the next dispatch needs enough time on the
+original gateway credentials for a full worker lifecycle. Review and integration
+follow the standard path for each validated patch. [Scale rehearsal and rollout](SWARM_SCALE_REHEARSAL.md)
+
 ## Model credentials and budget
 
 For worker execution, the real OpenAI key is injected only into the gateway.
@@ -159,6 +166,8 @@ target's worker ledger.
 | --- | --- |
 | [project.py](../swarm_control/project.py) | Parse/validate target settings and verify Git origin |
 | [modal_runner.py](../swarm_control/modal_runner.py) | Plan, admission, provisioning, event collection and cleanup |
+| [rollout.py](../swarm_control/rollout.py) | Wave sizing and validation threshold shared by dispatch and rehearsal |
+| [rehearsal.py](../swarm_control/rehearsal.py) | Deterministic simulation of worker, model, review and CI capacity |
 | [modal_worker.py](../swarm_control/modal_worker.py) | Install/check commands and Git patch recovery inside the VM |
 | [pilot_state.py](../swarm_control/pilot_state.py) | Local durable claims, budgets and activity summaries |
 | [pilot_budget.py](../swarm_control/pilot_budget.py) | Gateway policy, reservations, token validation and accounting |

@@ -26,7 +26,8 @@ MAX_BYTES = 8 * 1024 * 1024
 MAX_TASK_BYTES = 256 * 1024
 _RUNNER_LOCK = threading.RLock()
 _OPTIONS = {"task_ids", "workers", "timeout", "model_budget", "synchronized",
-            "allow_overlap", "base", "label", "context_mode", "require_parallel", "no_progress_timeout"}
+            "allow_overlap", "base", "label", "context_mode", "require_parallel",
+            "no_progress_timeout", "ramp_start"}
 _STATES = {"draft", "historical", "launching", "runner_finished", "interrupted"}
 _WORKER_STATES = frozenset({"starting", "preparing", "ready", "working", "checking", "recovering",
                             "validated", "needs_repair", "rejected", "failed", "interrupted",
@@ -128,6 +129,13 @@ def _options(value):
              "No-progress stop must be between 30 seconds and the coding time limit")
     _require(type(result["synchronized"]) is bool and type(result["allow_overlap"]) is bool,
              "Run flags must be booleans")
+    ramp_start = result.get("ramp_start")
+    if ramp_start is None:
+        result.pop("ramp_start", None)
+    else:
+        _require(type(ramp_start) is int and 1 <= ramp_start < min(result["workers"], len(tasks)),
+                 "Initial agents must be a positive whole number below the concurrent agent count")
+        _require(not result["synchronized"], "A staged ramp requires synchronized start to be off")
     _require(not result["synchronized"] or result["workers"] == len(tasks),
              "A synchronized run needs one task per agent")
     _require(isinstance(result["context_mode"], str) and result["context_mode"] in {"full", "task"},
@@ -440,6 +448,11 @@ class Workspace:
         diff = _git(project, "diff", "--binary", "HEAD", "--")
         status = _git(project, "status", "--porcelain", "--untracked-files=normal")
         inventory_identity = load_inventory(project)[1]
+        controller_files = ("modal_runner.py", "modal_worker.py", "context_packet.py", "progress.py",
+                            "supervision.py", "dependencies.py", "workload.py", "source_bundle.py",
+                            "connections.py", "connection_worker.py", "desktop_tools.py")
+        if options.get("ramp_start") is not None:
+            controller_files += ("rollout.py",)
         return {"base_sha": base_sha,
                 "dependency_inventory_sha256": inventory_identity["inventory_sha256"],
                 "checkout_head": _git(project, "rev-parse", "HEAD").decode().strip(),
@@ -450,10 +463,7 @@ class Workspace:
                 "instructions_sha256": {name: _digest((project.root / name).read_bytes())
                                         for name in project.instructions},
                 "controller_source_sha256": {name: _digest(Path(__file__).with_name(name).read_bytes())
-                    for name in ("modal_runner.py", "modal_worker.py", "context_packet.py", "progress.py",
-                                 "supervision.py", "dependencies.py", "workload.py", "source_bundle.py",
-                                 "connections.py", "connection_worker.py", "desktop_tools.py")
-                    if Path(__file__).with_name(name).is_file()},
+                    for name in controller_files if Path(__file__).with_name(name).is_file()},
                 "options_sha256": _digest(json.dumps(options, sort_keys=True).encode())}
 
     @staticmethod
@@ -470,7 +480,7 @@ class Workspace:
                 synchronized=options["synchronized"], base=options["base"], online=False,
                 model_budget=options["model_budget"], allow_overlap=options["allow_overlap"],
                 timeout=options["timeout"], context_mode=options["context_mode"],
-                require_parallel=options.get("require_parallel"))
+                require_parallel=options.get("require_parallel"), ramp_start=options.get("ramp_start"))
             if options["context_mode"] == "task":
                 runner.build_context_packets(tasks, raw["base_sha"], options["context_mode"], timeout=options["timeout"])
             bindings = Workspace._bindings(project, options, tasks, raw["base_sha"])
@@ -485,6 +495,8 @@ class Workspace:
         from .workload import public_analysis, public_context
         public["dependency_analysis"] = public_analysis(raw.get("dependency_analysis"))
         public["context_readiness"] = public_context(raw.get("context_readiness"))
+        if "rollout" in raw:
+            public["rollout"] = raw["rollout"]
         return public, bindings
 
     @staticmethod
@@ -507,6 +519,14 @@ class Workspace:
             result[key] = value if type(value) is int and 0 <= value <= 100000000 else None
         result["dependency_analysis"] = public_analysis(source.get("dependency_analysis"))
         result["context_readiness"] = public_context(source.get("context_readiness"))
+        rollout = source.get("rollout")
+        if isinstance(rollout, dict):
+            sizes = rollout.get("wave_sizes")
+            threshold = rollout.get("minimum_validated_percent")
+            if (isinstance(sizes, list) and 2 <= len(sizes) <= 100
+                    and all(type(size) is int and 1 <= size <= 100 for size in sizes)
+                    and sum(sizes) <= 100 and type(threshold) is int and 1 <= threshold <= 100):
+                result["rollout"] = {"wave_sizes": sizes, "minimum_validated_percent": threshold}
         return result
 
     @staticmethod
@@ -523,6 +543,7 @@ class Workspace:
                   "timeout": options.get("timeout"),
                   "require_parallel": options.get("require_parallel"),
                   "no_progress_timeout": options.get("no_progress_timeout"),
+                  "ramp_start": options.get("ramp_start"),
                   "model_budget": options.get("model_budget"),
                   "synchronized": options.get("synchronized"), "allow_overlap": options.get("allow_overlap"),
                   "context_mode": options.get("context_mode"),
@@ -620,7 +641,7 @@ class Workspace:
             except (OSError, ValueError, TypeError, RecursionError):
                 status = "unknown"
             outcomes[status] = outcomes.get(status, 0) + 1
-            row = {"task_id": task_id, "status": status, "phase": None,
+            row = {"task_id": task_id, "status": status, "phase": None, "dispatch_hold_reason": None,
                    "terminal_reason": None, "source_change_count": None,
                    "first_source_change_seconds": None, "file_change_signals": None,
                    "last_event_at_utc": None, "recovered_candidate_available": False,
@@ -629,6 +650,9 @@ class Workspace:
             if report is None:
                 continue
             observed += 1
+            if status == "not_dispatched" and report.get("reason") in (
+                    "operations_hold", "rollout_validation_hold", "rollout_gateway_window_hold"):
+                row["dispatch_hold_reason"] = report["reason"]
             supervisor = report.get("supervision")
             if isinstance(supervisor, dict) and supervisor.get("source") == "worker_supervisor_observed":
                 reason = supervisor.get("terminal_reason")
@@ -766,6 +790,11 @@ class Workspace:
                 _require(data.get("repository") == project.repository
                          and data.get("base_sha") == run["bindings"]["base_sha"]
                          and data.get("tasks") == run["options"]["task_ids"], "Run batch binding differs")
+                ramp_start = run["options"].get("ramp_start")
+                if ramp_start is not None:
+                    rollout = data.get("rollout")
+                    _require(isinstance(rollout, dict) and type(rollout.get("ramp_start")) is int
+                             and rollout["ramp_start"] == ramp_start, "Run batch ramp differs")
                 found.append(path.parent)
             except (OSError, ValueError, AttributeError, RecursionError):
                 continue
@@ -810,7 +839,7 @@ class Workspace:
             if options[key]:
                 argv.append(flag)
         for key, flag in (("require_parallel", "--require-parallel"),
-                          ("no_progress_timeout", "--no-progress-timeout")):
+                          ("no_progress_timeout", "--no-progress-timeout"), ("ramp_start", "--ramp-start")):
             if options.get(key) is not None:
                 argv.extend([flag, str(options[key])])
         try:
@@ -908,6 +937,7 @@ def runs_main():
     parser.add_argument("--context-mode", choices=["full", "task"], default="full")
     parser.add_argument("--require-parallel", type=int)
     parser.add_argument("--no-progress-timeout", type=int)
+    parser.add_argument("--ramp-start", type=int, help="Initial wave size for a staged run")
     parser.add_argument("--synchronized", action="store_true")
     parser.add_argument("--allow-overlap", action="store_true")
     parser.add_argument("--gateway-url")
@@ -920,7 +950,8 @@ def runs_main():
             "timeout": args.timeout, "model_budget": args.model_budget, "base": args.base, "label": args.label,
             "context_mode": args.context_mode, "synchronized": args.synchronized,
             "allow_overlap": args.allow_overlap, "require_parallel": args.require_parallel,
-            "no_progress_timeout": args.no_progress_timeout}, save=args.command == "create")
+            "no_progress_timeout": args.no_progress_timeout, "ramp_start": args.ramp_start},
+            save=args.command == "create")
     elif args.command == "list":
         _require(not args.items and not args.execute, "list accepts no run ID or execution")
         project = workspace._project(workspace._read(), args.project)

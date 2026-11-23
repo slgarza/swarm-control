@@ -35,6 +35,18 @@ def _json(raw):
     return json.loads(raw, object_pairs_hook=unique, parse_constant=nonfinite)
 
 
+def read_task_manifest(path):
+    with path.open("rb") as stream:
+        raw = stream.read(MAX_INVENTORY_BYTES + 1)
+    if len(raw) > MAX_INVENTORY_BYTES:
+        raise ValueError("Manifest exceeds the analysis size limit")
+    value = _json(raw)
+    selected = value.get("taskIds") if isinstance(value, dict) else None
+    if not isinstance(selected, list) or not selected:
+        raise ValueError("Manifest needs a nonempty taskIds array")
+    return selected
+
+
 def load_inventory(project):
     """Bound and hash every definition; no GitHub, ledger or target commands."""
     entries = sorted(project.tasks_dir.glob("*.json"))
@@ -201,14 +213,10 @@ def main():
     if args.manifest:
         if selected:
             parser.error("Choose positional task IDs or --manifest")
-        with args.manifest.open("rb") as stream:
-            raw = stream.read(MAX_INVENTORY_BYTES + 1)
-        if len(raw) > MAX_INVENTORY_BYTES:
-            parser.error("Manifest exceeds the analysis size limit")
-        value = _json(raw)
-        selected = value.get("taskIds") if isinstance(value, dict) else None
-        if not isinstance(selected, list) or not selected:
-            parser.error("Manifest needs a nonempty taskIds array")
+        try:
+            selected = read_task_manifest(args.manifest)
+        except ValueError as error:
+            parser.error(str(error))
     report = analyze_project(load_project(args.project), selected, workers=args.workers,
                              base=args.base, allow_overlap=args.allow_overlap)
     report["required_parallelism"] = args.require_parallel

@@ -34,12 +34,17 @@ required minimum, a shortfall or an incomplete existing-source scan fails
 preparation. Future waves still need prerequisite merges and a newly frozen base. See
 [dependency analysis](DEPENDENCIES.md).
 
-For a deliberately longer candidate, add `--timeout 1800`. The unchanged default
-is 300 seconds; the accepted range is 30–1800. The report shows the selected
-coding limit, sandbox lifecycle (`timeout + 900`) and gateway TTL
-(`max(1800, timeout + 900)`). An 1800-second selection therefore needs a 2700-second
-lifecycle/TTL. The independent gateway TTL ceiling is 3600. Selecting these
-values changes no live flag, budget policy or deployed service.
+Use `--timeout` to select a coding limit from 30 to 1800 seconds. The default
+is 300 seconds. The report shows that limit, the sandbox lifecycle
+(`timeout + 900`) and the gateway TTL. Fixed dispatch uses
+`max(1800, timeout + 900)`, so a coding limit of 1800 seconds gives a
+2700-second lifecycle and TTL. The gateway TTL ceiling is 3600 seconds.
+
+Use `--ramp-start N` for a staged cohort. The gateway capacity and resource
+checks use the largest planned wave while dependency and budget checks cover
+the reviewed cohort. The report shows the wave sizes, the validation threshold
+and the required gateway time remaining before each launch. Staged runs request
+the gateway's 3600-second TTL and require synchronized start to be off.
 
 Only this explicit option permits GitHub GETs:
 

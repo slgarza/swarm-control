@@ -14,6 +14,9 @@ def main():
         elif sys.argv[1] == "analyze":
             from .workload import main as run
             del sys.argv[1]
+        elif sys.argv[1] == "rehearse":
+            from .rehearsal import main as run
+            del sys.argv[1]
         elif sys.argv[1] == "integrate-queue":
             from .integration_pipeline import main as run
             del sys.argv[1]

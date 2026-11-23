@@ -126,13 +126,67 @@ class WorkspaceTests(unittest.TestCase):
                        {"model_budget": "NaN"}, {"model_budget": 0.001},
                        {"model_budget": "1e999999999"}, {"model_budget": "9" * 65},
                        {"model_budget": True}, {"model_budget": 180.01},
-                       {"context_mode": []}, {"allow_overlap": "false"}):
+                       {"context_mode": []}, {"allow_overlap": "false"}, {"ramp_start": 1}):
             with self.subTest(change=change), self.assertRaises(ValueError):
                 self.workspace.prepare_run("target", {**self.options, **change})
         with self.assertRaisesRegex(ValueError, "context_files"):
             self.workspace.prepare_run("target", {**self.options, "context_mode": "task"})
         self.assertEqual(self.path.read_bytes(), before)
         self.assertFalse((self.target.root / ".swarm/control.sqlite3").exists())
+
+    def test_staged_run_freezes_and_passes_the_initial_wave_setting(self):
+        first_path = self.target.tasks_dir / "A1.json"
+        task = json.loads(first_path.read_text())
+        task["ownership"] = ["src/item.txt"]
+        first_path.write_text(json.dumps(task))
+        second_task = {**task, "id": "A2", "issue": 2, "ownership": ["src/other.txt"]}
+        (self.target.tasks_dir / "A2.json").write_text(json.dumps(second_task))
+        self.live()
+        self.register()
+        options = {**self.options, "task_ids": ["A1", "A2"], "workers": 2}
+        for ramp_start in (0, 2, True, 1.5, "1"):
+            with self.subTest(ramp_start=ramp_start), self.assertRaisesRegex(ValueError, "Initial agents"):
+                self.workspace.prepare_run("target", {**options, "ramp_start": ramp_start})
+        with self.assertRaisesRegex(ValueError, "synchronized"):
+            self.workspace.prepare_run("target", {**options, "ramp_start": 1, "synchronized": True})
+
+        argv = ["swarm-control", "create", "target", "A1", "A2", "--agents", "2",
+                "--model-budget", "0.5", "--ramp-start", "1", "--workspace", str(self.path)]
+        with patch.object(sys, "argv", argv), patch("sys.stdout", new_callable=io.StringIO) as out:
+            self.assertEqual(workspace.runs_main(), 0)
+            saved = json.loads(out.getvalue())
+        restored = Workspace(self.path)
+        run = restored.run_detail("target", saved["id"])
+        self.assertEqual(run["ramp_start"], 1)
+        self.assertEqual(run["preflight"]["rollout"], {"wave_sizes": [1, 1], "minimum_validated_percent": 80})
+        default = restored.prepare_run("target", {**options, "ramp_start": None}, save=True)
+        self.assertNotIn("rollout", default["preflight"])
+        self.assertNotIn("ramp_start", json.loads(self.path.read_text())["projects"][0]["runs"][1]["options"])
+        self.assertFalse((self.target.root / ".swarm").exists())
+
+        real_run = subprocess.run
+        launches = []
+
+        def intercepted(argv, **kwargs):
+            if argv[:3] != [sys.executable, "-m", "swarm_control"]:
+                return real_run(argv, **kwargs)
+            launches.append(argv)
+            batch = self.target.root / ".swarm/modal-runs/batch-ramp"
+            (batch / "A2").mkdir(parents=True)
+            plan = {"run_id": saved["id"], "repository": self.target.repository,
+                    "base_sha": saved["base_sha"], "tasks": options["task_ids"], "rollout": {"ramp_start": 1}}
+            (batch / "plan.json").write_text(json.dumps(plan))
+            report = {"task_id": "A2", "run_id": saved["id"], "base_sha": saved["base_sha"],
+                      "status": "not_dispatched", "reason": "rollout_validation_hold"}
+            (batch / "A2/report.json").write_text(json.dumps(report))
+            return SimpleNamespace(returncode=1)
+
+        with patch("swarm_control.workspace.subprocess.run", side_effect=intercepted):
+            restored.launch("target", saved["id"], execute=True, gateway_url="https://fixture.modal.run")
+        self.assertEqual(len(launches), 1)
+        self.assertEqual(launches[0][launches[0].index("--ramp-start") + 1], "1")
+        execution = restored.run_detail("target", saved["id"])["execution"]
+        self.assertEqual(execution["task_observations"][1]["dispatch_hold_reason"], "rollout_validation_hold")
 
     def test_project_limit_is_not_increased_to_fit_requested_run(self):
         task = json.loads((self.target.tasks_dir / "A1.json").read_text())
@@ -228,6 +282,7 @@ class WorkspaceTests(unittest.TestCase):
                                             gateway_url="https://fixture.modal.run")
         self.assertEqual(len(launches), 1)
         self.assertEqual(launches[0][launches[0].index("--workers") + 1], "1")
+        self.assertNotIn("--ramp-start", launches[0])
         self.assertEqual(launches[0][launches[0].index("--run-id") + 1], saved["id"])
         self.assertEqual(result["status"], "runner_finished")
         self.assertEqual(result["runner_exit_code"], 1)

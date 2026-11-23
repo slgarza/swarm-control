@@ -236,6 +236,22 @@ class PreflightTests(unittest.TestCase):
         self.assertFalse(result["local_admission_reserve_sufficient"])
         self.assertFalse((self.root / ".swarm").exists())
 
+        self.project.path.write_text(text.replace("gateway_concurrency = 100", "gateway_concurrency = 40"))
+        self.project = load_project(self.project.path)
+        self.commit()
+        plain = preflight.build_preflight(self.project, ids, workers=100, base="HEAD")
+        self.assertIn("configured_gateway_capacity_insufficient", plain["local_workload_blockers"])
+        staged = preflight.build_preflight(self.project, ids, workers=100, base="HEAD", ramp_start=5)
+        self.assertTrue(staged["local_workload_ready"])
+        self.assertEqual(staged["required_parallelism"], 100)
+        self.assertTrue(staged["configured_gateway_capacity_sufficient"])
+        self.assertEqual(staged["rollout"]["wave_sizes"], [5, 10, 20, 40, 25])
+        self.assertEqual(staged["rollout"]["minimum_gateway_window_seconds"], 1200)
+        self.assertEqual(staged["runtime_constraints"]["gateway_run_ttl_seconds"], 3600)
+        self.assertEqual(staged["resource_plan"]["logical_container_inventory"]["workers"], 40)
+        self.assertEqual(staged["local_admission"]["minimum_infrastructure_reserve_cents"], 3100)
+        self.assertFalse((self.root / ".swarm").exists())
+
     def test_duplicate_task_or_issue_is_rejected(self):
         with self.assertRaisesRegex(ValueError, "duplicate task"):
             preflight.build_preflight(self.project, ["A1", "A1"], base=self.base)
