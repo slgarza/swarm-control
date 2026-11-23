@@ -26,6 +26,8 @@ progress. An existing installation can use `swarm-control start` instead.
    tasks listed by its configuration. Start with one or two independent tasks.
 3. Choose **Concurrent agents**. One agent per selected task is a clear first
    trial. Enter the proposed total model reservation if preparing real execution.
+   To validate outcomes before expanding, set **Initial agents for a staged run**
+   and leave synchronized start off.
 4. Click **Check plan** and read any blockers. Click **Save and review run** to preserve
    this exact selection and source. Saving starts no agents. Open the saved entry
    in **Runs** to inspect it later. Evidence, costs and workers belong to that
@@ -113,6 +115,12 @@ independent counts, the longest prerequisite chain, theoretical wave sizes and
 resource/import review hints. A sequence of 100 dependent tasks cannot satisfy
 that requirement. Future waves need merged prerequisites and a newly reviewed
 source base; they are not launched from a stale frozen checkout.
+
+`--ramp-start N` sets the initial wave for an unsynchronized plan or run. The
+plan shows the size of each wave and its maximum concurrent workers. Each wave
+must reach 80% validated results before the next can start. Use a representative
+first wave for early feedback, then measure full overlap in a separately
+authorized fixed run. [Scale rehearsal and progressive rollout](SWARM_SCALE_REHEARSAL.md)
 
 `--no-progress-timeout SECONDS` explicitly opts into stopping a worker after that
 many seconds without an observed owned-source change (30 seconds up to the

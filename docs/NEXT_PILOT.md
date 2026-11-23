@@ -4,7 +4,7 @@ This is a preparation protocol, not a record of another live experiment.
 No paid run, new allowance, AFK win or improved completion rate is implied.
 The original hundred-worker outcomes remain immutable.
 
-Protocol reviewed: November 13, 2026, against the current dashboard and CLI.
+Protocol updated November 23, 2026, for scale rehearsal and staged dispatch.
 No new live result is reported here. Organizer deadlines, eligibility and any
 cost exemption must be confirmed independently before a submission.
 
@@ -58,6 +58,13 @@ tabs. Navigation, a saved draft and a displayed 100-worker selection are not
 evidence that any worker started.
 
 ## Test one change at a time
+
+Use [scale rehearsal](SWARM_SCALE_REHEARSAL.md) on the independent subset of
+the frozen cohort to identify which provider, review and CI waits to measure.
+Keep the shared-file case in the live pilot's controlled collision experiment.
+If testing staged dispatch, record the initial wave size and hold reasons. The
+80% progression threshold measures worker validation within a wave. The pilot
+completion gate below measures independently accepted deliveries.
 
 1. Establish a small completion baseline with the new phase/termination receipts.
    Distinguish unsuccessful execution, empty output, valid recovered code and

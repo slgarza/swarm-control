@@ -54,10 +54,9 @@ See [gateway details](GATEWAY.md).
 Each worker gets one task, an exact base, isolated checkout and bounded gateway
 token. Synchronized batches wait for all preparations before starting. VM limits
 remain 2 CPU/2 GiB maximum, requested at 0.5 CPU/512 MiB. Coding time defaults to
-300 seconds; explicit `--timeout` accepts 30–1800 seconds. Lifecycle is coding
-timeout plus 900 seconds, at most 2700. Gateway TTL is `max(1800, timeout + 900)`,
-within its independent 3600-second ceiling. Thus opting into 1800-second sessions
-uses TTL 2700; the default keeps TTL 1800. Longer sessions do not grant allowance.
+300 seconds. Explicit `--timeout` accepts 30–1800 seconds. Lifecycle is coding
+timeout plus 900 seconds, at most 2700. Fixed dispatch uses a gateway TTL of
+`max(1800, timeout + 900)`. Progressive rollout uses one 3600-second window.
 Patches, hashes, events and final checks are recovered before termination; inspect
 any recovery or cleanup failure. Original private artifacts remain under the
 target's ignored `.swarm/`, shared with its Git worktrees.
@@ -66,6 +65,12 @@ The dispatcher submits at most `--workers` tasks at once and checkpoints each
 completion to the task ledger before submitting another. A checkpoint failure
 stops new submissions while submitted workers complete their recovery paths.
 There is no automatic worker replacement or budget replenishment.
+
+For progressive rollout, set `--ramp-start N` to start with fewer tasks. The
+runner drains and checkpoints a wave before admitting the next. At least 80%
+of that wave must be validated. An operations hold, insufficient validation
+or insufficient remaining gateway time can hold undispatched tasks. The run
+retains its original allocation. [Scale rehearsal and rollout](SWARM_SCALE_REHEARSAL.md)
 
 Profiles may opt into up to 100 workers; omitted profile fields and manual
 initialization default to ten. An approved AI plan for a new project explicitly
@@ -166,6 +171,7 @@ These commands do not automatically move through every stage for you.
 | `budget sync-openai` / `budget import-spend` | Explicitly fetch administrative cost evidence or import a private observation | Provider GETs for sync, local evidence writes for either; no spending approval |
 | `preflight TASK...` | Inspect prepared source, existing claims/allowance, cached spend and configured resource/runtime requirements | Offline by default; `--online` adds GitHub GETs only; no admission/deployment or launch approval |
 | `analyze [TASK...]` | Inspect explicit/inferred dependencies, cycles, source hints and a conservative ready frontier; up to 10,000 backlog definitions | Local metadata and frozen Git source reads only; `--require-parallel 100` fails an insufficient frontier |
+| `rehearse` | Compare fixed and progressive dispatch at up to 100 slots, and model provider, review and CI queues | Local simulation using a synthetic cohort or an explicit project manifest |
 | `smoke TASK...` | Create worker environments, clone/install/check the unchanged target and recover artifacts | Paid Modal resources and infrastructure allocation; no coding model calls or delivered feature |
 | `deploy-gateway` | Deploy the configured trusted model service | Modal deployment/build costs possible; no coding cohort |
 | `probe` | Exercise the real gateway/model/tool round trip in one bounded sandbox | Paid model/Modal usage and durable allowance allocation |
@@ -226,6 +232,7 @@ These flags apply to `plan`, `smoke` and `run` unless stated otherwise:
 | `--source-transport github\|bundle` | Use the profile's transport unless explicitly overridden; `github` clones public source, `bundle` uploads one bounded local frozen-history bundle without account tokens |
 | `--timeout SECONDS` | Agent coding time from 30 to 1800, default 300; longer sessions require explicit selection and do not include all setup/recovery time |
 | `--synchronized` | Require exactly one task per requested worker; real agents start after all worker preparations reach the barrier |
+| `--ramp-start N` | Start an unsynchronized `plan` or `run` with a wave of N agents, bounded below the worker limit and task count |
 | `--allow-overlap` | `plan`/`preflight`/`run` only: inspect or permit declared shared ownership in isolated checkouts; worker scope checks remain enforced |
 | `--model MODEL` | Required for `run`; only `gpt-6.1-sol` is supported by the current priced gateway |
 | `--model-budget USD` | Required for `run`; total cohort model allowance, positive whole cents, at most USD180 and within remaining local allowance |

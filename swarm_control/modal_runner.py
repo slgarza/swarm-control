@@ -23,9 +23,11 @@ from .modal_worker import (
     benchmark_bundle_summary,
     valid_path,
 )
+from .pilot_budget import MAX_TTL_SECONDS
 from .pilot_state import batch_summary, common_state, verify_github_tasks
 from .progress import WorkerProgress
 from .project import load_project
+from .rollout import MINIMUM_VALIDATED_PERCENT, rollout_waves, wave_passes
 
 ROOT = Path.cwd()
 REPOSITORY = None
@@ -239,31 +241,54 @@ def run_ttl_seconds(agent_timeout):
     return max(1800, agent_timeout + 900)
 
 
-def dispatch_tasks(tasks, workers, execute, on_complete, *, admit=None):
-    """Bound submitted work and checkpoint each completion before admitting more.
+def rollout_gateway_deadline(admission, requested_at, maximum_ttl):
+    """Estimate a conservative monotonic expiry without comparing host clocks."""
+    created, expires = admission.get("created_at"), admission.get("expires_at")
+    if (admission.get("state") != "active" or type(created) not in (int, float)
+            or type(expires) not in (int, float) or not 0 < created < expires <= created + maximum_ttl):
+        return requested_at
+    # The gateway could only create this admission after the controller sent it.
+    return requested_at + (expires - created)
 
-    Provider failures produce a failed attempt, never an automatic replacement.
-    A checkpoint failure stops new submissions; already submitted workers still
-    finish and are recovered by the caller's final reconciliation.
-    """
-    if not tasks:
-        return []
-    if type(workers) is not int or not 1 <= workers <= 100:
-        raise ValueError("workers must be between 1 and 100")
+
+def _checkpoint_held_tasks(tasks, on_complete, reason):
+    for task in tasks:
+        report = {"task_id": task["id"], "status": "not_dispatched",
+                  "reason": reason, "finished_at": now()}
+        on_complete(task, report)
+        yield report
+
+
+def _rollout_summary(plan, summary, checkpointed, hold_reasons):
+    outcomes = {task["task_id"]: task["status"] for task in summary["tasks"] if task["task_id"] in checkpointed}
+    waves = []
+    offset = 0
+    for size in plan["rollout"]["wave_sizes"]:
+        statuses = [outcomes[task_id] for task_id in plan["tasks"][offset:offset + size] if task_id in outcomes]
+        held = statuses.count("not_dispatched")
+        waves.append({"planned_count": size, "checkpointed_attempt_count": len(statuses) - held,
+                      "validated_count": statuses.count("validated"), "not_dispatched_count": held,
+                      "missing_checkpoint_count": size - len(statuses)})
+        offset += size
+    return {**plan["rollout"], "hold_reasons": sorted(hold_reasons), "waves": waves,
+            "not_dispatched_count": sum(wave["not_dispatched_count"] for wave in waves)}
+
+
+def _dispatch_batch(tasks, workers, execute, on_complete, admission_hold):
     remaining = iter(tasks)
     reports, skipped = [], []
-    held = False
+    hold_reason = None
     with ThreadPoolExecutor(max_workers=min(workers, len(tasks))) as pool:
         pending = {}
 
         def submit_next():
-            nonlocal held
-            if held:
+            nonlocal hold_reason
+            if hold_reason:
                 return
             task = next(remaining, None)
             if task is not None:
-                if admit is not None and not admit():
-                    held = True
+                hold_reason = admission_hold()
+                if hold_reason:
                     skipped.extend([task, *remaining])
                     return
                 pending[pool.submit(execute, task)] = task
@@ -283,11 +308,50 @@ def dispatch_tasks(tasks, workers, execute, on_complete, *, admit=None):
             on_complete(task, report)
             reports.append(report)
             submit_next()
-    for task in skipped:
-        report = {"task_id": task["id"], "status": "not_dispatched",
-                  "reason": "operations_hold", "finished_at": now()}
-        on_complete(task, report)
-        reports.append(report)
+    reports.extend(_checkpoint_held_tasks(skipped, on_complete, hold_reason))
+    return reports
+
+
+def dispatch_tasks(tasks, workers, execute, on_complete, *, admit=None,
+                   ramp_start=None, gateway_window_open=None):
+    """Bound submitted work and checkpoint it before admitting replacements.
+
+    A rollout waits for a wave to drain and validate before admitting more.
+    A failed checkpoint stops submission without retrying or replacing workers.
+    """
+    if not tasks and ramp_start is None:
+        return []
+    if type(workers) is not int or not 1 <= workers <= 100:
+        raise ValueError("workers must be between 1 and 100")
+
+    def admission_hold():
+        if admit is not None and not admit():
+            return "operations_hold"
+        if ramp_start is not None and gateway_window_open is not None and not gateway_window_open():
+            return "rollout_gateway_window_hold"
+        return None
+
+    if ramp_start is None:
+        return _dispatch_batch(tasks, workers, execute, on_complete, admission_hold)
+
+    reports = []
+    offset = 0
+    for size in rollout_waves(len(tasks), workers, ramp_start):
+        end = offset + size
+        wave_reports = _dispatch_batch(tasks[offset:end], size, execute, on_complete, admission_hold)
+        reports.extend(wave_reports)
+        offset = end
+        if offset == len(tasks):
+            break
+        wave_hold = next((report.get("reason") or "operations_hold" for report in wave_reports
+                          if report["status"] == "not_dispatched"), None)
+        validated = sum(report["status"] == "validated" for report in wave_reports)
+        if wave_hold is None and not wave_passes(validated, size):
+            wave_hold = ("operations_hold" if admit is not None and not admit()
+                         else "rollout_validation_hold")
+        if wave_hold:
+            reports.extend(_checkpoint_held_tasks(tasks[offset:], on_complete, wave_hold))
+            break
     return reports
 
 
@@ -927,6 +991,8 @@ def main():
     parser.add_argument(
         "--synchronized", action="store_true", help="start one full cohort together"
     )
+    parser.add_argument("--ramp-start", type=int,
+                        help="initial wave size for a progressive run, with expansion after recorded validation")
     parser.add_argument(
         "--allow-overlap", action="store_true",
         help="allow shared ownership in isolated workers; integration must reconcile collisions",
@@ -937,6 +1003,14 @@ def main():
         help="explicitly retry a reviewed failed attempt",
     )
     args = parser.parse_args()
+    waves = None
+    if args.ramp_start is not None:
+        if args.command == "smoke" or args.synchronized:
+            parser.error("--ramp-start is available for unsynchronized plan and run only")
+        try:
+            waves = rollout_waves(len(args.tasks), args.workers, args.ramp_start)
+        except ValueError as error:
+            parser.error(str(error))
     if args.require_parallel is None and args.workers == 100:
         args.require_parallel = 100
     args.run_id = validated_run_id(args.run_id)
@@ -1003,6 +1077,9 @@ def main():
     args.context_packets = build_context_packets(tasks, base_sha, args.context_mode, timeout=args.timeout)
     context_readiness = build_context_readiness(tasks, project, base_sha, args.context_mode,
                                               packets=args.context_packets)
+    planned_peak = max(waves) if waves else min(args.workers, len(tasks))
+    sandbox_lifecycle = args.timeout + 900
+    gateway_ttl = MAX_TTL_SECONDS if waves else run_ttl_seconds(args.timeout)
     plan = {
         "repository": project.repository,
         "base_sha": base_sha,
@@ -1019,15 +1096,15 @@ def main():
         "task_states": {task["id"]: task.get("status", "ready") for task in tasks},
         "live_execution_enabled": project.live_enabled,
         "gateway_concurrency": project.gateway_concurrency,
-        "gateway_capacity_sufficient": min(args.workers, len(tasks)) <= project.gateway_concurrency,
+        "gateway_capacity_sufficient": planned_peak <= project.gateway_concurrency,
         "allow_overlap": args.allow_overlap,
         "overlap_pairs": args.overlap_pairs,
         "requested_workers": args.workers,
-        "maximum_active_agents": min(args.workers, dependency_analysis["ready_count"]),
-        "enough_tasks_for_100": dependency_analysis["supports_100_now"] and args.workers >= 100,
+        "maximum_active_agents": min(planned_peak, dependency_analysis["ready_count"]),
+        "enough_tasks_for_100": dependency_analysis["supports_100_now"] and planned_peak >= 100,
         "agent_timeout_seconds": args.timeout,
-        "sandbox_lifecycle_timeout_seconds": args.timeout + 900,
-        "gateway_run_ttl_seconds": run_ttl_seconds(args.timeout),
+        "sandbox_lifecycle_timeout_seconds": sandbox_lifecycle,
+        "gateway_run_ttl_seconds": gateway_ttl,
         "configured_provider_pacing": {
             "tokens_per_minute": project.gateway_tokens_per_minute,
             "requests_per_minute": project.gateway_requests_per_minute,
@@ -1036,6 +1113,10 @@ def main():
         "mode": args.command,
         "source_transport": args.source_transport,
     }
+    if waves:
+        plan["rollout"] = {"ramp_start": args.ramp_start, "wave_sizes": waves,
+                           "minimum_validated_percent": MINIMUM_VALIDATED_PERCENT,
+                           "minimum_gateway_window_seconds": sandbox_lifecycle}
     if args.command == "plan":
         plan["local_admission"] = local_admission_summary(tasks, args.workers, project)
         print(json.dumps(plan, indent=2))
@@ -1085,6 +1166,7 @@ def main():
         tokens = {}
         reports = []
         recorded = set()
+        rollout_holds = set()
         if args.command == "run":
             from decimal import Decimal
 
@@ -1114,15 +1196,19 @@ def main():
         else:
             ledger.allocate(batch.name, 0, infra_cents=infrastructure_reserve_cents(len(tasks)))
         try:
+            gateway_deadline = None
             if gateway:
+                requested_at = time.monotonic()
                 admission = gateway["create_run"].remote(
                     batch.name, [task["id"] for task in tasks], args.model_budget,
-                    run_ttl_seconds(args.timeout)
+                    gateway_ttl
                 )
                 tokens = admission.pop("tokens")
                 write_json(batch / "budget-start.json", admission)
+                if waves:
+                    gateway_deadline = rollout_gateway_deadline(admission, requested_at, gateway_ttl)
                 if args.synchronized or project.gateway_tokens_per_minute is not None:
-                    verify_gateway_capacity(admission, min(args.workers, len(tasks)), project)
+                    verify_gateway_capacity(admission, planned_peak, project)
             barrier = (
                 Barrier(len(tasks))
                 if args.synchronized and args.command == "run"
@@ -1135,6 +1221,9 @@ def main():
                             barrier.abort()
                         return {"task_id": task["id"], "status": "not_dispatched",
                                 "reason": "operations_hold", "finished_at": now()}
+                    if waves and not gateway_window_open():
+                        return {"task_id": task["id"], "status": "not_dispatched",
+                                "reason": "rollout_gateway_window_hold", "finished_at": now()}
                     return execute_task(
                         task,
                         args,
@@ -1159,6 +1248,10 @@ def main():
                     recorded.add(task["id"])
                     if report.get("status") != "not_dispatched":
                         operations.observe(batch.name, task["id"], report, project.failure_policy)
+                    elif waves and report.get("reason") in {
+                        "operations_hold", "rollout_validation_hold", "rollout_gateway_window_hold"
+                    }:
+                        rollout_holds.add(report["reason"])
                 else:
                     directory = batch / task["id"]
                     directory.mkdir(exist_ok=True)
@@ -1170,7 +1263,12 @@ def main():
                     barrier.abort()
                 return allowed
 
-            reports = dispatch_tasks(tasks, args.workers, launch, checkpoint, admit=admit)
+            def gateway_window_open():
+                return gateway_deadline is not None and gateway_deadline - time.monotonic() >= sandbox_lifecycle
+
+            reports = dispatch_tasks(tasks, args.workers, launch, checkpoint, admit=admit,
+                                     ramp_start=args.ramp_start,
+                                     gateway_window_open=gateway_window_open if waves else None)
         finally:
             tokens.clear()
             if gateway:
@@ -1184,13 +1282,16 @@ def main():
                         batch / "budget-stop-error.json",
                         {
                             "error_type": type(error).__name__,
-                            "expires_in_at_most_seconds": run_ttl_seconds(args.timeout),
+                            "expires_in_at_most_seconds": gateway_ttl,
                         },
                     )
                 for task in tasks:
                     if task["id"] not in recorded:
                         record_task_result(ledger, batch, task)
-            write_json(batch / "summary.json", batch_summary(batch))
+            summary = batch_summary(batch)
+            if waves:
+                summary["rollout"] = _rollout_summary(plan, summary, recorded, rollout_holds)
+            write_json(batch / "summary.json", summary)
         return (
             0
             if len(reports) == len(tasks) and reports and all(

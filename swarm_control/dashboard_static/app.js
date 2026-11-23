@@ -230,7 +230,8 @@
 
   function readOptions() {
     const budget = byId('run-budget').value, workers = Number(byId('run-workers').value), required = byId('run-required-parallel').value, idle = byId('run-no-progress').value;
-    return {task_ids: [...state.selectedTasks].sort(), workers, timeout: Number(byId('run-timeout').value), base: byId('run-base').value.trim(), model_budget: budget === '' ? null : Number(budget), synchronized: byId('run-synchronized').checked, allow_overlap: byId('run-overlap').checked, context_mode: byId('run-context').value, require_parallel: required === '' ? (workers === 100 ? 100 : null) : Number(required), no_progress_timeout: idle === '' ? null : Number(idle), ...(byId('run-label').value.trim() ? {label: byId('run-label').value.trim()} : {})};
+    const rampStart = byId('run-ramp-start').value;
+    return {task_ids: [...state.selectedTasks].sort(), workers, timeout: Number(byId('run-timeout').value), base: byId('run-base').value.trim(), model_budget: budget === '' ? null : Number(budget), synchronized: byId('run-synchronized').checked, allow_overlap: byId('run-overlap').checked, context_mode: byId('run-context').value, require_parallel: required === '' ? (workers === 100 ? 100 : null) : Number(required), no_progress_timeout: idle === '' ? null : Number(idle), ramp_start: rampStart === '' ? null : Number(rampStart), ...(byId('run-label').value.trim() ? {label: byId('run-label').value.trim()} : {})};
   }
 
   function validateOptions(options) {
@@ -239,6 +240,8 @@
     if (!Number.isInteger(options.workers) || options.workers < 1 || options.workers > state.context.limits.max_workers) return 'Choose an agent count within this repository’s limit.';
     if (options.workers > options.task_ids.length) return 'Select at least ' + options.workers + ' tasks for ' + options.workers + ' concurrent agents.';
     if (options.task_ids.length > state.context.limits.max_workers) return 'This repository permits at most ' + state.context.limits.max_workers + ' tasks in one run.';
+    if (options.ramp_start !== null && (!Number.isInteger(options.ramp_start) || options.ramp_start < 1 || options.ramp_start >= Math.min(options.workers, options.task_ids.length))) return 'Choose a positive initial agent count below the concurrent limit.';
+    if (options.ramp_start !== null && options.synchronized) return 'Turn off synchronized start to use a staged run.';
     if (options.synchronized && options.workers !== options.task_ids.length) return 'A synchronized run needs exactly one selected task per agent.';
     if (!Number.isInteger(options.timeout) || options.timeout < 30 || options.timeout > 1800) return 'Choose a coding time limit from 30 to 1800 seconds.';
     if (options.require_parallel !== null && (!Number.isInteger(options.require_parallel) || options.require_parallel < 1 || options.require_parallel > options.workers)) return 'The required independent frontier must be between 1 and the selected agent count.';
@@ -273,9 +276,14 @@
   function renderPlan(container, plan) {
     const preflight = plan.preflight || {}, heading = node('div', 'plan-heading-row');
     heading.append(node('h3', '', plan.id ? 'Saved plan' : 'Plan review'), pill(preflight.preparation_checks_passed === true ? 'Source checks passed' : 'Preparation needs attention', preflight.preparation_checks_passed === true ? 'mint-pill' : 'amber-pill')); container.append(heading);
-    const factList = node('div', 'plan-facts');
-    for (const [label, value] of [['Concurrent agents', number(plan.workers)], ['Selected tasks', number(plan.task_ids?.length)], ['Coding limit', secondsLabel(plan.timeout)], ['Model reservation', money(plan.model_budget)], ['Infrastructure admission', money(finite(preflight.minimum_infrastructure_reserve_cents) ? preflight.minimum_infrastructure_reserve_cents / 100 : null)]]) {const fact = node('div', 'plan-fact'); fact.append(node('span', '', label), node('strong', '', value)); factList.append(fact);}
+    const factList = node('div', 'plan-facts'), rollout = preflight.rollout;
+    for (const [label, value] of [[rollout ? 'Agent limit' : 'Concurrent agents', number(plan.workers)], ['Selected tasks', number(plan.task_ids?.length)], ['Coding limit', secondsLabel(plan.timeout)], ['Model reservation', money(plan.model_budget)], ['Infrastructure admission', money(finite(preflight.minimum_infrastructure_reserve_cents) ? preflight.minimum_infrastructure_reserve_cents / 100 : null)]]) {const fact = node('div', 'plan-fact'); fact.append(node('span', '', label), node('strong', '', value)); factList.append(fact);}
     container.append(factList, node('p', '', ['preview', 'draft'].includes(plan.status) ? 'This is a local plan. Agent execution has not started, and no additional spending has been authorized. Reservations are limits, not invoices.' : 'These are the saved planning observations, not a new readiness check. Execution outcomes, delivery acceptance and invoices remain separate evidence.'));
+    if (Array.isArray(rollout?.wave_sizes) && rollout.wave_sizes.length) {
+      const waves = rollout.wave_sizes.map(number).join(', ');
+      const peak = Math.max(...rollout.wave_sizes);
+      container.append(node('p', 'field-help', 'The planned wave sizes are ' + waves + ' with a peak of ' + number(peak) + (peak === 1 ? ' agent.' : ' agents.') + ' Each wave must reach ' + number(rollout.minimum_validated_percent) + '% validated results before the next wave starts.'));
+    }
     renderReadiness(container, preflight, plan);
     const blockers = [...new Set([...(preflight.local_workload_blockers || []), ...(preflight.local_admission_blockers || []), ...(preflight.launch_blockers || [])])];
     if (blockers.length) {const details = node('details', 'plan-checks'), summary = node('summary', '', blockers.length + ' item(s) to resolve before a live launch'); details.open = preflight.preparation_checks_passed !== true; const list = node('ul', 'plan-blockers'); for (const blocker of blockers) list.append(node('li', '', blockerCopy[blocker] || String(blocker).replaceAll('_', ' '))); details.append(summary, list); container.append(details);}
@@ -400,7 +408,8 @@
         const scroll = node('div', 'table-scroll'), table = node('table'), head = node('thead'), tr = node('tr'), body = node('tbody');
         for (const text of ['Task', 'Outcome', 'Last phase', 'Source changes', 'Observed stop']) {const cell = node('th', '', text); cell.scope = 'col'; tr.append(cell);} head.append(tr);
         const reasons = {child_exited: 'Agent process exited', coding_deadline_reached: 'Coding limit reached', configured_no_source_progress: 'Configured source-progress stop', supervisor_interrupted: 'Supervisor interrupted', spawn_failed: 'Could not start agent'};
-        for (const task of reported.task_observations.slice(0, 100)) {const row = node('tr'); row.append(node('td', 'mono', task.task_id), node('td', '', outcomeLabels[task.status] || 'Unknown'), node('td', '', phaseLabels[task.phase] || 'Not observed'), node('td', '', finite(task.source_change_count) ? number(task.source_change_count) : 'Not observed'), node('td', '', (reasons[task.terminal_reason] || 'Unknown') + (task.recovered_candidate_available ? ' · Recovery candidate needs review' : ''))); body.append(row);}
+        const holds = {operations_hold: 'Operations hold', rollout_validation_hold: 'Wave validation threshold missed', rollout_gateway_window_hold: 'Insufficient gateway time for next wave'};
+        for (const task of reported.task_observations.slice(0, 100)) {const row = node('tr'); row.append(node('td', 'mono', task.task_id), node('td', '', outcomeLabels[task.status] || 'Unknown'), node('td', '', phaseLabels[task.phase] || 'Not observed'), node('td', '', finite(task.source_change_count) ? number(task.source_change_count) : 'Not observed'), node('td', '', (holds[task.dispatch_hold_reason] || reasons[task.terminal_reason] || 'Unknown') + (task.recovered_candidate_available ? ' · Recovery candidate needs review' : ''))); body.append(row);}
         table.append(head, body); scroll.append(table); details.append(scroll); progress.append(details);
       }
       progress.append(node('p', 'field-help', 'These are the last local worker reports. Phase counts are not active machines, continuous useful activity or accepted deliveries. Unobserved work remains unknown.')); target.append(progress);
@@ -757,7 +766,7 @@
     state.selectedTasks = new Set(matches.slice(0, cap).map((task) => task.id)); invalidatePreview(); renderTaskChoices(); updateBuilder(); announce(number(state.selectedTasks.size) + ' matching ready task definitions selected. Check the plan to inspect their dependencies.');
   });
   byId('clear-run-tasks').addEventListener('click', () => {state.selectedTasks.clear(); invalidatePreview(); renderTaskChoices(); updateBuilder();});
-  for (const id of ['run-workers', 'run-label', 'run-budget', 'run-base', 'run-timeout', 'run-context', 'run-synchronized', 'run-overlap', 'run-required-parallel', 'run-no-progress']) byId(id).addEventListener('input', () => {invalidatePreview(); updateBuilder();});
+  for (const id of ['run-workers', 'run-label', 'run-budget', 'run-base', 'run-timeout', 'run-context', 'run-synchronized', 'run-overlap', 'run-required-parallel', 'run-no-progress', 'run-ramp-start']) byId(id).addEventListener('input', () => {invalidatePreview(); updateBuilder();});
   byId('task-filter').addEventListener('change', renderTable);
   byId('task-search').addEventListener('input', renderTable);
   byId('close-detail').addEventListener('click', () => byId('task-dialog').close());

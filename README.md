@@ -104,6 +104,7 @@ unknowns. The loopback viewer makes no provider calls or execution/accounting wr
 | [Operations](docs/OPERATIONS.md) | Commands, side effects, flags and integration gates |
 | [Repositories and runs](docs/RUNS.md) | Connect targets, choose concurrent agents, save drafts and explicitly launch through the browser or CLI |
 | [Dependency and parallelism analysis](docs/DEPENDENCIES.md) | Detect prerequisite chains, inferred resource relationships and a conservative independent frontier for 100 workers |
+| [Scale rehearsal and progressive rollout](docs/SWARM_SCALE_REHEARSAL.md) | Compare 25, 50 and 100 worker slots with synthetic phase timings, then configure a checkpointed launch |
 | [Worker supervision](docs/WORKER_SUPERVISION.md) | Observe source changes, preserve termination reasons and run frozen task acceptance checks |
 | [Integration preparation pipeline](docs/INTEGRATION_PIPELINE.md) | Prepare independent reviewed candidates in bounded local lanes while other PRs wait for CI |
 | [Next pilot](docs/NEXT_PILOT.md) | Small completion experiment, scoped context, CI scheduling and matched AFK gates |
@@ -171,6 +172,22 @@ and inspect historical evidence. Backlog preparation, gateway deployment and
 reviewed integration still use the controller workflow.
 
 ## Capacity and remaining proof
+
+Compare worker limits and launch policies locally before an authorized run.
+Use the same cohort to inspect model, review and CI queues. The rehearsal reports
+synthetic worker occupancy, validation, end-to-end delivery time and queue waits.
+
+```sh
+swarm-control rehearse --synthetic-tasks 100 --workers 25 50 100 --ramp-start 5
+```
+
+Use a project and an explicit manifest to rehearse a reviewed cohort. In the
+browser or with `plan` and `run --ramp-start N`, progressive rollout starts
+with `N` tasks and waits for durable worker results before expanding. Each wave
+needs at least 80% validated results to release the next one. A ramp starting with
+5 out of 100 tasks plans waves of 5, 10, 20, 40 and 25, with at most 40 workers
+active together. See [scale rehearsal](docs/SWARM_SCALE_REHEARSAL.md) for scenario
+inputs, synthetic results and the research behind the design.
 
 Validate an independent frontier before planning a 100-worker cohort:
 

@@ -8,6 +8,7 @@ import subprocess
 import sys
 import tempfile
 import unittest
+from collections import Counter
 from contextlib import redirect_stderr, redirect_stdout
 from pathlib import Path
 from threading import Barrier, Event, Lock
@@ -534,8 +535,12 @@ class LifecycleTests(unittest.TestCase):
                                            "provider_rate_tpm": 800000, "provider_rate_rpm": 4000,
                                            "provider_rate_queue_seconds": 300})
 
+    def test_rollout_holds_unvalidated_wave_without_releasing_the_cohort_allocation(self):
+        self.run_mocked_100_agent_cohort(100, ramp_start=5)
+
     def run_mocked_100_agent_cohort(self, actual_capacity, *, agent_timeout=300,
-                                   stop_error=False, configured_pacing=False, advertised_pacing=None):
+                                   stop_error=False, configured_pacing=False, advertised_pacing=None,
+                                   ramp_start=None):
         class Image:
             @classmethod
             def from_registry(cls, *_args, **_kwargs):
@@ -556,7 +561,8 @@ class LifecycleTests(unittest.TestCase):
             gateway_calls.append((name, args))
             if name == "create_run":
                 return {"tokens": {task: "fake-task-token" for task in args[1]},
-                        "budget_usd": args[2], **(
+                        "budget_usd": args[2], "created_at": 1234567, "state": "active",
+                        "expires_at": 1234567 + args[3], **(
                             {"gateway_concurrency": actual_capacity} if actual_capacity is not None else {}
                         ), **(advertised_pacing or {})}
             if stop_error and name == "stop_run":
@@ -569,11 +575,12 @@ class LifecycleTests(unittest.TestCase):
                 remote=lambda *args: remote(name, *args))),
             Secret=SimpleNamespace(from_dict=lambda _: object()),
         )
-        rendezvous = Barrier(100)
+        rendezvous = Barrier(ramp_start or 100)
 
         def execute(task, args, base, batch, *_):
             rendezvous.wait(timeout=10)
-            return {"task_id": task["id"], "status": "validated", "sandbox_terminated": True}
+            status = "needs_repair" if ramp_start and task["id"] in {"T001", "T003"} else "validated"
+            return {"task_id": task["id"], "status": status, "sandbox_terminated": True}
 
         with tempfile.TemporaryDirectory() as temporary:
             project = make_project(Path(temporary))
@@ -592,6 +599,7 @@ class LifecycleTests(unittest.TestCase):
                     **template, "id": task_id, "issue": index + 1,
                     "ownership": [f"packages/ui/{task_id}"],
                 }))
+            scheduling_flags = ["--ramp-start", str(ramp_start)] if ramp_start else ["--synchronized"]
             with (
                 patch.multiple(runner, ROOT=project.root, PROJECT=None, REPOSITORY=None, APP=None),
                 patch.dict("sys.modules", {"modal": fake_modal}),
@@ -599,14 +607,17 @@ class LifecycleTests(unittest.TestCase):
                 patch.object(runner, "execute_task", side_effect=execute) as execute_worker,
                 patch("sys.argv", ["swarm-control", "run", *task_ids,
                                    "--project", str(project.path), "--workers", "100",
-                                   "--synchronized", "--allow-overlap", "--base", "HEAD",
+                                   *scheduling_flags, "--allow-overlap", "--base", "HEAD",
                                    "--model", "gpt-6.1-sol", "--model-budget", "180",
                                    "--timeout", str(agent_timeout),
                                    "--gateway-url", "https://fake.modal.run"]),
                 redirect_stdout(io.StringIO()),
             ):
                 admitted = actual_capacity == 100 and (not configured_pacing or advertised_pacing is not None)
-                if admitted:
+                if ramp_start:
+                    self.assertEqual(runner.main(), 1)
+                    self.assertEqual(execute_worker.call_count, ramp_start)
+                elif admitted:
                     self.assertEqual(runner.main(), 0)
                     self.assertEqual(execute_worker.call_count, 100)
                 else:
@@ -615,8 +626,24 @@ class LifecycleTests(unittest.TestCase):
                     execute_worker.assert_not_called()
             ledger = Ledger(project.root / ".swarm/control.sqlite3", model_limit_cents=18000, infra_limit_cents=4000)
             self.assertEqual(len(ledger.rows()), 100)
-            expected_state = "awaiting_integration" if admitted else "launch_failed"
-            self.assertTrue(all(row["state"] == expected_state for row in ledger.rows()))
+            if ramp_start:
+                self.assertEqual(Counter(row["state"] for row in ledger.rows()), {
+                    "awaiting_integration": 3, "needs_repair": 2, "not_dispatched": 95,
+                })
+                summary = next((project.root / ".swarm").rglob("summary.json"))
+                summary = json.loads(summary.read_text())
+                self.assertTrue(summary["all_sandboxes_terminated"])
+                rollout = summary["rollout"]
+                self.assertEqual(rollout["hold_reasons"], ["rollout_validation_hold"])
+                self.assertEqual(rollout["not_dispatched_count"], 95)
+                self.assertEqual(rollout["waves"][0], {
+                    "planned_count": 5, "checkpointed_attempt_count": 5, "validated_count": 3,
+                    "not_dispatched_count": 0, "missing_checkpoint_count": 0,
+                })
+                self.assertEqual([wave["not_dispatched_count"] for wave in rollout["waves"][1:]], [10, 20, 40, 25])
+            else:
+                expected_state = "awaiting_integration" if admitted else "launch_failed"
+                self.assertTrue(all(row["state"] == expected_state for row in ledger.rows()))
             with ledger.connect() as db:
                 self.assertEqual(db.execute("SELECT cents FROM pilot_allocations").fetchone()[0], 18000)
                 self.assertEqual(db.execute("SELECT cents FROM pilot_infra_allocations").fetchone()[0], 3100)
@@ -627,7 +654,7 @@ class LifecycleTests(unittest.TestCase):
                 self.assertEqual(json.loads(receipt.read_text())["expires_in_at_most_seconds"],
                                  runner.run_ttl_seconds(agent_timeout))
         self.assertEqual([name for name, _ in gateway_calls], ["create_run", "stop_run"])
-        self.assertEqual(gateway_calls[0][1][3], runner.run_ttl_seconds(agent_timeout))
+        self.assertEqual(gateway_calls[0][1][3], 3600 if ramp_start else runner.run_ttl_seconds(agent_timeout))
 
     def test_dispatch_checkpoints_fast_task_before_slow_one_and_bounds_submissions(self):
         slow_released = Event()

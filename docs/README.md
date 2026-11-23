@@ -21,7 +21,7 @@ not start a model request or coding workers.
 | User connecting GitHub or personal keys | [Connections](CONNECTIONS.md) | [Repository clone/fork and preparation](REPOSITORY_SETUP.md), [private source](PRIVATE_REPOSITORIES.md) |
 | Operator preparing a profile | [Project reference](PROJECTS.md) | [Preflight](DEPLOYMENT_PREFLIGHT.md), [budgets and billing](BILLING.md) |
 | Operator launching workers | [Run configuration](RUNS.md) | [Two-agent walkthrough](TWO_AGENT_WALKTHROUGH.md), [operations](OPERATIONS.md) |
-| Operator reviewing dependencies or capacity | [Dependencies and independent frontiers](DEPENDENCIES.md) | [Scaling limits](SCALING.md), [worker supervision](WORKER_SUPERVISION.md) |
+| Operator reviewing dependencies or capacity | [Dependencies and independent frontiers](DEPENDENCIES.md) | [Scale rehearsal and staged rollout](SWARM_SCALE_REHEARSAL.md), [scaling limits](SCALING.md), [worker supervision](WORKER_SUPERVISION.md) |
 | Operator reviewing returned patches | [Integration preparation](INTEGRATION_PIPELINE.md) | [Operations](OPERATIONS.md), [operational holds](OPERATIONS_SAFETY.md) |
 | Operator investigating a failure | [Troubleshooting](TROUBLESHOOTING.md) | [Operational holds](OPERATIONS_SAFETY.md), [budget migration](BUDGET_MIGRATION.md) |
 | Benchmark reviewer | [Current capability and evidence overview](contest/PRESENTATION.md) | [Benchmark protocol](contest/BENCHMARK.md), [evidence schema](contest/EVIDENCE.md), [target assessment](contest/TARGET-ASSESSMENT.md) |
@@ -35,6 +35,7 @@ not start a model request or coding workers.
 | Acquire source | Clone/fork a GitHub repository or inspect a local Git checkout | Own GitHub access; an existing local checkout needs a matching GitHub origin |
 | Prepare a work plan | Inspect bounded tracked source, send one explicitly budgeted OpenAI request, validate tasks and dependencies | Review the selected context, commands, ownership, acceptance and plan |
 | Materialize a plan | Explicit approval creates real issues and local task/profile files | Captured verified GitHub account, unchanged source and exact review binding |
+| Rehearse a cohort | Compare fixed dispatch with a ramp under bounded simulated provider, review and CI capacity | Independent ready cohort and explicit scenario assumptions |
 | Execute tasks | Save a draft, then explicitly launch up to 100 workers within the project and gateway limits | Published source where required, own provider setup, authorized model/infrastructure allowance and current capacity |
 | Integrate patches | Prepare reviewed candidates, run checks and publish/integrate through GitHub | Authenticated native Git on the controller, independent semantic review and passing checks on the actual candidate/base |
 | Inspect outcomes | Selected-run configuration, curated evidence, separate cost/reservation fields and private attempt history | Real source observations; missing activity, invoices and acceptance stay unknown |

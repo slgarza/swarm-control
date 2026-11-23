@@ -17,9 +17,11 @@ from pathlib import Path
 from urllib.parse import quote
 
 from . import budget_policy, budget_reporting, modal_runner
+from .pilot_budget import MAX_TTL_SECONDS
 from .pilot_integrate import green_checks
 from .pilot_state import verify_github_tasks
 from .project import load_project
+from .rollout import MINIMUM_VALIDATED_PERCENT, rollout_waves
 
 
 def model_cents(value):
@@ -114,7 +116,7 @@ def _remote_base(query, prefix, base_sha, branch):
 
 def build_preflight(project, task_ids, *, workers=1, synchronized=False, base=None,
                     online=False, model_budget=None, allow_overlap=False, query=None, timeout=300,
-                    context_mode="full", require_parallel=None):
+                    context_mode="full", require_parallel=None, ramp_start=None):
     """Return stage-specific evidence; no result authorizes a live operation."""
     modal_runner.configure(project)
     tasks = [modal_runner.load_task(task_id) for task_id in task_ids]
@@ -122,6 +124,14 @@ def build_preflight(project, task_ids, *, workers=1, synchronized=False, base=No
     if synchronized and len(tasks) != workers:
         raise ValueError("a synchronized cohort needs exactly one task per worker")
     ttl = modal_runner.run_ttl_seconds(timeout)
+    active_workers = min(workers, len(tasks))
+    waves = None
+    if ramp_start is not None:
+        if synchronized:
+            raise ValueError("A staged ramp requires synchronized start to be off")
+        waves = rollout_waves(len(tasks), workers, ramp_start)
+        active_workers = max(waves)
+        ttl = MAX_TTL_SECONDS
     base = base or project.base_ref
     if not isinstance(base, str) or base.startswith("-"):
         raise ValueError("invalid base ref")
@@ -153,7 +163,7 @@ def build_preflight(project, task_ids, *, workers=1, synchronized=False, base=No
         blockers.append("task_metadata_not_ready")
     if not local["project_capacity_sufficient"]:
         blockers.append("configured_worker_capacity_insufficient")
-    gateway_sufficient = min(workers, len(tasks)) <= project.gateway_concurrency
+    gateway_sufficient = active_workers <= project.gateway_concurrency
     if not gateway_sufficient:
         blockers.append("configured_gateway_capacity_insufficient")
 
@@ -195,8 +205,7 @@ def build_preflight(project, task_ids, *, workers=1, synchronized=False, base=No
                        "owner_launch_authorization_not_verified"]
     if not project.live_enabled:
         launch_blockers.append("live_execution_disabled")
-    active_workers = min(workers, len(tasks))
-    return {
+    result = {
         "version": 1, "kind": "cohort_preflight", "repository": project.repository,
         "recorded_at_utc": datetime.now(UTC).isoformat(), "base_sha": base_sha,
         "task_ids": task_ids, "requested_workers": workers, "synchronized": synchronized,
@@ -256,6 +265,13 @@ def build_preflight(project, task_ids, *, workers=1, synchronized=False, base=No
                                 "vm_cpu_limit": 2, "vm_memory_mib_limit": 2048,
                                 "automatic_worker_replacement": False},
     }
+    if waves:
+        result["rollout"] = {
+            "ramp_start": ramp_start, "wave_sizes": waves,
+            "minimum_validated_percent": MINIMUM_VALIDATED_PERCENT,
+            "minimum_gateway_window_seconds": timeout + 900,
+        }
+    return result
 
 
 def main():
@@ -270,6 +286,7 @@ def main():
     parser.add_argument("--context-mode", choices=("full", "task"), default="full")
     parser.add_argument("--require-parallel", type=int,
                         help="Require a conservative independent ready frontier of this size")
+    parser.add_argument("--ramp-start", type=int, help="Inspect a staged run with this initial wave size")
     parser.add_argument("--model-budget", help="proposed cohort model reserve in USD; not authorization")
     parser.add_argument("--online", action="store_true", help="permit read-only GitHub GET requests")
     args = parser.parse_args()
@@ -279,6 +296,7 @@ def main():
         model_budget=args.model_budget, allow_overlap=args.allow_overlap,
         timeout=args.timeout,
         context_mode=args.context_mode, require_parallel=args.require_parallel,
+        ramp_start=args.ramp_start,
     )
     print(json.dumps(result, indent=2))
     # Exit describes checked source preparation, never financial or launch approval.

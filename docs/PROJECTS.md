@@ -160,13 +160,14 @@ and still resets on crash/redeployment/container restart. It cannot attest
 provider quota or coordinate unrelated gateway/account traffic. See
 [gateway details](GATEWAY.md).
 
-Coding time is a CLI setting, not another TOML key: `--timeout` accepts 30–1800
-seconds and defaults to 300. Sandbox lifecycle is coding timeout plus 900 seconds;
-gateway run TTL is `max(1800, timeout + 900)`, so an explicit 1800-second session
-uses 2700 seconds. The gateway's independent TTL ceiling is 3600 seconds. Longer
-sessions do not raise model/infra allowances or authorize execution. Gateway HTTP
-handlers are bounded at 900 seconds and the worker model stream idle timeout is
-900000 ms. Review wait/expiry and capacity before selecting a longer session.
+Set coding time with `--timeout`, which accepts 30–1800 seconds and defaults to
+300. The sandbox lifecycle is the coding timeout plus 900 seconds. Fixed dispatch
+uses a gateway TTL of `max(1800, timeout + 900)`, so an 1800-second session has
+a TTL of 2700 seconds. Progressive rollout uses one 3600-second gateway window
+and checks the remaining time before each worker starts. Gateway HTTP handlers
+are bounded at 900 seconds and the worker model stream idle timeout is 900000 ms.
+Review wait/expiry, capacity and the authorized allowance before selecting a
+longer session. [Gateway policy](GATEWAY.md)
 
 The profile must be directly at the target checkout root. A separately approved
 private runtime profile can use an ignored root-level filename; a nested `.swarm/`
