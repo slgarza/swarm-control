@@ -252,6 +252,47 @@ The receipt provides immediate behavior and integration verification for the
 three teaching tasks. The longer quality observation, 100-agent overlap and
 matched AFK comparison still need their own evidence. [Benchmark protocol](contest/BENCHMARK.md)
 
+## November 23 Exercism cohort rehearsal
+
+The rehearsal uses 100 Python practice exercises in one private target repo.
+Each exercise owns one starter module, has its own open issue, and runs its
+original test suite from a frozen acceptance command. The target retains the
+MIT notice and the pinned upstream source identity. Reference implementations
+were used temporarily outside the target Git history to check acceptance.
+[Exercism Python source and license](https://github.com/exercism/python/tree/479f11b44b02337b0413e805b948491c2179615a)
+
+The selection screened 127 eligible exercise sets. Of these, 124 ran the same
+positive number of cases against the starter and reference, with the starter
+rejected and the reference passing. The 100 selected cases span Exercism
+difficulty levels 1–9 and contain 1,709 test cases. The original suite skips
+one extra-credit case, so 1,708 ran successfully against the references.
+The target harness separately ran all 100 frozen commands against the
+starters and confirmed the same test counts and rejections.
+
+The fixture baseline validates the cohort layout and frozen test hashes. It runs
+an exercise suite when its solution module differs from the starter. In a
+temporary checkout, the controller's own acceptance helper rejected the
+`E001` anagram starter, accepted the reference and rejected an altered frozen
+test before running the acceptance command.
+
+The exact target commit passed GitHub CI, all 100 open issue checks and a
+synchronized preflight with a conservative frontier of 100. Online preflight
+took 62.417 seconds and made 103 GitHub GETs. Live execution is disabled and
+the target has zero allowances. The evidence records workload readiness and a
+simulated schedule. Provider capacity, live overlap and agent delivery remain
+separate measurements. [Public receipt](evidence/exercism-100-preflight-2026-11-23.json)
+
+From the prepared target checkout with the controller installed, repeat the
+read-only checks with:
+
+```sh
+swarm-control analyze --project swarm.toml --manifest swarm/cohort.json \
+  --base HEAD --workers 100 --require-parallel 100
+mapfile -t swarm_exercise_ids < <(python3 -c 'import json; print(*json.load(open("swarm/cohort.json"))["taskIds"], sep="\n")')
+swarm-control preflight "${swarm_exercise_ids[@]}" --project swarm.toml \
+  --base HEAD --workers 100 --require-parallel 100 --synchronized --online
+```
+
 ## Research behind the design
 
 | Finding | Applied to Swarm Control |

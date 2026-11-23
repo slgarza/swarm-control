@@ -195,6 +195,9 @@ of 100 synthetic candidates in real local Git worktrees.
 The [November 23 live pilot](docs/SWARM_SCALE_REHEARSAL.md#november-23-live-pilot)
 records the 1 → 2 rollout on three tutorial tasks, exact-head CI and combined
 post-merge checks, and a gateway usage-settlement gap.
+The [Exercism cohort rehearsal](docs/SWARM_SCALE_REHEARSAL.md#november-23-exercism-cohort-rehearsal)
+records a 100-exercise workload with frozen acceptance checks and a synchronized
+source preflight.
 
 Validate an independent frontier before planning a 100-worker cohort:
 
