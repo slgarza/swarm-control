@@ -1,0 +1,215 @@
+{
+  "schema_version": 1,
+  "kind": "bounded_live_progressive_delivery_pilot",
+  "observed_at_utc": "2026-11-23T16:52:48.440636+00:00",
+  "controller_commit": "c1bd293ba02e53c831a825ff1cb27848fc56339f",
+  "target_scope": "Fresh private GitHub tutorial fixture with three disjoint standard-library Python tasks",
+  "frozen_base_sha": "724be57f612c8464521967e99807eb44bda51c35",
+  "frozen_task_manifest_sha256": "4d220eec7864214552746360afb28589b5a62f6a038cf5b6b8c56ee8c9af65cf",
+  "plan_record_sha256": "11c6f8db721fb33b54993a4e26a5e96d6fb8bc01c3e26a90dcf96fca568a5969",
+  "execution": {
+    "mode": "live_modal_sandboxes",
+    "source_transport": "bundle",
+    "model": "gpt-6.1-sol",
+    "worker_limit": 2,
+    "coding_timeout_seconds": 360,
+    "gateway_ttl_seconds": 3600,
+    "preflight_preparation_passed": true,
+    "preflight_local_allowance_verified": true,
+    "rollout": {
+      "ramp_start": 1,
+      "wave_sizes": [
+        1,
+        2
+      ],
+      "minimum_validated_percent": 80,
+      "minimum_gateway_window_seconds": 1260,
+      "hold_reasons": [],
+      "waves": [
+        {
+          "planned_count": 1,
+          "checkpointed_attempt_count": 1,
+          "validated_count": 1,
+          "not_dispatched_count": 0,
+          "missing_checkpoint_count": 0
+        },
+        {
+          "planned_count": 2,
+          "checkpointed_attempt_count": 2,
+          "validated_count": 2,
+          "not_dispatched_count": 0,
+          "missing_checkpoint_count": 0
+        }
+      ],
+      "not_dispatched_count": 0
+    },
+    "workload_released_at_utc": "2026-11-23T16:47:27Z",
+    "runner_finished_at_utc": "2026-11-23T16:49:07Z",
+    "runner_makespan_seconds": 100.0,
+    "observed_peak_agent_sessions": 2,
+    "sampled_command_model_overlap_peak": 2,
+    "second_wave_process_overlap_seconds": 37.221001,
+    "activity_evidence_gaps": [],
+    "validated_count": 3
+  },
+  "compatibility_probe": {
+    "status": "probe_passed",
+    "wall_seconds": 41.945,
+    "command_events": 1,
+    "sandbox_terminated": true,
+    "workspace_clean": true,
+    "gateway_run_stopped": true
+  },
+  "review_overlap": {
+    "task_id": "D01",
+    "baseline_and_frozen_acceptance_checks": "passed",
+    "started_at_utc": "2026-11-23T16:48:47.271808+00:00",
+    "finished_at_utc": "2026-11-23T16:48:48.199029+00:00",
+    "inside_both_second_wave_agent_intervals": true
+  },
+  "deliveries": [
+    {
+      "task_id": "D01",
+      "wave": 1,
+      "worker_result": "validated",
+      "agent_started_at_utc": "2026-11-23T16:47:33.746141+00:00",
+      "agent_finished_at_utc": "2026-11-23T16:48:17.002717+00:00",
+      "command_events": 4,
+      "model_turn_events": 1,
+      "patch_sha256": "df2085c2e6541a7fe58731b7344cf2c20fde9bc6739845c2a590c2ae553cd2d9",
+      "patch_bytes": 1428,
+      "worker_observed_token_counts": {
+        "input_tokens": 44991,
+        "cached_input_tokens": 32808,
+        "cache_write_input_tokens": 12171,
+        "output_tokens": 758
+      },
+      "sandbox_terminated": true,
+      "integration_acceptance_checks": "passed",
+      "reviewed_pr_head_sha": "175aa0ad555bb8afa5fb2f1793c9081f6f9ebec9",
+      "merge_commit_sha": "838b6e2ea011ffea0b8245668594b94051d9d5e7",
+      "merged_at_utc": "2026-11-23T16:50:13+00:00",
+      "verified_exact_head_ci": "success",
+      "frozen_behavior_on_combined_head": "passed"
+    },
+    {
+      "task_id": "D02",
+      "wave": 2,
+      "worker_result": "validated",
+      "agent_started_at_utc": "2026-11-23T16:48:22.552305+00:00",
+      "agent_finished_at_utc": "2026-11-23T16:48:59.787636+00:00",
+      "command_events": 4,
+      "model_turn_events": 1,
+      "patch_sha256": "5400eed1b2fa7f876361349e8af593bcbe639f0d0c37aed25337fbc528dcb7f2",
+      "patch_bytes": 1923,
+      "worker_observed_token_counts": {
+        "input_tokens": 45207,
+        "cached_input_tokens": 32793,
+        "cache_write_input_tokens": 12402,
+        "output_tokens": 846
+      },
+      "sandbox_terminated": true,
+      "integration_acceptance_checks": "passed",
+      "reviewed_pr_head_sha": "9077363cbad9fdb5a1361bfd322e2da7ffc40372",
+      "merge_commit_sha": "d2e1fda55b05ab54225edb301fcb3a03b706f121",
+      "merged_at_utc": "2026-11-23T16:50:52+00:00",
+      "verified_exact_head_ci": "success",
+      "frozen_behavior_on_combined_head": "passed"
+    },
+    {
+      "task_id": "D03",
+      "wave": 2,
+      "worker_result": "validated",
+      "agent_started_at_utc": "2026-11-23T16:48:22.566635+00:00",
+      "agent_finished_at_utc": "2026-11-23T16:49:01.798781+00:00",
+      "command_events": 4,
+      "model_turn_events": 1,
+      "patch_sha256": "da94e7d1978e6187153da38907de4b55c956af1beac1b0d05c3a834a5ccc92dc",
+      "patch_bytes": 1830,
+      "worker_observed_token_counts": {
+        "input_tokens": 45081,
+        "cached_input_tokens": 32718,
+        "cache_write_input_tokens": 12351,
+        "output_tokens": 968
+      },
+      "sandbox_terminated": true,
+      "integration_acceptance_checks": "passed",
+      "reviewed_pr_head_sha": "2743b431f32826ffbda0ac8300d6596265f4a8d7",
+      "merge_commit_sha": "8a4d34b2ccab7afebe67abfa5c7aac2660a3a300",
+      "merged_at_utc": "2026-11-23T16:51:29+00:00",
+      "verified_exact_head_ci": "success",
+      "frozen_behavior_on_combined_head": "passed"
+    }
+  ],
+  "delivery_verification": {
+    "observed_merged_private_prs": 3,
+    "combined_head_sha": "8a4d34b2ccab7afebe67abfa5c7aac2660a3a300",
+    "combined_head_ci": "success",
+    "combined_local_tests_passed": 16,
+    "frozen_behavior_checks_passed": 3,
+    "immediate_verification_completed_at_utc": "2026-11-23T16:51:52.877473+00:00",
+    "release_to_immediate_verification_seconds": 265.877473,
+    "longitudinal_observation_completed": false,
+    "afk_comparison": null,
+    "throughput_benchmark": null
+  },
+  "accounting": {
+    "owner_authorized_trial_ceiling_usd": 100,
+    "retained_local_model_admission_cents": 850,
+    "retained_local_infrastructure_admission_cents": 325,
+    "retained_local_admission_total_cents": 1175,
+    "gateway_probe": {
+      "state": "stopped",
+      "budget_usd": 0.5,
+      "committed_usd": 0.0,
+      "retained_usd": 0.429619,
+      "reserved_usd": 0.0,
+      "maximum_charged_usd": 0.429619,
+      "billing_verified": false,
+      "request_count": 2,
+      "verified_settlements": 0,
+      "unverified_settlements": 2,
+      "input_count_attempts": 2,
+      "input_count_failures": 0,
+      "last_task_settlement_categories": [
+        "completed"
+      ]
+    },
+    "gateway_cohort": {
+      "state": "stopped",
+      "budget_usd": 8.0,
+      "committed_usd": 0.0,
+      "retained_usd": 2.831109,
+      "reserved_usd": 0.0,
+      "maximum_charged_usd": 2.831109,
+      "billing_verified": false,
+      "request_count": 12,
+      "verified_settlements": 0,
+      "unverified_settlements": 12,
+      "input_count_attempts": 12,
+      "input_count_failures": 0,
+      "last_task_settlement_categories": [
+        "completed"
+      ]
+    },
+    "gateway_maximum_charge_total_usd": "3.260728",
+    "modal_attributed_usage_subtotal_usd": "0.00583657",
+    "modal_source": "Hourly Modal usage report filtered to the two pilot app IDs. Current UTC billing interval, provisional.",
+    "modal_attributed_rows": 6,
+    "modal_usage_receipt_sha256": "26ff0958a6b186511e8b0fcb28e18f33fc79dad397ca58c133533d097cf09609",
+    "openai_reconciled_cost_usd": null,
+    "total_reconciled_cost_usd": null
+  },
+  "cleanup": {
+    "all_worker_sandboxes_terminated": true,
+    "pilot_modal_apps_stopped": 2,
+    "pilot_modal_active_containers": 0,
+    "live_policy_after_pilot": "disabled",
+    "durable_ledger_kept": true
+  },
+  "controller_release_validation": {
+    "local_tests_passed": 662,
+    "ruff": "passed",
+    "python_compilation": "passed"
+  }
+}

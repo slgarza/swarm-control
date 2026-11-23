@@ -25,6 +25,7 @@ does not establish current test totals, provider capacity, invoices or acceptanc
 | Easy Run preparation, November 12 | [Receipt](../evidence/easy-run-validation-2026-11-12.json) |
 | Initial GUI onboarding preparation, November 12 | [Receipt](../evidence/gui-onboarding-validation-2026-11-12.json) |
 | Scale rehearsal and local integration, November 23 | [Method and findings](../SWARM_SCALE_REHEARSAL.md#november-23-local-validation), [receipt](../evidence/scale-rehearsal-validation-2026-11-23.json) |
+| Live 1 → 2 rollout and reviewed delivery, November 23 | [Pilot findings](../SWARM_SCALE_REHEARSAL.md#november-23-live-pilot), [receipt](../evidence/live-progressive-pilot-2026-11-23.json) |
 
 Some receipts refer to superseded onboarding steps or language guides. Those
 references record what was checked then; they are not links to supported current
