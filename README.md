@@ -189,6 +189,10 @@ needs at least 80% validated results to release the next one. A ramp starting wi
 active together. See [scale rehearsal](docs/SWARM_SCALE_REHEARSAL.md) for scenario
 inputs, synthetic results and the research behind the design.
 
+The [November 23 local validation](docs/SWARM_SCALE_REHEARSAL.md#november-23-local-validation)
+records a frozen 100-task preflight, repeatable queue comparisons and preparation
+of 100 synthetic candidates in real local Git worktrees.
+
 Validate an independent frontier before planning a 100-worker cohort:
 
 ```sh

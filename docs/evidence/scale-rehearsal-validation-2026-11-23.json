@@ -1,0 +1,1070 @@
+{
+  "schema_version": 1,
+  "kind": "offline_scale_rehearsal_validation",
+  "controller_commit": "4163f86a253e44186dc6e1212899a71505049875",
+  "recorded_at_utc": "2026-11-23T16:40:02.185805+00:00",
+  "started_at_utc": "2026-11-23T16:38:39.146502+00:00",
+  "local_harness_wall_seconds": 10.8157,
+  "environment": {
+    "python": "3.12.3",
+    "node": "v24.6.0",
+    "git": "git version 2.43.0",
+    "git_transport": "file only"
+  },
+  "demo_checkout": {
+    "baseline_tests_passed": 2,
+    "baseline_wall_seconds": 0.0358,
+    "task_count": 2,
+    "static_independent_frontier": 2,
+    "planned_wave_sizes": [
+      1,
+      1
+    ],
+    "planned_peak": 1,
+    "live_execution_enabled": false,
+    "smoke_result": "blocked_by_disabled_live_policy",
+    "runtime_state_created": false
+  },
+  "frozen_local_cohort": {
+    "task_count": 100,
+    "base_sha": "eee0731d092d733798049448cae685e3d1f2239e",
+    "inventory_sha256": "4eb10cf143d00d8ab9f5d1bb343a67b55817f9c4e748331471b1e548fe26bc12",
+    "static_independent_frontier": 100,
+    "required_parallelism": 100,
+    "configured_gateway_slots": 40,
+    "fixed": {
+      "source_preparation_passed": false,
+      "blockers": [
+        "configured_gateway_capacity_insufficient"
+      ],
+      "planned_peak": 100,
+      "local_wall_seconds": 0.237
+    },
+    "progressive": {
+      "source_preparation_passed": true,
+      "wave_sizes": [
+        5,
+        10,
+        20,
+        40,
+        25
+      ],
+      "planned_peak": 40,
+      "local_wall_seconds": 0.2291
+    },
+    "runtime_state_created": false,
+    "live_execution_enabled": false,
+    "launch_ready": false
+  },
+  "controller_fixture_tests": {
+    "status": "passed",
+    "tests": [
+      "tests.test_modal_runner.LifecycleTests.test_mocked_100_agent_run_keeps_one_budget_and_incremental_task_state",
+      "tests.test_modal_runner.LifecycleTests.test_rollout_holds_unvalidated_wave_without_releasing_the_cohort_allocation",
+      "tests.test_modal_runner.LifecycleTests.test_100_concurrent_fake_workers_checkpoint_failures_without_replacements",
+      "tests.test_modal_runner.LifecycleTests.test_stale_deployed_capacity_stops_100_agent_run_without_spawning_or_refunding",
+      "tests.test_rollout.RolloutTests.test_expansion_waits_for_every_previous_checkpoint",
+      "tests.test_rollout.RolloutTests.test_hold_after_first_wave_releases_no_new_work"
+    ],
+    "count": 6,
+    "local_wall_seconds": 3.4363,
+    "verified": {
+      "fixed_mocked_callbacks": 100,
+      "local_mocked_callback_peak": 100,
+      "progressive_first_wave": {
+        "attempted": 5,
+        "validated": 3,
+        "needs_repair": 2,
+        "not_dispatched_in_later_waves": 95,
+        "reason": "rollout_validation_hold"
+      },
+      "reserved_test_model_cents": 18000,
+      "reserved_test_infrastructure_cents": 3100,
+      "mocked_stale_gateway_workers_started": 0,
+      "replacements_after_injected_callback_failure": 0
+    },
+    "scope": "Controller dispatch and temporary SQLite are real. Modal, GitHub issue checks and worker execution are substituted."
+  },
+  "local_git_integration_fixture_tests": {
+    "status": "passed",
+    "tests": [
+      "tests.test_integration_pipeline.PipelineTests.test_one_hundred_candidate_preview_is_valid_and_bounded",
+      "tests.test_integration_pipeline.PipelineTests.test_independent_real_check_processes_overlap_and_global_lock_is_short",
+      "tests.test_pilot_integrate.CollisionIntegrationTests.test_independent_same_file_edits_use_three_way_and_validate_combined_tree",
+      "tests.test_pilot_integrate.CollisionIntegrationTests.test_true_conflict_is_durable_and_partial_application_is_cleaned",
+      "tests.test_integration_pipeline.PipelineTests.test_baseline_green_does_not_override_frozen_behavior_acceptance",
+      "tests.test_integration_pipeline.PipelineTests.test_changed_protected_acceptance_is_rejected_before_local_checks"
+    ],
+    "count": 6,
+    "local_wall_seconds": 5.9349,
+    "verified": {
+      "prepared_synthetic_candidates": 100,
+      "distinct_local_git_worktrees": 100,
+      "configured_preparation_lanes": 8,
+      "observed_check_invocation_peak_in_two_lane_case": 2,
+      "combined_three_way_check": "passed",
+      "conflicting_change": "needs_repair_with_clean_worktree",
+      "failed_frozen_behavior_check": "needs_repair",
+      "tampered_protected_input": "blocked_before_install"
+    },
+    "scope": "Temporary local Git remotes, synthetic change artifacts and actual local check commands. No target PR publication."
+  },
+  "simulations": {
+    "healthy": {
+      "scenario": {
+        "preset": "healthy",
+        "provider_slots": 100,
+        "review_slots": 100,
+        "ci_slots": 100,
+        "review_release": "after_workers"
+      },
+      "input_sha256": "845897f9072b770baff8b4bd9c6d9ee701b7ac9d8681b73e3802c0e489bafb48",
+      "report_stdout_sha256": "780593e63bf140fc0cfe9517ac958609357aa0e7996ca97abff83f043c68c857",
+      "byte_identical_repetitions": 2,
+      "local_wall_seconds": [
+        0.0518,
+        0.0723
+      ],
+      "trials": [
+        {
+          "worker_limit": 25,
+          "policy": "fixed",
+          "attempted": 100,
+          "validated": 100,
+          "accepted": 100,
+          "not_dispatched": 0,
+          "hold_reason": null,
+          "peak_active_workers": 25,
+          "workers_finished_seconds": 520,
+          "first_accepted_seconds": 700,
+          "finished_seconds": 700,
+          "p95_wait_seconds": {
+            "model": 0,
+            "review": 0,
+            "ci": 0
+          },
+          "peak_queued": {
+            "model": 0,
+            "review": 0,
+            "ci": 0
+          }
+        },
+        {
+          "worker_limit": 25,
+          "policy": "progressive",
+          "attempted": 100,
+          "validated": 100,
+          "accepted": 100,
+          "not_dispatched": 0,
+          "hold_reason": null,
+          "peak_active_workers": 25,
+          "workers_finished_seconds": 780,
+          "first_accepted_seconds": 960,
+          "finished_seconds": 960,
+          "p95_wait_seconds": {
+            "model": 0,
+            "review": 0,
+            "ci": 0
+          },
+          "peak_queued": {
+            "model": 0,
+            "review": 0,
+            "ci": 0
+          }
+        },
+        {
+          "worker_limit": 50,
+          "policy": "fixed",
+          "attempted": 100,
+          "validated": 100,
+          "accepted": 100,
+          "not_dispatched": 0,
+          "hold_reason": null,
+          "peak_active_workers": 50,
+          "workers_finished_seconds": 260,
+          "first_accepted_seconds": 440,
+          "finished_seconds": 440,
+          "p95_wait_seconds": {
+            "model": 0,
+            "review": 0,
+            "ci": 0
+          },
+          "peak_queued": {
+            "model": 0,
+            "review": 0,
+            "ci": 0
+          }
+        },
+        {
+          "worker_limit": 50,
+          "policy": "progressive",
+          "attempted": 100,
+          "validated": 100,
+          "accepted": 100,
+          "not_dispatched": 0,
+          "hold_reason": null,
+          "peak_active_workers": 40,
+          "workers_finished_seconds": 650,
+          "first_accepted_seconds": 830,
+          "finished_seconds": 830,
+          "p95_wait_seconds": {
+            "model": 0,
+            "review": 0,
+            "ci": 0
+          },
+          "peak_queued": {
+            "model": 0,
+            "review": 0,
+            "ci": 0
+          }
+        },
+        {
+          "worker_limit": 100,
+          "policy": "fixed",
+          "attempted": 100,
+          "validated": 100,
+          "accepted": 100,
+          "not_dispatched": 0,
+          "hold_reason": null,
+          "peak_active_workers": 100,
+          "workers_finished_seconds": 130,
+          "first_accepted_seconds": 310,
+          "finished_seconds": 310,
+          "p95_wait_seconds": {
+            "model": 0,
+            "review": 0,
+            "ci": 0
+          },
+          "peak_queued": {
+            "model": 0,
+            "review": 0,
+            "ci": 0
+          }
+        },
+        {
+          "worker_limit": 100,
+          "policy": "progressive",
+          "attempted": 100,
+          "validated": 100,
+          "accepted": 100,
+          "not_dispatched": 0,
+          "hold_reason": null,
+          "peak_active_workers": 40,
+          "workers_finished_seconds": 650,
+          "first_accepted_seconds": 830,
+          "finished_seconds": 830,
+          "p95_wait_seconds": {
+            "model": 0,
+            "review": 0,
+            "ci": 0
+          },
+          "peak_queued": {
+            "model": 0,
+            "review": 0,
+            "ci": 0
+          }
+        }
+      ]
+    },
+    "worker-fault": {
+      "scenario": {
+        "preset": "worker-fault",
+        "provider_slots": 100,
+        "review_slots": 100,
+        "ci_slots": 100,
+        "review_release": "after_workers"
+      },
+      "input_sha256": "b86e172a3c76e8b59f446a5e0c6f3aecd0a578528a816f45aae2b35410016d76",
+      "report_stdout_sha256": "250e868adb69e34fdf650e92ced1af853b3741110ac541527cfee068b530bdd4",
+      "byte_identical_repetitions": 2,
+      "local_wall_seconds": [
+        0.0441,
+        0.055
+      ],
+      "trials": [
+        {
+          "worker_limit": 25,
+          "policy": "fixed",
+          "attempted": 100,
+          "validated": 0,
+          "accepted": 0,
+          "not_dispatched": 0,
+          "hold_reason": null,
+          "peak_active_workers": 25,
+          "workers_finished_seconds": 520,
+          "first_accepted_seconds": null,
+          "finished_seconds": 520,
+          "p95_wait_seconds": {
+            "model": 0,
+            "review": null,
+            "ci": null
+          },
+          "peak_queued": {
+            "model": 0,
+            "review": 0,
+            "ci": 0
+          }
+        },
+        {
+          "worker_limit": 25,
+          "policy": "progressive",
+          "attempted": 5,
+          "validated": 0,
+          "accepted": 0,
+          "not_dispatched": 95,
+          "hold_reason": "rollout_validation_hold",
+          "peak_active_workers": 5,
+          "workers_finished_seconds": 130,
+          "first_accepted_seconds": null,
+          "finished_seconds": 130,
+          "p95_wait_seconds": {
+            "model": 0,
+            "review": null,
+            "ci": null
+          },
+          "peak_queued": {
+            "model": 0,
+            "review": 0,
+            "ci": 0
+          }
+        },
+        {
+          "worker_limit": 50,
+          "policy": "fixed",
+          "attempted": 100,
+          "validated": 0,
+          "accepted": 0,
+          "not_dispatched": 0,
+          "hold_reason": null,
+          "peak_active_workers": 50,
+          "workers_finished_seconds": 260,
+          "first_accepted_seconds": null,
+          "finished_seconds": 260,
+          "p95_wait_seconds": {
+            "model": 0,
+            "review": null,
+            "ci": null
+          },
+          "peak_queued": {
+            "model": 0,
+            "review": 0,
+            "ci": 0
+          }
+        },
+        {
+          "worker_limit": 50,
+          "policy": "progressive",
+          "attempted": 5,
+          "validated": 0,
+          "accepted": 0,
+          "not_dispatched": 95,
+          "hold_reason": "rollout_validation_hold",
+          "peak_active_workers": 5,
+          "workers_finished_seconds": 130,
+          "first_accepted_seconds": null,
+          "finished_seconds": 130,
+          "p95_wait_seconds": {
+            "model": 0,
+            "review": null,
+            "ci": null
+          },
+          "peak_queued": {
+            "model": 0,
+            "review": 0,
+            "ci": 0
+          }
+        },
+        {
+          "worker_limit": 100,
+          "policy": "fixed",
+          "attempted": 100,
+          "validated": 0,
+          "accepted": 0,
+          "not_dispatched": 0,
+          "hold_reason": null,
+          "peak_active_workers": 100,
+          "workers_finished_seconds": 130,
+          "first_accepted_seconds": null,
+          "finished_seconds": 130,
+          "p95_wait_seconds": {
+            "model": 0,
+            "review": null,
+            "ci": null
+          },
+          "peak_queued": {
+            "model": 0,
+            "review": 0,
+            "ci": 0
+          }
+        },
+        {
+          "worker_limit": 100,
+          "policy": "progressive",
+          "attempted": 5,
+          "validated": 0,
+          "accepted": 0,
+          "not_dispatched": 95,
+          "hold_reason": "rollout_validation_hold",
+          "peak_active_workers": 5,
+          "workers_finished_seconds": 130,
+          "first_accepted_seconds": null,
+          "finished_seconds": 130,
+          "p95_wait_seconds": {
+            "model": 0,
+            "review": null,
+            "ci": null
+          },
+          "peak_queued": {
+            "model": 0,
+            "review": 0,
+            "ci": 0
+          }
+        }
+      ]
+    },
+    "provider-constrained": {
+      "scenario": {
+        "preset": "provider-constrained",
+        "provider_slots": 10,
+        "review_slots": 100,
+        "ci_slots": 100,
+        "review_release": "after_workers"
+      },
+      "input_sha256": "6857db3954226d2d4bcad9648984df2e5d112459290118cd1cec069b69e57f8b",
+      "report_stdout_sha256": "57966ee5004daa9f7c9de57375b4e52479cc69bb00ddc5fa25ab49ce29a63692",
+      "byte_identical_repetitions": 2,
+      "local_wall_seconds": [
+        0.0462,
+        0.046
+      ],
+      "trials": [
+        {
+          "worker_limit": 25,
+          "policy": "fixed",
+          "attempted": 100,
+          "validated": 100,
+          "accepted": 100,
+          "not_dispatched": 0,
+          "hold_reason": null,
+          "peak_active_workers": 25,
+          "workers_finished_seconds": 940,
+          "first_accepted_seconds": 1120,
+          "finished_seconds": 1120,
+          "p95_wait_seconds": {
+            "model": 140,
+            "review": 0,
+            "ci": 0
+          },
+          "peak_queued": {
+            "model": 15,
+            "review": 0,
+            "ci": 0
+          }
+        },
+        {
+          "worker_limit": 25,
+          "policy": "progressive",
+          "attempted": 100,
+          "validated": 100,
+          "accepted": 100,
+          "not_dispatched": 0,
+          "hold_reason": null,
+          "peak_active_workers": 25,
+          "workers_finished_seconds": 1320,
+          "first_accepted_seconds": 1500,
+          "finished_seconds": 1500,
+          "p95_wait_seconds": {
+            "model": 180,
+            "review": 0,
+            "ci": 0
+          },
+          "peak_queued": {
+            "model": 15,
+            "review": 0,
+            "ci": 0
+          }
+        },
+        {
+          "worker_limit": 50,
+          "policy": "fixed",
+          "attempted": 100,
+          "validated": 100,
+          "accepted": 100,
+          "not_dispatched": 0,
+          "hold_reason": null,
+          "peak_active_workers": 50,
+          "workers_finished_seconds": 940,
+          "first_accepted_seconds": 1120,
+          "finished_seconds": 1120,
+          "p95_wait_seconds": {
+            "model": 360,
+            "review": 0,
+            "ci": 0
+          },
+          "peak_queued": {
+            "model": 40,
+            "review": 0,
+            "ci": 0
+          }
+        },
+        {
+          "worker_limit": 50,
+          "policy": "progressive",
+          "attempted": 100,
+          "validated": 100,
+          "accepted": 100,
+          "not_dispatched": 0,
+          "hold_reason": null,
+          "peak_active_workers": 40,
+          "workers_finished_seconds": 1190,
+          "first_accepted_seconds": 1370,
+          "finished_seconds": 1370,
+          "p95_wait_seconds": {
+            "model": 270,
+            "review": 0,
+            "ci": 0
+          },
+          "peak_queued": {
+            "model": 30,
+            "review": 0,
+            "ci": 0
+          }
+        },
+        {
+          "worker_limit": 100,
+          "policy": "fixed",
+          "attempted": 100,
+          "validated": 100,
+          "accepted": 100,
+          "not_dispatched": 0,
+          "hold_reason": null,
+          "peak_active_workers": 100,
+          "workers_finished_seconds": 940,
+          "first_accepted_seconds": 1120,
+          "finished_seconds": 1120,
+          "p95_wait_seconds": {
+            "model": 810,
+            "review": 0,
+            "ci": 0
+          },
+          "peak_queued": {
+            "model": 90,
+            "review": 0,
+            "ci": 0
+          }
+        },
+        {
+          "worker_limit": 100,
+          "policy": "progressive",
+          "attempted": 100,
+          "validated": 100,
+          "accepted": 100,
+          "not_dispatched": 0,
+          "hold_reason": null,
+          "peak_active_workers": 40,
+          "workers_finished_seconds": 1190,
+          "first_accepted_seconds": 1370,
+          "finished_seconds": 1370,
+          "p95_wait_seconds": {
+            "model": 270,
+            "review": 0,
+            "ci": 0
+          },
+          "peak_queued": {
+            "model": 30,
+            "review": 0,
+            "ci": 0
+          }
+        }
+      ]
+    },
+    "review-constrained": {
+      "scenario": {
+        "preset": "review-constrained",
+        "provider_slots": 100,
+        "review_slots": 4,
+        "ci_slots": 8,
+        "review_release": "after_workers"
+      },
+      "input_sha256": "cdd134e239166e2e6fb26233f6d610b36cfb3fa7d4d24a2f5093882c91f76e7f",
+      "report_stdout_sha256": "54a46bc27808eacab9ac8564c2e0340deb8e50fefad71dee7d6b548ec8e7f7a5",
+      "byte_identical_repetitions": 2,
+      "local_wall_seconds": [
+        0.0457,
+        0.0444
+      ],
+      "trials": [
+        {
+          "worker_limit": 25,
+          "policy": "fixed",
+          "attempted": 100,
+          "validated": 100,
+          "accepted": 100,
+          "not_dispatched": 0,
+          "hold_reason": null,
+          "peak_active_workers": 25,
+          "workers_finished_seconds": 520,
+          "first_accepted_seconds": 700,
+          "finished_seconds": 2140,
+          "p95_wait_seconds": {
+            "model": 0,
+            "review": 1380,
+            "ci": 0
+          },
+          "peak_queued": {
+            "model": 0,
+            "review": 96,
+            "ci": 0
+          }
+        },
+        {
+          "worker_limit": 25,
+          "policy": "progressive",
+          "attempted": 100,
+          "validated": 100,
+          "accepted": 100,
+          "not_dispatched": 0,
+          "hold_reason": null,
+          "peak_active_workers": 25,
+          "workers_finished_seconds": 780,
+          "first_accepted_seconds": 960,
+          "finished_seconds": 2400,
+          "p95_wait_seconds": {
+            "model": 0,
+            "review": 1380,
+            "ci": 0
+          },
+          "peak_queued": {
+            "model": 0,
+            "review": 96,
+            "ci": 0
+          }
+        },
+        {
+          "worker_limit": 50,
+          "policy": "fixed",
+          "attempted": 100,
+          "validated": 100,
+          "accepted": 100,
+          "not_dispatched": 0,
+          "hold_reason": null,
+          "peak_active_workers": 50,
+          "workers_finished_seconds": 260,
+          "first_accepted_seconds": 440,
+          "finished_seconds": 1880,
+          "p95_wait_seconds": {
+            "model": 0,
+            "review": 1380,
+            "ci": 0
+          },
+          "peak_queued": {
+            "model": 0,
+            "review": 96,
+            "ci": 0
+          }
+        },
+        {
+          "worker_limit": 50,
+          "policy": "progressive",
+          "attempted": 100,
+          "validated": 100,
+          "accepted": 100,
+          "not_dispatched": 0,
+          "hold_reason": null,
+          "peak_active_workers": 40,
+          "workers_finished_seconds": 650,
+          "first_accepted_seconds": 830,
+          "finished_seconds": 2270,
+          "p95_wait_seconds": {
+            "model": 0,
+            "review": 1380,
+            "ci": 0
+          },
+          "peak_queued": {
+            "model": 0,
+            "review": 96,
+            "ci": 0
+          }
+        },
+        {
+          "worker_limit": 100,
+          "policy": "fixed",
+          "attempted": 100,
+          "validated": 100,
+          "accepted": 100,
+          "not_dispatched": 0,
+          "hold_reason": null,
+          "peak_active_workers": 100,
+          "workers_finished_seconds": 130,
+          "first_accepted_seconds": 310,
+          "finished_seconds": 1750,
+          "p95_wait_seconds": {
+            "model": 0,
+            "review": 1380,
+            "ci": 0
+          },
+          "peak_queued": {
+            "model": 0,
+            "review": 96,
+            "ci": 0
+          }
+        },
+        {
+          "worker_limit": 100,
+          "policy": "progressive",
+          "attempted": 100,
+          "validated": 100,
+          "accepted": 100,
+          "not_dispatched": 0,
+          "hold_reason": null,
+          "peak_active_workers": 40,
+          "workers_finished_seconds": 650,
+          "first_accepted_seconds": 830,
+          "finished_seconds": 2270,
+          "p95_wait_seconds": {
+            "model": 0,
+            "review": 1380,
+            "ci": 0
+          },
+          "peak_queued": {
+            "model": 0,
+            "review": 96,
+            "ci": 0
+          }
+        }
+      ]
+    },
+    "combined-after_workers": {
+      "scenario": {
+        "preset": null,
+        "provider_slots": 10,
+        "review_slots": 4,
+        "ci_slots": 8,
+        "review_release": "after_workers"
+      },
+      "input_sha256": "4a4127923b1c9faa1139ec9fe35db68e7747d9fc71615eb0bac4505eda4e9e6e",
+      "report_stdout_sha256": "3cdb21399ccbcc4026fe6c55b7db9c3cb08278817e3399c80a1a20077f03aaf5",
+      "byte_identical_repetitions": 2,
+      "local_wall_seconds": [
+        0.0581,
+        0.0424
+      ],
+      "trials": [
+        {
+          "worker_limit": 25,
+          "policy": "fixed",
+          "attempted": 100,
+          "validated": 100,
+          "accepted": 100,
+          "not_dispatched": 0,
+          "hold_reason": null,
+          "peak_active_workers": 25,
+          "workers_finished_seconds": 940,
+          "first_accepted_seconds": 1120,
+          "finished_seconds": 2560,
+          "p95_wait_seconds": {
+            "model": 140,
+            "review": 1380,
+            "ci": 0
+          },
+          "peak_queued": {
+            "model": 15,
+            "review": 96,
+            "ci": 0
+          }
+        },
+        {
+          "worker_limit": 25,
+          "policy": "progressive",
+          "attempted": 100,
+          "validated": 100,
+          "accepted": 100,
+          "not_dispatched": 0,
+          "hold_reason": null,
+          "peak_active_workers": 25,
+          "workers_finished_seconds": 1320,
+          "first_accepted_seconds": 1500,
+          "finished_seconds": 2940,
+          "p95_wait_seconds": {
+            "model": 180,
+            "review": 1380,
+            "ci": 0
+          },
+          "peak_queued": {
+            "model": 15,
+            "review": 96,
+            "ci": 0
+          }
+        },
+        {
+          "worker_limit": 50,
+          "policy": "fixed",
+          "attempted": 100,
+          "validated": 100,
+          "accepted": 100,
+          "not_dispatched": 0,
+          "hold_reason": null,
+          "peak_active_workers": 50,
+          "workers_finished_seconds": 940,
+          "first_accepted_seconds": 1120,
+          "finished_seconds": 2560,
+          "p95_wait_seconds": {
+            "model": 360,
+            "review": 1380,
+            "ci": 0
+          },
+          "peak_queued": {
+            "model": 40,
+            "review": 96,
+            "ci": 0
+          }
+        },
+        {
+          "worker_limit": 50,
+          "policy": "progressive",
+          "attempted": 100,
+          "validated": 100,
+          "accepted": 100,
+          "not_dispatched": 0,
+          "hold_reason": null,
+          "peak_active_workers": 40,
+          "workers_finished_seconds": 1190,
+          "first_accepted_seconds": 1370,
+          "finished_seconds": 2810,
+          "p95_wait_seconds": {
+            "model": 270,
+            "review": 1380,
+            "ci": 0
+          },
+          "peak_queued": {
+            "model": 30,
+            "review": 96,
+            "ci": 0
+          }
+        },
+        {
+          "worker_limit": 100,
+          "policy": "fixed",
+          "attempted": 100,
+          "validated": 100,
+          "accepted": 100,
+          "not_dispatched": 0,
+          "hold_reason": null,
+          "peak_active_workers": 100,
+          "workers_finished_seconds": 940,
+          "first_accepted_seconds": 1120,
+          "finished_seconds": 2560,
+          "p95_wait_seconds": {
+            "model": 810,
+            "review": 1380,
+            "ci": 0
+          },
+          "peak_queued": {
+            "model": 90,
+            "review": 96,
+            "ci": 0
+          }
+        },
+        {
+          "worker_limit": 100,
+          "policy": "progressive",
+          "attempted": 100,
+          "validated": 100,
+          "accepted": 100,
+          "not_dispatched": 0,
+          "hold_reason": null,
+          "peak_active_workers": 40,
+          "workers_finished_seconds": 1190,
+          "first_accepted_seconds": 1370,
+          "finished_seconds": 2810,
+          "p95_wait_seconds": {
+            "model": 270,
+            "review": 1380,
+            "ci": 0
+          },
+          "peak_queued": {
+            "model": 30,
+            "review": 96,
+            "ci": 0
+          }
+        }
+      ]
+    },
+    "combined-as_validated": {
+      "scenario": {
+        "preset": null,
+        "provider_slots": 10,
+        "review_slots": 4,
+        "ci_slots": 8,
+        "review_release": "as_validated"
+      },
+      "input_sha256": "836eda97161465b535ce916d881b8539b4d618d5da0a5e64ea98e56ac24936d0",
+      "report_stdout_sha256": "2e1c67f758725c656d21eb67555bd9cfea83b4541857eb67479ae5acd4ec98e5",
+      "byte_identical_repetitions": 2,
+      "local_wall_seconds": [
+        0.0545,
+        0.0448
+      ],
+      "trials": [
+        {
+          "worker_limit": 25,
+          "policy": "fixed",
+          "attempted": 100,
+          "validated": 100,
+          "accepted": 100,
+          "not_dispatched": 0,
+          "hold_reason": null,
+          "peak_active_workers": 25,
+          "workers_finished_seconds": 940,
+          "first_accepted_seconds": 310,
+          "finished_seconds": 1750,
+          "p95_wait_seconds": {
+            "model": 140,
+            "review": 600,
+            "ci": 0
+          },
+          "peak_queued": {
+            "model": 15,
+            "review": 44,
+            "ci": 0
+          }
+        },
+        {
+          "worker_limit": 25,
+          "policy": "progressive",
+          "attempted": 100,
+          "validated": 100,
+          "accepted": 100,
+          "not_dispatched": 0,
+          "hold_reason": null,
+          "peak_active_workers": 25,
+          "workers_finished_seconds": 1320,
+          "first_accepted_seconds": 310,
+          "finished_seconds": 1830,
+          "p95_wait_seconds": {
+            "model": 180,
+            "review": 330,
+            "ci": 0
+          },
+          "peak_queued": {
+            "model": 15,
+            "review": 23,
+            "ci": 0
+          }
+        },
+        {
+          "worker_limit": 50,
+          "policy": "fixed",
+          "attempted": 100,
+          "validated": 100,
+          "accepted": 100,
+          "not_dispatched": 0,
+          "hold_reason": null,
+          "peak_active_workers": 50,
+          "workers_finished_seconds": 940,
+          "first_accepted_seconds": 310,
+          "finished_seconds": 1750,
+          "p95_wait_seconds": {
+            "model": 360,
+            "review": 600,
+            "ci": 0
+          },
+          "peak_queued": {
+            "model": 40,
+            "review": 44,
+            "ci": 0
+          }
+        },
+        {
+          "worker_limit": 50,
+          "policy": "progressive",
+          "attempted": 100,
+          "validated": 100,
+          "accepted": 100,
+          "not_dispatched": 0,
+          "hold_reason": null,
+          "peak_active_workers": 40,
+          "workers_finished_seconds": 1190,
+          "first_accepted_seconds": 310,
+          "finished_seconds": 1830,
+          "p95_wait_seconds": {
+            "model": 270,
+            "review": 430,
+            "ci": 0
+          },
+          "peak_queued": {
+            "model": 30,
+            "review": 32,
+            "ci": 0
+          }
+        },
+        {
+          "worker_limit": 100,
+          "policy": "fixed",
+          "attempted": 100,
+          "validated": 100,
+          "accepted": 100,
+          "not_dispatched": 0,
+          "hold_reason": null,
+          "peak_active_workers": 100,
+          "workers_finished_seconds": 940,
+          "first_accepted_seconds": 310,
+          "finished_seconds": 1750,
+          "p95_wait_seconds": {
+            "model": 810,
+            "review": 600,
+            "ci": 0
+          },
+          "peak_queued": {
+            "model": 90,
+            "review": 44,
+            "ci": 0
+          }
+        },
+        {
+          "worker_limit": 100,
+          "policy": "progressive",
+          "attempted": 100,
+          "validated": 100,
+          "accepted": 100,
+          "not_dispatched": 0,
+          "hold_reason": null,
+          "peak_active_workers": 40,
+          "workers_finished_seconds": 1190,
+          "first_accepted_seconds": 310,
+          "finished_seconds": 1830,
+          "p95_wait_seconds": {
+            "model": 270,
+            "review": 430,
+            "ci": 0
+          },
+          "peak_queued": {
+            "model": 30,
+            "review": 32,
+            "ci": 0
+          }
+        }
+      ]
+    }
+  },
+  "delivery": {
+    "paid_workers_started": 0,
+    "real_provider_calls": 0,
+    "target_pull_requests_merged": 0,
+    "provider_capacity_verified": false,
+    "useful_live_overlap_verified": false,
+    "reconciled_cost_usd": null,
+    "pr_per_hour": null,
+    "pr_per_dollar": null
+  },
+  "harness_completed_at_utc": "2026-11-23T16:38:49.962203+00:00",
+  "publication_validation": {
+    "full_controller_test_count": 662,
+    "full_controller_test_suite_seconds": 88.581,
+    "full_controller_tests": "passed",
+    "ruff": "passed",
+    "python_compilation": "passed",
+    "reproduced_cli_report_hashes": 6,
+    "documentation_links": "passed"
+  }
+}

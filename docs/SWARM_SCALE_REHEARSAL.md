@@ -153,6 +153,70 @@ ordinary source, issue, capacity and budget gates. Earlier allocations stay in
 the ledger when a wave fails or the window runs short. A later paid attempt
 needs its own authorization. [Bounded operations](OPERATIONS.md)
 
+## November 23 local validation
+
+This run used [controller commit `4163f86`](https://github.com/slgarza/swarm-control/commit/4163f86a253e44186dc6e1212899a71505049875),
+temporary Git checkouts and Python 3.12. The public receipt records the
+controller and fixture identities, measured local elapsed times, exact test
+names and all 36 simulated trials. Each of the six scenario commands produced
+byte-identical JSON on a second execution. [Validation receipt](evidence/scale-rehearsal-validation-2026-11-23.json)
+
+| Part of the run | Observed result |
+| --- | --- |
+| Public demo | Two baseline tests passed. The two-task plan showed an independent frontier of two and waves of one task each. The demo's disabled policy blocked the smoke command before any runtime state was created. |
+| Frozen 100-task fixture | The analyzer found 100 independent ready tasks. With 40 configured gateway slots, fixed preflight flagged insufficient configured capacity. Staged preflight passed local preparation checks, with waves of 5, 10, 20, 40 and 25 and a peak of 40. The fixture kept live execution disabled. |
+| Real controller with test doubles | The fixed dispatcher reached 100 simultaneous local callbacks in a concurrency fixture. In the staged lifecycle fixture, three of the first five reports validated and two needed repair. The controller checkpointed 95 tasks as `not_dispatched` with `rollout_validation_hold` and retained the original fixture allocation in SQLite. |
+| Local integration | The pipeline prepared 100 synthetic candidates in 100 distinct Git worktrees with eight configured lanes. Additional fixtures verified two overlapping check invocations, compatible same-file changes against the combined tree, durable conflict cleanup and enforcement of frozen acceptance checks. |
+
+### Review queue experiment
+
+In two matched scenarios, 100 tasks shared ten model lanes, four review lanes
+and eight CI lanes. The experiment changed when review became eligible. All
+cases below used fixed dispatch with 100 worker slots and ended with 100
+simulated acceptances.
+
+| Review release | First acceptance | Last acceptance | Model queue p95 | Review queue p95 |
+| --- | ---: | ---: | ---: | ---: |
+| After all workers finish | 1,120 s | 2,560 s | 810 s | 1,380 s |
+| As each worker validates | 310 s | 1,750 s | 810 s | 600 s |
+
+Starting review from validated candidates removed 810 simulated seconds from
+the delivery clock under these assumptions. Hold the workload and provider
+capacity constant when testing this review timing hypothesis in a live pilot.
+The simulator uses an aggregate model phase and fixed service times. Live
+provider capacity, useful agent overlap, reconciled cost and accepted target
+PRs remain to be measured. [Next pilot](NEXT_PILOT.md)
+
+Run the matched scenario commands from an installed controller. Use the four
+built-in presets described above for the other comparisons in the receipt.
+
+```sh
+swarm_trial_dir=$(mktemp -d)
+for review_release in after_workers as_validated; do
+  printf '{"provider_slots":10,"review_slots":4,"ci_slots":8,"review_release":"%s"}\n' \
+    "$review_release" > "$swarm_trial_dir/$review_release.json"
+  swarm-control rehearse --synthetic-tasks 100 --workers 25 50 100 --ramp-start 5 \
+    --scenario "$swarm_trial_dir/$review_release.json"
+done
+```
+
+Replay the named integration and controller fixtures from this repository with
+its virtual environment active. The selected tests use temporary repositories
+and test doubles for external worker services.
+
+```sh
+GIT_ALLOW_PROTOCOL=file python - <<'PY'
+import json
+import subprocess
+import sys
+from pathlib import Path
+
+receipt = json.loads(Path("docs/evidence/scale-rehearsal-validation-2026-11-23.json").read_text())
+for section in ("controller_fixture_tests", "local_git_integration_fixture_tests"):
+    subprocess.run([sys.executable, "-m", "unittest", "-v", *receipt[section]["tests"]], check=True)
+PY
+```
+
 ## Research behind the design
 
 | Finding | Applied to Swarm Control |
