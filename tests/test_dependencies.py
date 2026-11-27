@@ -54,6 +54,27 @@ class DependencyGraphTests(unittest.TestCase):
         self.assertTrue(report["waves_are_theoretical"])
         self.assertFalse(report["max_wave_width_is_exact_graph_width"])
 
+    def test_dispatch_suggestions_prioritize_longest_unfinished_branch(self):
+        tasks = [task("A1"), task("B1"), task("Z1"),
+                 task("B2", dependsOn=["B1"]), task("B3", dependsOn=["B1"]),
+                 task("Z2", dependsOn=["Z1"]), task("Z3", dependsOn=["Z2"])]
+        report = analyze_dependencies(tasks, workers=2)
+        self.assertEqual(report["safe_frontier_ids"], ["A1", "B1", "Z1"])
+        self.assertEqual(report["prioritized_frontier_ids"], ["Z1", "B1", "A1"])
+        self.assertEqual(report["suggested_dispatch_ids"], ["Z1", "B1"])
+        self.assertEqual(report["blocked_tasks"]["Z2"][0]["dependency_ids"], ["Z1"])
+
+    def test_dispatch_suggestions_break_equal_chain_lengths_by_immediate_unlocks(self):
+        tasks = [task("A1"), task("B1"), task("Z1"),
+                 task("MERGED", status="merged", pullRequest=1),
+                 task("JOIN", dependsOn=["A1", "B1"]),
+                 task("JOIN2", dependsOn=["A1", "B1"]),
+                 task("USE", dependsOn=["Z1", "MERGED"])]
+        report = analyze_dependencies(tasks, workers=1)
+        self.assertEqual(report["safe_frontier_ids"], ["A1", "B1", "Z1"])
+        self.assertEqual(report["prioritized_frontier_ids"], ["Z1", "A1", "B1"])
+        self.assertEqual(report["suggested_dispatch_ids"], ["Z1"])
+
     def test_large_backlog_uses_iterative_graph_and_caps_dispatch_not_width(self):
         independent = analyze_dependencies([task(f"T{i:04}") for i in range(1000)], workers=100)
         self.assertEqual(independent["safe_frontier_count"], 1000)
@@ -71,6 +92,7 @@ class DependencyGraphTests(unittest.TestCase):
                 self.assertTrue(report["cycles"])
                 self.assertEqual(report["cycles"][0][0], report["cycles"][0][-1])
                 self.assertIsNone(report["critical_path_length"])
+                self.assertEqual(report["prioritized_frontier_ids"], [])
                 self.assertEqual(report["suggested_dispatch_ids"], [])
                 self.assertIn("dependency_cycle", [error["code"] for error in report["errors"]])
 
@@ -331,6 +353,7 @@ class FrozenImportTests(unittest.TestCase):
         self.assertTrue(report["static_scan"]["truncated"])
         self.assertTrue(report["static_scan"]["incomplete"])
         self.assertFalse(report["requested_parallelism_possible_now"])
+        self.assertEqual(report["prioritized_frontier_ids"], [])
         self.assertEqual(report["suggested_dispatch_ids"], [])
         absent = analyze_dependencies(tasks, root=self.root, base_sha="f" * 40, workers=2)
         self.assertTrue(absent["static_scan"]["unavailable"])

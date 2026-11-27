@@ -116,6 +116,19 @@ resource/import review hints. A sequence of 100 dependent tasks cannot satisfy
 that requirement. Future waves need merged prerequisites and a newly reviewed
 source base; they are not launched from a stale frozen checkout.
 
+When selected tasks are waiting on prerequisites or conflict with each other,
+**Check plan** can offer **Use ready tasks**. The preview lists the tasks that can
+advance, ordered by dependency impact, and the tasks to revisit. Applying it sets
+the proposed worker count, pins the source commit and requires a fresh **Check plan**
+before saving. The model reservation and required independent frontier keep their
+reviewed values. Deferred tasks can be selected in a later run once their
+prerequisites are merged and present in the new base.
+
+From the CLI, inspect `ready_stage` in the `preflight` report. Its `task_ids`,
+`workers` and `base_sha` can be supplied to a new `preflight` or `runs plan`,
+keeping the listed task order. The original mixed selection can still report
+preparation blockers. Launch authorization applies to the reviewed draft.
+
 `--ramp-start N` sets the initial wave for an unsynchronized plan or run. The
 plan shows the size of each wave and its maximum concurrent workers. Each wave
 must reach 80% validated results before the next can start. Use a representative

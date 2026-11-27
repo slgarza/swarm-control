@@ -4,11 +4,14 @@ import io
 import json
 import tempfile
 import unittest
+from concurrent.futures import wait
 from contextlib import redirect_stderr, redirect_stdout
 from pathlib import Path
-from unittest.mock import patch
+from types import SimpleNamespace
+from unittest.mock import Mock, patch
 
 from swarm_control import modal_runner as runner
+from swarm_control.pilot_state import Ledger
 from swarm_control.rollout import rollout_waves, wave_passes
 from tests.support import make_project
 
@@ -89,6 +92,93 @@ class RolloutTests(unittest.TestCase):
             {"expires_at": 126601}, {"expires_at": float("inf")},
         ):
             self.assertEqual(runner.rollout_gateway_deadline({**receipt, **invalid}, 21, 3600), 21)
+
+    def test_fixed_live_queue_holds_when_gateway_window_is_closed_or_short(self):
+        for expiry in ("before_launch", "before_refill"):
+            with self.subTest(expiry=expiry):
+                self._assert_fixed_live_queue_hold(expiry)
+
+    def _assert_fixed_live_queue_hold(self, expiry):
+        with tempfile.TemporaryDirectory() as temporary:
+            project = make_project(Path(temporary))
+            project.path.write_text(project.path.read_text().replace("live_enabled = false", "live_enabled = true"))
+            template = json.loads((project.tasks_dir / "A1.json").read_text())
+            cohort = tasks(3)
+            for index, task in enumerate(cohort):
+                (project.tasks_dir / f"{task['id']}.json").write_text(json.dumps({
+                    **template, **task, "issue": index + 2, "ownership": [f"planned/{task['id']}.txt"],
+                }))
+
+            clock = 30
+            expected_attempts = int(expiry == "before_refill")
+
+            def issue_access(_batch, ids, _budget, ttl):
+                nonlocal clock
+                self.assertEqual(ttl, 2700)
+                if expiry == "before_launch":
+                    clock += ttl
+                return {"state": "active", "created_at": 5000, "expires_at": 5000 + ttl,
+                        "tokens": {task_id: "fake-token" for task_id in ids}}
+
+            def execute(task, *_):
+                nonlocal clock
+                clock += 700
+                return {"task_id": task["id"], "status": "validated", "sandbox_terminated": True}
+
+            gateway = {"create_run": Mock(), "stop_run": Mock(), "run_status": Mock()}
+            gateway["create_run"].remote.side_effect = issue_access
+            gateway["stop_run"].remote.return_value = {"state": "stopped"}
+            modal = Mock()
+            modal.Function.from_name.side_effect = lambda _app, name, **_opts: gateway[name]
+            with (
+                patch.multiple(runner, ROOT=project.root, PROJECT=None, REPOSITORY=None, APP=None),
+                patch.dict("sys.modules", {"modal": modal}),
+                patch.object(runner, "time", SimpleNamespace(monotonic=lambda: clock)),
+                patch.object(runner, "verify_github_tasks"),
+                patch.object(runner, "execute_task", side_effect=execute) as execute_worker,
+                patch("sys.argv", ["swarm-control", "run", *(task["id"] for task in cohort),
+                                   "--project", str(project.path), "--base", "HEAD", "--workers", "1",
+                                   "--model", "gpt-6.1-sol", "--model-budget", "1.00", "--timeout", "1800",
+                                   "--gateway-url", "https://fake.modal.run"]),
+                redirect_stdout(io.StringIO()),
+            ):
+                self.assertEqual(runner.main(), 1)
+                self.assertEqual(execute_worker.call_count, expected_attempts)
+
+            gateway["stop_run"].remote.assert_called_once()
+            summary = json.loads(next((project.root / ".swarm").rglob("summary.json")).read_text())
+            held_count = len(cohort) - expected_attempts
+            self.assertEqual([report["status"] for report in summary["tasks"]],
+                             ["validated"] * expected_attempts + ["not_dispatched"] * held_count)
+            ledger = Ledger(project.root / ".swarm/control.sqlite3")
+            rows = ledger.rows()
+            self.assertEqual([row["state"] for row in rows],
+                             ["awaiting_integration"] * expected_attempts + ["not_dispatched"] * held_count)
+            for row in rows[expected_attempts:]:
+                report = json.loads(Path(row["report"]).read_text())
+                self.assertEqual(report["reason"], "gateway_window_hold")
+            with ledger.connect() as db:
+                self.assertEqual(db.execute("SELECT cents FROM pilot_allocations").fetchone()[0], 100)
+                self.assertEqual(db.execute("SELECT cents FROM pilot_infra_allocations").fetchone()[0], 190)
+
+    def test_fixed_dispatch_checkpoints_all_observed_finishes_before_refilling(self):
+        executed, checkpointed = [], []
+
+        def execute(task):
+            executed.append(task["id"])
+            return {"task_id": task["id"], "status": "needs_repair"}
+
+        def checkpoint(task, report):
+            if report["status"] == "needs_repair":
+                checkpointed.append(task["id"])
+
+        with patch.object(runner, "wait", side_effect=lambda pending, **_: wait(pending)):
+            reports = runner.dispatch_tasks(tasks(4), 2, execute, checkpoint,
+                                             admit=lambda: len(checkpointed) < 2)
+
+        self.assertEqual(set(executed), {"T000", "T001"})
+        self.assertEqual(checkpointed, ["T000", "T001"])
+        self.assertEqual([report["reason"] for report in reports[2:]], ["operations_hold"] * 2)
 
     def test_missing_cleanup_evidence_for_an_attempt_does_not_count_as_terminated(self):
         with tempfile.TemporaryDirectory() as temporary:

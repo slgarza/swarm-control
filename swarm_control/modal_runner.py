@@ -9,7 +9,7 @@ import re
 import subprocess
 import time
 import uuid
-from concurrent.futures import ThreadPoolExecutor, as_completed
+from concurrent.futures import FIRST_COMPLETED, ThreadPoolExecutor, wait
 from contextlib import contextmanager
 from datetime import UTC, datetime
 from pathlib import Path
@@ -33,6 +33,8 @@ ROOT = Path.cwd()
 REPOSITORY = None
 APP = None
 PROJECT = None
+WORKER_PREPARE_SECONDS = 240
+AGENT_EXIT_GRACE_SECONDS = 12
 
 
 def configure(project):
@@ -296,18 +298,21 @@ def _dispatch_batch(tasks, workers, execute, on_complete, admission_hold):
         for _ in range(min(workers, len(tasks))):
             submit_next()
         while pending:
-            future = next(as_completed(pending))
-            task = pending.pop(future)
-            try:
-                report = future.result()
-            except Exception as error:  # noqa: BLE001 - preserve a launch failure without retrying
-                report = {
-                    "task_id": task["id"], "status": "launch_failed",
-                    "error_type": type(error).__name__, "finished_at": now(),
-                }
-            on_complete(task, report)
-            reports.append(report)
-            submit_next()
+            done, _ = wait(pending, return_when=FIRST_COMPLETED)
+            completed = [future for future in pending if future in done]
+            for future in completed:
+                task = pending.pop(future)
+                try:
+                    report = future.result()
+                except Exception as error:  # noqa: BLE001 - preserve a launch failure without retrying
+                    report = {
+                        "task_id": task["id"], "status": "launch_failed",
+                        "error_type": type(error).__name__, "finished_at": now(),
+                    }
+                on_complete(task, report)
+                reports.append(report)
+            for _ in completed:
+                submit_next()
     reports.extend(_checkpoint_held_tasks(skipped, on_complete, hold_reason))
     return reports
 
@@ -327,8 +332,8 @@ def dispatch_tasks(tasks, workers, execute, on_complete, *, admit=None,
     def admission_hold():
         if admit is not None and not admit():
             return "operations_hold"
-        if ramp_start is not None and gateway_window_open is not None and not gateway_window_open():
-            return "rollout_gateway_window_hold"
+        if gateway_window_open is not None and not gateway_window_open():
+            return "rollout_gateway_window_hold" if ramp_start is not None else "gateway_window_hold"
         return None
 
     if ramp_start is None:
@@ -733,7 +738,9 @@ def execute_task(task, args, base_sha, batch, image, app, secret, barrier=None):
         preparation_started = time.monotonic()
         if source_bundle is not None:
             measured("prepare", source_bundle.upload, sandbox)
-        remaining = max(0, int(240 - (time.monotonic() - preparation_started))) if source_bundle is not None else 240
+        remaining = WORKER_PREPARE_SECONDS
+        if source_bundle is not None:
+            remaining = int(remaining - (time.monotonic() - preparation_started))
         if remaining < 1 or helper_step("prepare", "prepare", remaining) != 0:
             raise RuntimeError("repository setup failed; see install/prepare logs")
         if args.command == "run":
@@ -747,7 +754,7 @@ def execute_task(task, args, base_sha, batch, image, app, secret, barrier=None):
                 process = sandbox.exec(
                     "python3", "/opt/swarm/modal_worker.py", "agent", "/tmp/task.json",
                     secrets=[secret],
-                    timeout=args.timeout + 12,
+                    timeout=args.timeout + AGENT_EXIT_GRACE_SECONDS,
                 )
                 process.stdin.write(packet["prompt"] + "\n")
                 process.stdin.write_eof()
@@ -1072,6 +1079,7 @@ def main():
 
     dependency_analysis = analyze_project(project, args.tasks, workers=args.workers,
                                          base=base_sha, allow_overlap=args.allow_overlap)
+    admission_tasks = effective_tasks(tasks, dependency_analysis)
     if args.command != "plan":
         require_cohort(dependency_analysis, args.require_parallel)
     args.context_packets = build_context_packets(tasks, base_sha, args.context_mode, timeout=args.timeout)
@@ -1118,7 +1126,7 @@ def main():
                            "minimum_validated_percent": MINIMUM_VALIDATED_PERCENT,
                            "minimum_gateway_window_seconds": sandbox_lifecycle}
     if args.command == "plan":
-        plan["local_admission"] = local_admission_summary(tasks, args.workers, project)
+        plan["local_admission"] = local_admission_summary(admission_tasks, args.workers, project)
         print(json.dumps(plan, indent=2))
         return 0
     args.source_bundle = None
@@ -1138,7 +1146,7 @@ def main():
         operations.require_admission(project.failure_policy)
         ledger = project.ledger(state / "control.sqlite3")
         if args.command == "run":
-            verify_github_tasks(effective_tasks(tasks, dependency_analysis), ROOT, base_sha,
+            verify_github_tasks(admission_tasks, ROOT, base_sha,
                                 repository=project.repository, tasks_dir=project.tasks_dir)
         app = modal.App.lookup(
             APP, environment_name=args.environment, create_if_missing=True
@@ -1196,6 +1204,15 @@ def main():
         else:
             ledger.allocate(batch.name, 0, infra_cents=infrastructure_reserve_cents(len(tasks)))
         try:
+            gateway_window_reason = None
+            minimum_gateway_window = None
+            if waves:
+                gateway_window_reason = "rollout_gateway_window_hold"
+                minimum_gateway_window = sandbox_lifecycle
+            elif gateway and len(tasks) > args.workers:
+                gateway_window_reason = "gateway_window_hold"
+                minimum_gateway_window = WORKER_PREPARE_SECONDS + args.timeout + AGENT_EXIT_GRACE_SECONDS
+
             gateway_deadline = None
             if gateway:
                 requested_at = time.monotonic()
@@ -1205,7 +1222,7 @@ def main():
                 )
                 tokens = admission.pop("tokens")
                 write_json(batch / "budget-start.json", admission)
-                if waves:
+                if gateway_window_reason:
                     gateway_deadline = rollout_gateway_deadline(admission, requested_at, gateway_ttl)
                 if args.synchronized or project.gateway_tokens_per_minute is not None:
                     verify_gateway_capacity(admission, planned_peak, project)
@@ -1221,9 +1238,9 @@ def main():
                             barrier.abort()
                         return {"task_id": task["id"], "status": "not_dispatched",
                                 "reason": "operations_hold", "finished_at": now()}
-                    if waves and not gateway_window_open():
+                    if gateway_window_reason and not gateway_window_open():
                         return {"task_id": task["id"], "status": "not_dispatched",
-                                "reason": "rollout_gateway_window_hold", "finished_at": now()}
+                                "reason": gateway_window_reason, "finished_at": now()}
                     return execute_task(
                         task,
                         args,
@@ -1264,11 +1281,12 @@ def main():
                 return allowed
 
             def gateway_window_open():
-                return gateway_deadline is not None and gateway_deadline - time.monotonic() >= sandbox_lifecycle
+                return (gateway_deadline is not None
+                        and gateway_deadline - time.monotonic() >= minimum_gateway_window)
 
             reports = dispatch_tasks(tasks, args.workers, launch, checkpoint, admit=admit,
                                      ramp_start=args.ramp_start,
-                                     gateway_window_open=gateway_window_open if waves else None)
+                                     gateway_window_open=gateway_window_open if gateway_window_reason else None)
         finally:
             tokens.clear()
             if gateway:
