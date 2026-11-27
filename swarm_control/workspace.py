@@ -495,13 +495,15 @@ class Workspace:
         from .workload import public_analysis, public_context
         public["dependency_analysis"] = public_analysis(raw.get("dependency_analysis"))
         public["context_readiness"] = public_context(raw.get("context_readiness"))
+        if "ready_stage" in raw:
+            public["ready_stage"] = raw["ready_stage"]
         if "rollout" in raw:
             public["rollout"] = raw["rollout"]
         return public, bindings
 
     @staticmethod
     def _public_preflight(source):
-        from .workload import public_analysis, public_context
+        from .workload import _public_task_id, public_analysis, public_context
 
         result = {}
         for key in ("preparation_checks_passed", "local_workload_ready", "local_admission_reserve_sufficient",
@@ -519,6 +521,18 @@ class Workspace:
             result[key] = value if type(value) is int and 0 <= value <= 100000000 else None
         result["dependency_analysis"] = public_analysis(source.get("dependency_analysis"))
         result["context_readiness"] = public_context(source.get("context_readiness"))
+        stage = source.get("ready_stage")
+        if isinstance(stage, dict):
+            tasks, deferred = stage.get("task_ids"), stage.get("deferred_task_ids")
+            workers, base = stage.get("workers"), stage.get("base_sha")
+            if (isinstance(tasks, list) and isinstance(deferred, list) and tasks and deferred
+                    and len(tasks) + len(deferred) <= 100
+                    and all(_public_task_id(task_id) for task_id in tasks + deferred)
+                    and len(set(tasks + deferred)) == len(tasks) + len(deferred)
+                    and type(workers) is int and 1 <= workers <= len(tasks)
+                    and isinstance(base, str) and re.fullmatch(r"[a-f0-9]{40}", base)):
+                result["ready_stage"] = {"task_ids": tasks, "deferred_task_ids": deferred,
+                                         "workers": workers, "base_sha": base}
         rollout = source.get("rollout")
         if isinstance(rollout, dict):
             sizes = rollout.get("wave_sizes")
@@ -651,7 +665,8 @@ class Workspace:
                 continue
             observed += 1
             if status == "not_dispatched" and report.get("reason") in (
-                    "operations_hold", "rollout_validation_hold", "rollout_gateway_window_hold"):
+                    "operations_hold", "gateway_window_hold", "rollout_validation_hold",
+                    "rollout_gateway_window_hold"):
                 row["dispatch_hold_reason"] = report["reason"]
             supervisor = report.get("supervision")
             if isinstance(supervisor, dict) and supervisor.get("source") == "worker_supervisor_observed":

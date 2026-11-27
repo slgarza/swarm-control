@@ -353,6 +353,19 @@ def _layers(nodes, incoming, outgoing):
     return waves, list(reversed(chain)), max(distances.values(), default=0)
 
 
+def _prioritize_frontier(frontier, waves, active, incoming, outgoing):
+    """Rank eligible tasks by downstream chain length and direct unlocks."""
+    remaining_prerequisites = {node: len(incoming[node] & active) for node in active}
+    priorities = {}
+    for wave in reversed(waves):
+        for node in wave:
+            children = outgoing[node] & active
+            chain_length = 1 + max((priorities[child][0] for child in children), default=0)
+            immediate_unlocks = sum(remaining_prerequisites[child] == 1 for child in children)
+            priorities[node] = chain_length, immediate_unlocks
+    return sorted(frontier, key=priorities.__getitem__, reverse=True)
+
+
 def analyze_dependencies(tasks, *, root=None, base_sha=None, selected_ids=None,
                          workers=100, allow_overlap=False, completed_ids=()):
     """Inspect a selected workload and its prerequisite closure without mutation.
@@ -689,6 +702,7 @@ def analyze_dependencies(tasks, *, root=None, base_sha=None, selected_ids=None,
     if source is not None:
         source.scan["incomplete"] = bool(source_incomplete)
     eligible = not errors and not cycles and not source_incomplete
+    prioritized = _prioritize_frontier(safe, waves, active, incoming, outgoing) if eligible else []
     advice = []
     width = max((len(wave) for wave in waves), default=0)
     if errors:
@@ -720,7 +734,7 @@ def analyze_dependencies(tasks, *, root=None, base_sha=None, selected_ids=None,
         "safe_frontier_ids": safe, "safe_frontier_count": len(safe),
         "safe_frontier_is_maximal_not_maximum": True,
         "safe_frontier_algorithm": "bounded_conflict_degree_then_path_specificity_then_task_id",
-        "suggested_dispatch_ids": safe[:workers] if eligible else [],
+        "prioritized_frontier_ids": prioritized, "suggested_dispatch_ids": prioritized[:workers],
         "requested_parallelism_possible_now": eligible and len(safe) >= workers,
         "supports_100_now": eligible and len(safe) >= 100,
         "blocked_tasks": blocked,

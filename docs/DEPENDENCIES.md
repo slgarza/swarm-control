@@ -40,7 +40,8 @@ authorized remaining allowance.
 | `edges` | Directed prerequisites, each with a declared or inferred reason |
 | `ready_count` | Selected tasks whose recorded status and hard prerequisites permit new work |
 | `safe_frontier_count` | A deterministic conservative maximal set without observed read/write or write/write conflicts |
-| `suggested_dispatch_ids` | Up to the requested worker count from that frontier, provided analysis is complete and valid |
+| `prioritized_frontier_ids` | The full conflict-free frontier ordered by longest unfinished downstream chain, then by the number of tasks with only this prerequisite left |
+| `suggested_dispatch_ids` | Up to the requested worker count from the prioritized frontier, provided analysis is complete and valid |
 | `max_wave_width` | Largest topological layer after hypothetical prerequisite completion |
 | `critical_path_length` | Number of unfinished tasks in the longest dependency chain |
 | `cycles` | Bounded cycle witnesses; a repeated endpoint closes each path |
@@ -52,6 +53,10 @@ The frontier is a greedy maximal set, not a mathematical maximum independent set
 Candidates with fewer observed conflicts are considered first, with path
 specificity and task ID as deterministic tie-breaks. A broad root-owner task
 therefore does not hide a ready frontier of one hundred separate leaf owners.
+Once the frontier is selected, dispatch suggestions give the first slots to tasks
+on longer downstream chains. Equal chains favor tasks that are the last remaining
+prerequisite for more immediate successors. Remaining ties keep the frontier order.
+The priority assumes equal task duration and describes the selected graph.
 Likewise, a topological layer is not an exact maximum antichain. Neither is a
 semantic proof that the tasks are independent. The report explicitly retains
 `semantic_independence_verified: false` and `provider_capacity_verified: false`.
@@ -70,6 +75,14 @@ Examples of workload shapes:
   future layer 100. Merge and verify the bootstrap first, then freeze a new base
   and prepare the leaf stage. A later wave cannot run against the old base and
   assume that unmerged prerequisite code exists.
+
+When a reviewed selection includes both ready and waiting work, `preflight` can
+return a `ready_stage` with the prioritized task IDs, deferred IDs, concurrent
+worker count and exact source commit. The stage is drawn from the conflict-free
+frontier and excludes tasks held by local metadata or durable claims. It preserves
+the requested minimum independent frontier and any initial rollout size. Review
+the new selection in the dashboard or pass its IDs, worker count and exact base
+to a fresh CLI preflight. See [run configuration](RUNS.md).
 
 The offline graph supports up to 10,000 definitions, including inventories larger
 than one live cohort. Task files are limited to 256 KiB each and 32 MiB in total.

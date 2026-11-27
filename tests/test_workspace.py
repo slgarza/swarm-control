@@ -134,6 +134,56 @@ class WorkspaceTests(unittest.TestCase):
         self.assertEqual(self.path.read_bytes(), before)
         self.assertFalse((self.target.root / ".swarm/control.sqlite3").exists())
 
+    def test_ready_stage_preserves_order_and_keeps_deferred_tasks_out_of_draft(self):
+        path = self.target.tasks_dir / "A1.json"
+        independent = json.loads(path.read_text())
+        independent["ownership"] = ["src/item.txt"]
+        path.write_text(json.dumps(independent))
+        prerequisite = {**independent, "id": "Z1", "issue": 2, "ownership": ["src/contract.txt"],
+                        "produces": ["contract:example"]}
+        dependent = {**independent, "id": "Z2", "issue": 3, "ownership": ["src/contract.txt"],
+                     "consumes": ["contract:example"]}
+        for task_definition in (prerequisite, dependent):
+            (self.target.tasks_dir / f"{task_definition['id']}.json").write_text(json.dumps(task_definition))
+        self.git("add", ".")
+        self.git("commit", "-qm", "mixed dependency and ownership cohort")
+        self.register()
+        options = {**self.options, "task_ids": ["A1", "Z1", "Z2"], "workers": 3, "synchronized": True}
+        preview = self.workspace.prepare_run("target", options)["preflight"]
+        self.assertFalse(preview["local_workload_ready"])
+        self.assertIn("task_dependencies_not_ready", preview["local_workload_blockers"])
+        self.assertIn("selected_task_ownership_overlaps", preview["local_workload_blockers"])
+        self.assertEqual(preview["ready_stage"], {
+            "task_ids": ["Z1", "A1"], "deferred_task_ids": ["Z2"], "workers": 2,
+            "base_sha": self.git("rev-parse", "HEAD"),
+        })
+        strict = self.workspace.prepare_run("target", {**options, "require_parallel": 3})
+        self.assertNotIn("ready_stage", strict["preflight"])
+        ramp = self.workspace.prepare_run("target", {**options, "synchronized": False, "ramp_start": 2})
+        self.assertNotIn("ready_stage", ramp["preflight"])
+
+        stage = preview["ready_stage"]
+        saved = self.workspace.prepare_run("target", {
+            **options, "task_ids": stage["task_ids"], "workers": stage["workers"], "base": stage["base_sha"],
+        }, save=True)
+        self.assertTrue(saved["preflight"]["local_workload_ready"])
+        self.assertEqual(saved["task_ids"], ["Z1", "A1"])
+        self.assertEqual(saved["model_budget"], options["model_budget"])
+        self.assertEqual(saved["base_sha"], stage["base_sha"])
+        self.assertEqual(saved["preflight"]["minimum_infrastructure_reserve_cents"], 160)
+        self.assertFalse(saved["authorizes_spend"])
+        self.assertFalse((self.target.root / ".swarm").exists())
+
+        prerequisite.update(status="merged", pullRequest=42)
+        (self.target.tasks_dir / "Z1.json").write_text(json.dumps(prerequisite))
+        (self.target.root / "src/contract.txt").write_text("merged fixture contract\n")
+        self.git("add", ".")
+        self.git("commit", "-qm", "fixture prerequisite reached the base")
+        next_stage = self.workspace.prepare_run("target", {**self.options, "task_ids": ["Z2"]})
+        self.assertTrue(next_stage["preflight"]["local_workload_ready"])
+        self.assertNotEqual(next_stage["base_sha"], stage["base_sha"])
+        self.assertEqual(self.workspace.run_detail("target", saved["id"])["base_sha"], stage["base_sha"])
+
     def test_staged_run_freezes_and_passes_the_initial_wave_setting(self):
         first_path = self.target.tasks_dir / "A1.json"
         task = json.loads(first_path.read_text())

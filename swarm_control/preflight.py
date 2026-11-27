@@ -114,13 +114,31 @@ def _remote_base(query, prefix, base_sha, branch):
         raise ValueError("selected base is not reachable from the remote base branch")
 
 
+def _ready_stage(analysis, local, claimed, project, workers, *, synchronized, require_parallel, ramp_start):
+    local_ready = set(local["ready_task_ids"]) - claimed.keys()
+    task_ids = [task_id for task_id in analysis["prioritized_frontier_ids"] if task_id in local_ready]
+    task_ids = task_ids[:project.max_live_agents]
+    stage_workers = min(workers, project.gateway_concurrency, len(task_ids))
+    if synchronized:
+        task_ids = task_ids[:stage_workers]
+    if len(task_ids) == analysis["selected_task_count"] or stage_workers < (require_parallel or 1):
+        return None
+    if ramp_start is not None and ramp_start >= stage_workers:
+        return None
+    included = set(task_ids)
+    deferred = [task_id for task_id in analysis["selected_task_ids"] if task_id not in included]
+    return {"task_ids": task_ids, "deferred_task_ids": deferred, "workers": stage_workers,
+            "base_sha": analysis["base_sha"]}
+
+
 def build_preflight(project, task_ids, *, workers=1, synchronized=False, base=None,
                     online=False, model_budget=None, allow_overlap=False, query=None, timeout=300,
                     context_mode="full", require_parallel=None, ramp_start=None):
     """Return stage-specific evidence; no result authorizes a live operation."""
     modal_runner.configure(project)
     tasks = [modal_runner.load_task(task_id) for task_id in task_ids]
-    modal_runner.validate_batch(tasks, workers, allow_overlap=allow_overlap)
+    # A preview can explain ownership conflicts and offer a conflict-free stage.
+    modal_runner.validate_batch(tasks, workers, allow_overlap=True)
     if synchronized and len(tasks) != workers:
         raise ValueError("a synchronized cohort needs exactly one task per worker")
     ttl = modal_runner.run_ttl_seconds(timeout)
@@ -146,11 +164,14 @@ def build_preflight(project, task_ids, *, workers=1, synchronized=False, base=No
         raise ValueError("Required parallelism must be within the selected worker count")
     dependency_analysis = analyze_project(project, task_ids, workers=workers,
                                          base=base_sha, allow_overlap=allow_overlap)
+    admission_tasks = effective_tasks(tasks, dependency_analysis)
     context_packets = modal_runner.build_context_packets(tasks, base_sha, context_mode, timeout=timeout)
     context_readiness = build_context_readiness(tasks, project, base_sha, context_mode,
                                                packets=context_packets)
-    local = modal_runner.local_admission_summary(tasks, workers, project)
+    local = modal_runner.local_admission_summary(admission_tasks, workers, project)
     blockers = preparation_blockers(dependency_analysis, require_parallel)
+    if not allow_overlap and modal_runner.overlap_pairs(tasks):
+        blockers.append("selected_task_ownership_overlaps")
     try:
         project.verify_origin()
     except (ValueError, subprocess.SubprocessError):
@@ -195,7 +216,7 @@ def build_preflight(project, task_ids, *, workers=1, synchronized=False, base=No
             budget_blockers.append("local_model_reserve_insufficient")
     if proposed is None:
         budget_blockers.append("cohort_model_reserve_not_selected")
-    github = (_online(project, effective_tasks(tasks, dependency_analysis), base_sha,
+    github = (_online(project, admission_tasks, base_sha,
                       query or (lambda path: _github(project, path)))
               if online else {"checked": False, "issues_and_dependencies_verified": None,
                               "base_reachable_from_remote_branch": None, "exact_base_ci_green": None,
@@ -265,6 +286,12 @@ def build_preflight(project, task_ids, *, workers=1, synchronized=False, base=No
                                 "vm_cpu_limit": 2, "vm_memory_mib_limit": 2048,
                                 "automatic_worker_replacement": False},
     }
+    ready_stage = _ready_stage(
+        dependency_analysis, local, selected_claims, project, workers,
+        synchronized=synchronized, require_parallel=require_parallel, ramp_start=ramp_start,
+    )
+    if ready_stage:
+        result["ready_stage"] = ready_stage
     if waves:
         result["rollout"] = {
             "ramp_start": ramp_start, "wave_sizes": waves,

@@ -146,7 +146,8 @@ def public_analysis(source):
         result[key] = value if type(value) is int and 0 <= value <= MAX_TASKS else None
     for key in ("requested_parallelism_possible_now", "supports_100_now"):
         result[key] = source.get(key) if type(source.get(key)) is bool else None
-    for key in ("ready_task_ids", "safe_frontier_ids", "suggested_dispatch_ids", "critical_path"):
+    for key in ("ready_task_ids", "safe_frontier_ids", "prioritized_frontier_ids",
+                "suggested_dispatch_ids", "critical_path"):
         values = source.get(key, [])
         result[key] = [v for v in values[:1000] if _public_task_id(v)] \
             if isinstance(values, list) else []

@@ -61,10 +61,17 @@ Patches, hashes, events and final checks are recovered before termination; inspe
 any recovery or cleanup failure. Original private artifacts remain under the
 target's ignored `.swarm/`, shared with its Git worktrees.
 
-The dispatcher submits at most `--workers` tasks at once and checkpoints each
-completion to the task ledger before submitting another. A checkpoint failure
+The dispatcher submits at most `--workers` tasks at once and checkpoints the
+completed workers it observes before refilling their slots. A checkpoint failure
 stops new submissions while submitted workers complete their recovery paths.
 There is no automatic worker replacement or budget replenishment.
+
+For fixed runs with more tasks than worker slots, each launch needs enough
+remaining gateway time for the 240-second preparation limit, the coding timeout,
+and 12 seconds of agent exit grace. The controller checks before submission and
+again before provisioning. If the window is too short or cannot be verified,
+remaining tasks are recorded as `not_dispatched` with `gateway_window_hold`.
+The original allocation remains in the ledger.
 
 For progressive rollout, set `--ramp-start N` to start with fewer tasks. The
 runner drains and checkpoints a wave before admitting the next. At least 80%

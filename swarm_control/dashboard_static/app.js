@@ -220,7 +220,11 @@
     if (!available.length) {target.append(node('p', 'task-picker-empty', query ? 'No tasks match this search.' : 'No tasks are registered in this repository. Prepare its backlog before creating a run.')); return;}
     for (const task of available) {
       const label = node('label', 'run-task-option'), checkbox = node('input'); checkbox.type = 'checkbox'; checkbox.value = task.id; checkbox.checked = state.selectedTasks.has(task.id); checkbox.setAttribute('aria-label', 'Select ' + task.id + ': ' + task.title);
-      checkbox.addEventListener('change', () => {if (checkbox.checked) state.selectedTasks.add(task.id); else state.selectedTasks.delete(task.id); invalidatePreview(); updateBuilder();});
+      checkbox.addEventListener('change', () => {
+        if (checkbox.checked) state.selectedTasks.add(task.id); else state.selectedTasks.delete(task.id);
+        state.selectedTasks = new Set([...state.selectedTasks].sort());
+        invalidatePreview(); updateBuilder();
+      });
       const copy = node('span', 'run-task-copy'), heading = node('span', 'run-task-heading'); heading.append(node('strong', 'mono', task.id), node('span', '', task.title));
       const metadata = []; if (task.dependencies?.length) metadata.push('Depends on: ' + task.dependencies.join(', ')); if (task.has_task_context) metadata.push('Task packet available');
       copy.append(heading); if (metadata.length) copy.append(node('span', 'run-task-metadata', metadata.join(' · ')));
@@ -231,7 +235,7 @@
   function readOptions() {
     const budget = byId('run-budget').value, workers = Number(byId('run-workers').value), required = byId('run-required-parallel').value, idle = byId('run-no-progress').value;
     const rampStart = byId('run-ramp-start').value;
-    return {task_ids: [...state.selectedTasks].sort(), workers, timeout: Number(byId('run-timeout').value), base: byId('run-base').value.trim(), model_budget: budget === '' ? null : Number(budget), synchronized: byId('run-synchronized').checked, allow_overlap: byId('run-overlap').checked, context_mode: byId('run-context').value, require_parallel: required === '' ? (workers === 100 ? 100 : null) : Number(required), no_progress_timeout: idle === '' ? null : Number(idle), ramp_start: rampStart === '' ? null : Number(rampStart), ...(byId('run-label').value.trim() ? {label: byId('run-label').value.trim()} : {})};
+    return {task_ids: [...state.selectedTasks], workers, timeout: Number(byId('run-timeout').value), base: byId('run-base').value.trim(), model_budget: budget === '' ? null : Number(budget), synchronized: byId('run-synchronized').checked, allow_overlap: byId('run-overlap').checked, context_mode: byId('run-context').value, require_parallel: required === '' ? (workers === 100 ? 100 : null) : Number(required), no_progress_timeout: idle === '' ? null : Number(idle), ramp_start: rampStart === '' ? null : Number(rampStart), ...(byId('run-label').value.trim() ? {label: byId('run-label').value.trim()} : {})};
   }
 
   function validateOptions(options) {
@@ -264,16 +268,19 @@
     for (const button of byId('worker-presets').querySelectorAll('button')) button.setAttribute('aria-pressed', String(Number(button.dataset.workers) === options.workers));
     byId('preview-run-button').disabled = state.planning || Boolean(problem) || !state.csrf;
     byId('save-run-button').disabled = state.planning || !state.preview || state.previewFingerprint !== JSON.stringify(options) || Boolean(problem) || !state.csrf;
+    const useReadyTasks = byId('use-ready-tasks-button');
+    if (useReadyTasks) useReadyTasks.disabled = byId('save-run-button').disabled;
     byId('preview-run-button').textContent = state.planning ? 'Checking…' : 'Check plan';
     if (problem && options.task_ids.length) builderError(problem);
   }
 
   const blockerCopy = {
+    selected_task_ownership_overlaps: 'Some selected tasks have overlapping write ownership.',
     task_dependency_graph_invalid: 'The task graph has a cycle, missing prerequisite or invalid resource declaration. Resolve the graph before dispatch.', task_dependencies_not_ready: 'Selected tasks depend on unfinished work. Complete and merge their prerequisites, then check a new source base.', independent_frontier_below_required_parallelism: 'Fewer independent tasks are ready than this run requires. Inspect the parallelism review below.', dependency_source_scan_incomplete: 'The bounded source scan is incomplete. Review the remaining source before asserting the required independent capacity.',
     target_origin_mismatch_or_unavailable: 'The registered repository origin needs verification.', checkout_head_differs_from_selected_base: 'The checkout differs from the selected source reference.', target_checkout_has_uncommitted_changes: 'The repository has uncommitted changes.', task_metadata_not_ready: 'Some selected tasks are not ready.', configured_worker_capacity_insufficient: 'The requested agent count exceeds the repository policy.', configured_gateway_capacity_insufficient: 'The configured gateway capacity is below this run’s concurrency.', selected_tasks_already_have_durable_claims: 'Some tasks already belong to an earlier run.', budget_profile_policy_mismatch: 'The project budget policy differs from the retained accounting policy.', existing_active_or_awaiting_tasks: 'Earlier tasks are still active or waiting for integration.', durable_unreserved_allowance_not_observed: 'Remaining local admission allowance has not been observed.', local_infrastructure_reserve_insufficient: 'Remaining infrastructure admission allowance is insufficient.', local_model_reserve_insufficient: 'Remaining model admission allowance is insufficient.', cohort_model_reserve_not_selected: 'Select a total model reservation before a live launch.', github_readiness_not_checked: 'Current GitHub source readiness has not been checked.', provider_quota_not_verified: 'Current provider quota needs verification.', deployed_gateway_capacity_not_verified: 'The deployed gateway capacity needs verification.', owner_launch_authorization_not_verified: 'The live launch still needs explicit owner authorization.', live_execution_disabled: 'Live execution is disabled in the repository policy.'
   };
 
-  function renderPlan(container, plan) {
+  function renderPlan(container, plan, interactive = false) {
     const preflight = plan.preflight || {}, heading = node('div', 'plan-heading-row');
     heading.append(node('h3', '', plan.id ? 'Saved plan' : 'Plan review'), pill(preflight.preparation_checks_passed === true ? 'Source checks passed' : 'Preparation needs attention', preflight.preparation_checks_passed === true ? 'mint-pill' : 'amber-pill')); container.append(heading);
     const factList = node('div', 'plan-facts'), rollout = preflight.rollout;
@@ -285,8 +292,37 @@
       container.append(node('p', 'field-help', 'The planned wave sizes are ' + waves + ' with a peak of ' + number(peak) + (peak === 1 ? ' agent.' : ' agents.') + ' Each wave must reach ' + number(rollout.minimum_validated_percent) + '% validated results before the next wave starts.'));
     }
     renderReadiness(container, preflight, plan);
+    renderReadyStage(container, plan, interactive);
     const blockers = [...new Set([...(preflight.local_workload_blockers || []), ...(preflight.local_admission_blockers || []), ...(preflight.launch_blockers || [])])];
     if (blockers.length) {const details = node('details', 'plan-checks'), summary = node('summary', '', blockers.length + ' item(s) to resolve before a live launch'); details.open = preflight.preparation_checks_passed !== true; const list = node('ul', 'plan-blockers'); for (const blocker of blockers) list.append(node('li', '', blockerCopy[blocker] || String(blocker).replaceAll('_', ' '))); details.append(summary, list); container.append(details);}
+  }
+
+  function renderReadyStage(container, plan, interactive) {
+    const stage = plan.preflight?.ready_stage;
+    if (!stage) return;
+    facts(container, 'Suggested ready run', [
+      ['Concurrent agents', number(stage.workers)],
+      ['Ready tasks in dispatch order', stage.task_ids.join(', ')],
+      ['Deferred tasks', stage.deferred_task_ids.join(', ')],
+      ['Source commit', stage.base_sha, true],
+    ]);
+    if (!interactive || plan.status !== 'preview') return;
+
+    const button = node('button', 'button button-quiet', 'Use ready tasks');
+    button.id = 'use-ready-tasks-button';
+    button.type = 'button';
+    button.addEventListener('click', () => {
+      if (state.planning || state.preview !== plan || state.previewFingerprint !== JSON.stringify(readOptions())) return;
+      state.selectedTasks = new Set(stage.task_ids);
+      byId('run-workers').value = String(stage.workers);
+      byId('run-base').value = stage.base_sha;
+      invalidatePreview();
+      renderTaskChoices();
+      updateBuilder();
+      byId('preview-run-button').focus();
+      announce('Ready tasks selected. Check the updated plan before saving.');
+    });
+    container.append(button);
   }
 
   function renderReadiness(container, preflight, plan) {
@@ -327,7 +363,7 @@
       if (!response.ok) throw new Error(typeof result.error === 'string' ? result.error : 'The local server rejected this plan.');
       if (result.project_id !== projectId || !result.preflight || result.authorizes_spend !== false || !['preview', 'draft'].includes(result.status)) throw new Error('The server did not return a valid local plan.');
       state.preview = result; state.previewFingerprint = fingerprint;
-      const panel = byId('run-preview'); clear(panel); panel.hidden = false; renderPlan(panel, result);
+      const panel = byId('run-preview'); clear(panel); panel.hidden = false; renderPlan(panel, result, !save);
       if (save) {
         if (!result.id || result.status !== 'draft') throw new Error('The saved draft could not be confirmed. Refresh run history before retrying.');
         state.runId = result.id; persistSelection(); announce('Draft saved. No agents were launched.');
@@ -408,7 +444,7 @@
         const scroll = node('div', 'table-scroll'), table = node('table'), head = node('thead'), tr = node('tr'), body = node('tbody');
         for (const text of ['Task', 'Outcome', 'Last phase', 'Source changes', 'Observed stop']) {const cell = node('th', '', text); cell.scope = 'col'; tr.append(cell);} head.append(tr);
         const reasons = {child_exited: 'Agent process exited', coding_deadline_reached: 'Coding limit reached', configured_no_source_progress: 'Configured source-progress stop', supervisor_interrupted: 'Supervisor interrupted', spawn_failed: 'Could not start agent'};
-        const holds = {operations_hold: 'Operations hold', rollout_validation_hold: 'Wave validation threshold missed', rollout_gateway_window_hold: 'Insufficient gateway time for next wave'};
+        const holds = {operations_hold: 'Operations hold', rollout_validation_hold: 'Wave validation threshold missed', rollout_gateway_window_hold: 'Insufficient gateway time for next wave', gateway_window_hold: 'Insufficient gateway time for queued task'};
         for (const task of reported.task_observations.slice(0, 100)) {const row = node('tr'); row.append(node('td', 'mono', task.task_id), node('td', '', outcomeLabels[task.status] || 'Unknown'), node('td', '', phaseLabels[task.phase] || 'Not observed'), node('td', '', finite(task.source_change_count) ? number(task.source_change_count) : 'Not observed'), node('td', '', (holds[task.dispatch_hold_reason] || reasons[task.terminal_reason] || 'Unknown') + (task.recovered_candidate_available ? ' · Recovery candidate needs review' : ''))); body.append(row);}
         table.append(head, body); scroll.append(table); details.append(scroll); progress.append(details);
       }
@@ -763,7 +799,7 @@
   byId('select-matching-run-tasks').addEventListener('click', () => {
     const query = byId('run-task-search').value.trim().toLocaleLowerCase('en-US'), cap = state.context?.limits?.max_tasks || state.context?.limits?.max_workers || 100;
     const matches = (state.context?.tasks || []).filter((task) => task.status === 'ready' && [task.id, task.title].join(' ').toLocaleLowerCase('en-US').includes(query));
-    state.selectedTasks = new Set(matches.slice(0, cap).map((task) => task.id)); invalidatePreview(); renderTaskChoices(); updateBuilder(); announce(number(state.selectedTasks.size) + ' matching ready task definitions selected. Check the plan to inspect their dependencies.');
+    state.selectedTasks = new Set(matches.slice(0, cap).map((task) => task.id).sort()); invalidatePreview(); renderTaskChoices(); updateBuilder(); announce(number(state.selectedTasks.size) + ' matching ready task definitions selected. Check the plan to inspect their dependencies.');
   });
   byId('clear-run-tasks').addEventListener('click', () => {state.selectedTasks.clear(); invalidatePreview(); renderTaskChoices(); updateBuilder();});
   for (const id of ['run-workers', 'run-label', 'run-budget', 'run-base', 'run-timeout', 'run-context', 'run-synchronized', 'run-overlap', 'run-required-parallel', 'run-no-progress', 'run-ramp-start']) byId(id).addEventListener('input', () => {invalidatePreview(); updateBuilder();});
@@ -858,7 +894,7 @@
     prepareTasks:async(projectId,taskIds,workers)=>{
       await loadCatalog(false,projectId);if(state.projectId!==projectId)throw new Error('Project selection changed.');
       await loadProjectContext(projectId);if(state.projectId!==projectId)throw new Error('Project selection changed.');
-      state.selectedTasks=new Set(taskIds.filter(id=>state.context?.tasks.some(task=>task.id===id&&task.status==='ready')));
+      state.selectedTasks=new Set(taskIds.filter(id=>state.context?.tasks.some(task=>task.id===id&&task.status==='ready')).sort());
       byId('run-workers').value=String(workers);invalidatePreview();renderTaskChoices();updateBuilder();
       window.SwarmNavigation?.navigate('new-run',{project:projectId,run:null});publishContext();
     }};
